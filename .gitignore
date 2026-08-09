@@ -6,6 +6,8 @@ shareware/
 *.lbl
 *.o
 *.sym
+__pycache__/
+*.pyc
 
 # Editor / OS
 .DS_Store

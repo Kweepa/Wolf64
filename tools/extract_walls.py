@@ -202,15 +202,17 @@ def quantize_blue_stone(rgb: list[tuple[int, int, int]]) -> list[int]:
     return out
 
 
+TEX_STRIDE = 128  # 16 stripes × 8 bytes (checked-in $4800 layout, before map @$5000)
+
+
 def pack_texture(indices: list[int]) -> bytes:
     """
-    Pack 16×16 C64 indices into 128 bytes, column-major.
+    Pack 16×16 C64 indices into a 256-byte page-aligned stripe.
 
-    Each byte holds two vertical texels: high nibble = even row, low = odd row.
-    Matches the tech-doc stripe sample that merges high/low nibbles into one
-    chunky screen byte.
+    Bytes 0..127: column-major, two vertical texels per byte
+    (high nibble = even row, low = odd row). Bytes 128..255: pad.
     """
-    out = bytearray(TEX_SIZE * (TEX_SIZE // 2))
+    out = bytearray(TEX_STRIDE)
     o = 0
     for x in range(TEX_SIZE):
         for y in range(0, TEX_SIZE, 2):
@@ -263,7 +265,7 @@ def extract(shareware: Path, out_dir: Path) -> Path:
                 indices = quantize(rgb16)
 
         packed = pack_texture(indices)
-        assert len(packed) == 128
+        assert len(packed) == TEX_STRIDE
         blob.extend(packed)
 
         preview = indices_to_image(indices, scale=8)
@@ -272,7 +274,7 @@ def extract(shareware: Path, out_dir: Path) -> Path:
         colors = sorted(set(indices))
         print(f"{slot:2} {name:14} page={str(page):>4}  c64={colors}")
 
-    assert len(blob) == NUM_TEXTURES * 128
+    assert len(blob) == NUM_TEXTURES * TEX_STRIDE
     bin_path = out_dir / "walls.bin"
     bin_path.write_bytes(blob)
 

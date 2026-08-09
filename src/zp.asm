@@ -53,22 +53,56 @@ tex_id		= $2d
 texx		= $2e
 wallz_l		= $2f
 wallz_h		= $30
-texy_l		= $31
-texy_h		= $32
-texstep_l	= $33
-texstep_h	= $34
-half_h		= $35		; 1..50 half-tiles (TDD)
-side		= $36		; 0=x-hit, 1=y-hit
-
-col_base_l	= $37
-col_base_h	= $38
-tex_ptr_l	= $39
-tex_ptr_h	= $3a
-wall_top_ht	= $3b		; clipped wall top in half-tiles
-wall_end_ht	= $3c		; clipped wall end (exclusive)
+half_h		= $31		; 1..50 half-tiles (TDD)
+side		= $32		; 0=x-hit, 1=y-hit
+view_back	= $33		; 0 = paint SCREEN; 1 = paint SCREEN_B
+scr_front_l	= $34		; visible matrix base (HUD) — must be contiguous word
+scr_front_h	= $35
+tex_ptr_l	= $36
+tex_ptr_h	= $37
+smc_last_page	= $38		; last patched texture page
+smc_last_h	= $39		; last patched half_h
 
 move_dx_l	= $3d
 move_dx_h	= $3e
 move_dy_l	= $40
 move_dy_h	= $41
 key_bits	= $42
+border_tick	= $43				; write-only $d020 shadow (optional HUD)
+; SquareDoom-style CIA profiler (Timer A snap)
+prof_snap_l	= $44
+prof_snap_h	= $45
+prof_now_l	= $46
+prof_now_h	= $47
+prof_dt_l	= $48
+prof_dt_h	= $49
+pp_tmp_l	= $4a
+pp_tmp_h	= $4b
+pp_dig_h	= $4c
+pp_dig_t	= $4d
+
+; Back-buffer row bases: view_rowN → screen + 40 + N*40 (Y = column)
+view_row0	= $50
+view_row1	= $52
+view_row2	= $54
+view_row3	= $56
+view_row4	= $58
+view_row5	= $5a
+view_row6	= $5c
+view_row7	= $5e
+view_row8	= $60
+view_row9	= $62
+view_row10	= $64
+view_row11	= $66
+view_row12	= $68
+view_row13	= $6a
+view_row14	= $6c
+view_row15	= $6e
+view_row16	= $70
+view_row17	= $72
+view_row18	= $74
+view_row19	= $76
+view_row20	= $78
+view_row21	= $7a
+view_row22	= $7c
+view_row23	= $7e

@@ -8,8 +8,11 @@ read_keys
 	lda #0
 	sta key_bits
 
+	; SquareDoom warmstart DDR — if PB is outputs, $dc01 never sees the matrix
 	lda #$ff
 	sta $dc02				; PA outputs (column select)
+	lda #0
+	sta $dc03				; PB inputs (row read)
 
 	; W / A / S on PA1 = $FD
 	lda #$fd
@@ -176,16 +179,10 @@ probe_solid
 	jsr map_to_tile
 	ldy #0
 	lda (tile_l),y
-	beq .clear
-	cmp #16
-	bcs .clear
-	cmp #11				; doors open until drawn
+	cmp #16				; solid < 16; floor/open >= 16
 	bcc .solid
-	cmp #14
-	bcc .clear
+	lda #0
+	rts
 .solid
 	lda #1
-	rts
-.clear
-	lda #0
 	rts

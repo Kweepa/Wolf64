@@ -1,5 +1,5 @@
 ; The Keep–style DDA for a 64×64 Wolf64 map
-; Solid: tile in 1..15; walkable: 0 or >=16
+; Solid: tile < 16; walkable: >= 16 (empty=16; doors parked at 251..253 for now)
 !zone dda
 
 MAX_DDA = 64
@@ -26,18 +26,51 @@ setup_player_tile
 	sta mapy
 	rts
 
+; Pipelined: setup → cast cols 1..38 → paint back → $d018 swap
+; Letterbox 38x40 chunky: skip col 0/39 and top/bottom 2 cells (see gen_painters).
+; Cast cannot split setup×40 then march×40: SMC tile ops are per-column.
+COL_FIRST	= 1
+COL_LIMIT	= 39				; exclusive
+
 render_frame
+!if PROFILE = 1 {
+	jsr prof_reset_frame
+}
 	jsr setup_player_tile
-	lda #0
+	lda #COL_FIRST
 	sta col
-.col_loop
+.dda_loop
 	jsr cast_column
 	inc col
 	lda col
-	cmp #40
-	bne .col_loop
-	jsr blit_fb
-	jmp draw_texid_row
+	cmp #COL_LIMIT
+	bne .dda_loop
+!if PROFILE = 1 {
+!if PROF_SPLIT = 0 {
+	ldy #PROF_CAST
+	jsr prof_add_bucket
+}
+}
+	jsr set_view_rows
+	; Painters/SMC under $A000 need BASIC out (see hacks.md)
+	lda #$34
+	sta $01
+	lda #COL_FIRST
+	sta col
+.paint_loop
+	jsr paint_column
+	inc col
+	lda col
+	cmp #COL_LIMIT
+	bne .paint_loop
+	lda #$35
+	sta $01
+!if PROFILE = 1 {
+	ldy #PROF_PAINT
+	jsr prof_add_bucket
+}
+	jsr swap_view
+	rts
 
 cast_column
 	; Previous column left mapx/mapy at the hit cell — always restart at player
@@ -52,7 +85,8 @@ cast_column
 	adc playera
 	sta angle
 
-	; Secant indices from |angle| so ±θ share ddx/ddy (old fold broke L/R symmetry)
+	; Secant indices from |angle| so ±θ share ddx/ddy
+	lda angle
 	jsr fold_angle
 	sta dxindex
 	tay
@@ -93,23 +127,64 @@ cast_column
 	sta ystep
 	lda fracy
 	jsr calc_sdy
-	jmp .tile0
+	jmp .patch
 .ysouth
 	lda #1
 	sta ystep
 	lda fracy_inv
 	jsr calc_sdy
 
-.tile0
+.patch
+	; SquareDoom: patch ±X/±Y tile advances once per column (no sign tests in march)
+	ldx #$e6				; INC zp
+	lda xstep
+	bpl +
+	ldx #$c6				; DEC zp
++
+	stx .smc_x_lo
+	stx .smc_x_hi
+	stx .smc_mapx
+	ldx #$18				; CLC
+	ldy #$69				; ADC #
+	lda ystep
+	bpl +
+	ldx #$38				; SEC
+	ldy #$e9				; SBC #
++
+	stx .smc_y_clc
+	sty .smc_y_op1
+	sty .smc_y_op2
+	ldx #$e6				; INC mapy
+	lda ystep
+	bpl +
+	ldx #$c6				; DEC mapy
++
+	stx .smc_mapy
+
 	lda mapx
 	sta tmp0
 	lda mapy
 	sta tmp1
 	jsr map_to_tile
+!if PROFILE = 1 {
+!if PROF_SPLIT = 1 {
+	ldy #PROF_RAY
+	jsr prof_add_bucket
+}
+}
+	jsr cast_march
+!if PROFILE = 1 {
+!if PROF_SPLIT = 1 {
+	ldy #PROF_DDA
+	jsr prof_add_bucket
+}
+}
+	rts
 
-	lda #MAX_DDA
-	sta tmp3			; step budget (keep X free)
-	ldy #0
+; Inner DDA + hit_wall / miss (expects tile_*, ddx/ddy/sdx/sdy, SMC patched)
+cast_march
+	ldy #0					; Y=0 for (tile_l) reads
+	ldx #MAX_DDA				; step budget in X
 
 .inner
 	lda sdx_h
@@ -121,32 +196,17 @@ cast_column
 	bcs .adv_y
 
 .adv_x
-	lda xstep
-	bmi .ax_neg
-	inc mapx
+.smc_x_lo
 	inc tile_l
-	bne .ax_read
+	bne .smc_x_ok
+.smc_x_hi
 	inc tile_h
-	jmp .ax_read
-.ax_neg
-	dec mapx
-	lda tile_l
-	bne +
-	dec tile_h
-+
-	dec tile_l
-.ax_read
-	ldy #0
+.smc_x_ok
+.smc_mapx
+	inc mapx
 	lda (tile_l),y
-	beq .ax_miss
 	cmp #16
 	bcs .ax_miss
-	; Doors not drawn yet — treat as open
-	cmp #11
-	bcc .ax_hit
-	cmp #14
-	bcc .ax_miss
-.ax_hit
 	sta tex_id
 	lda #0
 	sta side
@@ -164,40 +224,26 @@ cast_column
 	adc ddx_h
 	sta sdx_h
 	bcs .miss
-	dec tmp3
+	dex
 	beq .miss
 	jmp .inner
 
 .adv_y
-	lda ystep
-	bmi .ay_neg
-	inc mapy
+.smc_y_clc
 	clc
 	lda tile_l
+.smc_y_op1
 	adc #64
 	sta tile_l
-	bcc .ay_read
-	inc tile_h
-	jmp .ay_read
-.ay_neg
-	dec mapy
-	sec
-	lda tile_l
-	sbc #64
-	sta tile_l
-	bcs .ay_read
-	dec tile_h
-.ay_read
-	ldy #0
+	lda tile_h
+.smc_y_op2
+	adc #0
+	sta tile_h
+.smc_mapy
+	inc mapy
 	lda (tile_l),y
-	beq .ay_miss
 	cmp #16
 	bcs .ay_miss
-	cmp #11
-	bcc .ay_hit
-	cmp #14
-	bcc .ay_miss
-.ay_hit
 	sta tex_id
 	lda #1
 	sta side
@@ -214,7 +260,8 @@ cast_column
 	lda sdy_h
 	adc ddy_h
 	sta sdy_h
-	dec tmp3
+	bcs .miss				; 16-bit wrap → bogus near wallz / huge column
+	dex
 	beq .miss
 	jmp .inner
 
@@ -222,22 +269,18 @@ cast_column
 	lda #0
 	ldx col
 	sta col_texid,x
-	jmp draw_sky_floor
+	sta col_half_h,x
+	sta col_texx,x
+	rts
 
-; A = angle → 0..64 secant index; fold_angle(|θ|) so fold(θ)=fold(−θ)
+; A = angle → 0..64 secant index (Keep-style fold)
 fold_angle
-	cmp #128
-	bcc .fa_pos
-	eor #$ff
-	clc
-	adc #1
-.fa_pos
+	and #127
 	cmp #64
 	bcc .fa_done
-	sta tmp1
-	lda #128
-	sec
-	sbc tmp1
+	eor #127
+	clc
+	adc #1
 .fa_done
 	rts
 
@@ -335,12 +378,37 @@ hit_wall
 	sta wallz_l
 	stx wallz_h
 
-	; half_h = min(50, max(1, $2000 / wallz)) half-tiles
+	; half_h: wallz>>5 → heightab; wallz<32 (close) → exact $1800/wallz
 	jsr calc_half_h
-	jmp draw_column
+	ldx col
+	lda half_h
+	sta col_half_h,x
+	lda texx
+	sta col_texx,x
+	rts
 
-; wallz 8.8 → half_h in 1..50 half-tiles
+; wallz 8.8 → half_h in 1..50 (256-entry heightab, idx = wallz>>5)
+; Scale $1800 = 3/4 of former $2000 (squarer tiles)
 calc_half_h
+	lda wallz_h
+	sta tmp1
+	lda wallz_l
+	lsr tmp1
+	ror
+	lsr tmp1
+	ror
+	lsr tmp1
+	ror
+	lsr tmp1
+	ror
+	lsr tmp1
+	ror					; A = wallz >> 5
+	beq .near				; wallz < 32: close, spend on divide
+	tax
+	lda heightab,x
+	sta half_h
+	rts
+.near
 	lda wallz_l
 	ora wallz_h
 	bne +
@@ -349,11 +417,11 @@ calc_half_h
 	rts
 +
 	lda #0
-	sta tmp0				; quotient
+	sta tmp0
 	lda #$00
-	sta tmp2				; dividend lo
-	lda #$20
-	sta tmp3				; dividend hi = $2000
+	sta tmp2
+	lda #$18
+	sta tmp3
 .sublp
 	sec
 	lda tmp2

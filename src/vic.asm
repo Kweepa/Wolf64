@@ -1,5 +1,9 @@
-; VIC setup — TechDesignDoc chunky view via multicolor bitmap nibbles
+; VIC setup - TechDesignDoc chunky view via multicolor bitmap nibbles
+; Double-buffer: SCREEN $4000 / SCREEN_B $4400, flip via $d018
 !zone vic
+
+D018_SCR_A	= %00001000			; matrix $4000, bitmap $6000
+D018_SCR_B	= %00011000			; matrix $4400, bitmap $6000
 
 init_vic
 	lda $dd00
@@ -15,8 +19,10 @@ init_vic
 	ora #%00011000			; 40 columns + multicolor
 	sta $d016
 
-	lda #%00001000
+	lda #D018_SCR_A
 	sta $d018
+	lda #1
+	sta view_back			; first paint -> $4400 while A is shown
 
 	lda #0
 	sta $d020
@@ -24,11 +30,12 @@ init_vic
 
 	jsr fill_bitmap_pattern
 	jsr clear_screens
+	jsr fill_view_border
 	jsr draw_ui_row
 	rts
 
 fill_bitmap_pattern
-	; Each char row = 40 cells × 8 bytes = 320 (old loop stopped at Y wrap = 32 cells)
+	; Each char row = 40 cells x 8 bytes = 320 (old loop stopped at Y wrap = 32 cells)
 	lda #<BITMAP
 	sta tmp0
 	lda #>BITMAP
@@ -77,73 +84,139 @@ clear_screens
 	sta SCREEN+$100,x
 	sta SCREEN+$200,x
 	sta SCREEN+$2e8,x
+	sta SCREEN_B,x
+	sta SCREEN_B+$100,x
+	sta SCREEN_B+$200,x
+	sta SCREEN_B+$2e8,x
 	inx
 	bne -
 	rts
 
 draw_ui_row
-	; Placeholder until first frame; tex ids drawn each frame
+	; Placeholder until first frame; profiler draws each frame
 	ldx #39
 	lda #0
 -
 	sta SCREEN,x
+	sta SCREEN_B,x
 	sta $d800,x
 	dex
 	bpl -
 	rts
 
-; Top row: hex digit 0-9A-F of col_texid[col] in MCM bitmap (00/11 pairs)
-draw_texid_row
-	ldx #0
-.dtr_col
-	lda col_texid,x
-	and #15
-	asl
-	asl
-	asl					; ×8
-	clc
-	adc #<hexfont
+; Black letterbox: cols 0/39 all viewport rows; rows 1-2 and 23-24 all cols
+; (HUD row 0 left alone). Both matrices.
+fill_view_border
+	lda #<(SCREEN + 40)
 	sta tmp0
-	lda #0
-	adc #>hexfont
+	lda #>(SCREEN + 40)
 	sta tmp1
-
-	; BITMAP + col*8 (row 0) — must keep ASL carry (col≥32 → +$100)
-	lda #0
-	sta tmp3
-	txa
-	asl
-	rol tmp3
-	asl
-	rol tmp3
-	asl
-	rol tmp3
-	clc
-	adc #<BITMAP
-	sta tmp2
-	lda tmp3
-	adc #>BITMAP
-	sta tmp3
-
+	jsr .fvb_one
+	lda #<(SCREEN_B + 40)
+	sta tmp0
+	lda #>(SCREEN_B + 40)
+	sta tmp1
+.fvb_one
+	ldx #24					; screen rows 1..24
+.fvb_row
 	ldy #0
-.dtr_copy
-	lda (tmp0),y
-	sta (tmp2),y
-	iny
-	cpy #8
-	bne .dtr_copy
-
-	lda #$00				; 01/10 → black
-	sta SCREEN,x
-	lda #7					; 11 → yellow
-	sta $d800,x
-
-	inx
-	cpx #40
-	bne .dtr_col
+	lda #0
+	sta (tmp0),y			; col 0
+	ldy #39
+	sta (tmp0),y			; col 39
+	; top two / bottom two viewport rows: black across
+	cpx #24
+	beq .fvb_full
+	cpx #23
+	beq .fvb_full
+	cpx #2
+	beq .fvb_full
+	cpx #1
+	beq .fvb_full
+	jmp .fvb_next
+.fvb_full
+	ldy #38
+	lda #0
+-
+	sta (tmp0),y
+	dey
+	bne -					; cols 1..38 (Y=0 already black)
+.fvb_next
+	clc
+	lda tmp0
+	adc #40
+	sta tmp0
+	bcc +
+	inc tmp1
++
+	dex
+	bne .fvb_row
 	rts
 
-; Narrow 4×8 MCM glyphs (only center bit-pairs — no edge bleed)
+; Point view_row0..23 at back matrix rows 1..24 (skip HUD row 0)
+; Painters only use view_row2..21
+set_view_rows
+	lda #$28				; +40
+	sta tmp0
+	lda view_back
+	beq .base_a
+	lda #>SCREEN_B
+	bne .base_hi
+.base_a
+	lda #>SCREEN
+.base_hi
+	sta tmp1
+	ldx #0
+.svr_loop
+	lda tmp0
+	sta view_row0,x
+	lda tmp1
+	sta view_row0+1,x
+	inx
+	inx
+	clc
+	lda tmp0
+	adc #40
+	sta tmp0
+	bcc +
+	inc tmp1
++
+	cpx #48
+	bne .svr_loop
+	rts
+
+; Show the matrix just painted; flip view_back for next frame
+swap_view
+	lda view_back
+	beq .show_a
+	lda #D018_SCR_B
+	sta $d018
+	lda #0
+	sta view_back
+	rts
+.show_a
+	lda #D018_SCR_A
+	sta $d018
+	lda #1
+	sta view_back
+	rts
+
+; Front matrix hi after swap (opposite of next back)
+; -> scr_front_l/h for HUD writes
+set_scr_front
+	lda #0
+	sta scr_front_l
+	lda view_back
+	beq .front_b
+	lda #>SCREEN
+	sta scr_front_h
+	rts
+.front_b
+	lda #>SCREEN_B
+	sta scr_front_h
+	rts
+
+; Narrow 4x8 MCM glyphs (only center bit-pairs - no edge bleed)
 hexfont
 	!byte $3c,$cc,$cc,$cc,$cc,$cc,$3c,$00	; 0
 	!byte $30,$30,$30,$30,$30,$30,$30,$00	; 1
@@ -161,46 +234,3 @@ hexfont
 	!byte $f0,$cc,$cc,$cc,$cc,$cc,$f0,$00	; D
 	!byte $fc,$c0,$c0,$f0,$c0,$c0,$fc,$00	; E
 	!byte $fc,$c0,$c0,$f0,$c0,$c0,$c0,$00	; F
-
-blit_fb
-	ldx #0
-.bl_col
-	lda colbaselo,x
-	sta col_base_l
-	lda colbasehi,x
-	sta col_base_h
-
-	txa
-	clc
-	adc #<(SCREEN + 40)
-	sta tmp0
-	lda #>(SCREEN + 40)
-	adc #0
-	sta tmp1
-
-	ldy #0
-.bl_row
-	lda (col_base_l),y
-	sty tmp2
-	ldy #0
-	sta (tmp0),y
-	ldy tmp2
-
-	clc
-	lda tmp0
-	adc #40
-	sta tmp0
-	bcc .bl_nc
-	inc tmp1
-.bl_nc
-	iny
-	cpy #24
-	beq .bl_nextcol
-	jmp .bl_row
-.bl_nextcol
-	inx
-	cpx #40
-	beq .bl_done
-	jmp .bl_col
-.bl_done
-	rts

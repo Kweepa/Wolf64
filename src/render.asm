@@ -1,60 +1,34 @@
-; Column painter — sky / wall / floor into FRAMEBUF (24 cells = 48 half-tiles)
-; Horizon at half-tile 24; half_h is 1..50 half-tiles (TDD wall-height spectrum)
+; Column dispatch — compiled height painters (TechDesignDoc §4)
+; Textures: 16 × 128-byte stripes at $4800 (checked-in layout)
 !zone render
 
-SKY_COLOR	= $bb				; dark grey
-FLOOR_COLOR	= $cc				; medium grey
+SKY_COLOR	= $bb
+FLOOR_COLOR	= $cc
 
-draw_column
-	ldx col
-	lda colbaselo,x
-	sta col_base_l
-	lda colbasehi,x
-	sta col_base_h
+; A = texture id. Patch table: count, then (addr_lo, addr_hi, byte_off)*
+; addr points at LDA abs,x operand lo; written as TEXTURES+id*128+byte_off.
+patch_painter_tex
+	cmp smc_last_page
+	bne .do
+	ldx half_h
+	cpx smc_last_h
+	beq .out
+.do
+	sta smc_last_page
+	sta tmp3
+	ldx half_h
+	stx smc_last_h
 
-	lda half_h
-	bne +
-	lda #1
-	sta half_h
-+
-	; Unclipped wall in half-tiles: [24-h, 24+h). Clip to [0,48).
-	lda half_h
-	cmp #24
-	bcc .h_small
-	lda #0
-	sta wall_top_ht
-	lda #48
-	sta wall_end_ht
-	jmp .prep_tex
-.h_small
-	lda #24
-	sec
-	sbc half_h
-	sta wall_top_ht
-	clc
-	lda #24
-	adc half_h
-	sta wall_end_ht
-
-.prep_tex
-	ldx col
-	lda col_texid,x
-	bne .have_tex
-	jmp draw_sky_floor
-
-.have_tex
-	; TEXTURES + id*128 + texx*8
 	lda #0
 	sta tex_ptr_h
-	ldx col
-	lda col_texid,x
+	lda tmp3
 	sta tex_ptr_l
 	ldx #7
--
+.mul128
 	asl tex_ptr_l
 	rol tex_ptr_h
 	dex
-	bne -
+	bne .mul128
 	clc
 	lda tex_ptr_l
 	adc #<TEXTURES
@@ -62,135 +36,106 @@ draw_column
 	lda tex_ptr_h
 	adc #>TEXTURES
 	sta tex_ptr_h
+
+	ldx half_h
+	lda ph_patch_lo,x
+	sta tmp0
+	lda ph_patch_hi,x
+	sta tmp1
+	ldy #0
+	lda (tmp0),y
+	beq .out
+	sta tmp2
+	iny
+.loop
+	lda (tmp0),y
+	sta move_dx_l
+	iny
+	lda (tmp0),y
+	sta move_dx_h
+	iny
+	lda (tmp0),y
+	sta tmp3				; byte_off
+	iny
+	tya
+	pha
+	clc
+	lda tmp3
+	adc tex_ptr_l
+	ldy #0
+	sta (move_dx_l),y
+	lda tex_ptr_h
+	adc #0
+	iny
+	sta (move_dx_l),y
+	pla
+	tay
+	dec tmp2
+	bne .loop
+.out
+	rts
+
+; Paint one column from DDA caches (col_texid / col_half_h / col_texx)
+; Uses view_row* (set_view_rows); Y = column, X = texx*8
+paint_column
+	ldx col
+	lda col_texid,x
+	bne .have_tex
+	jmp draw_sky_floor
+
+.have_tex
+	lda col_half_h,x
+	bne +
+	lda #1
++
+	cmp #51
+	bcc +
+	lda #50
++
+	sta half_h
+
+	lda col_texx,x
+	sta texx
+
+	lda col_texid,x
+	jsr patch_painter_tex
+
 	lda texx
 	asl
 	asl
 	asl
-	clc
-	adc tex_ptr_l
-	sta tex_ptr_l
-	bcc +
-	inc tex_ptr_h
-+
+	tax
+	ldy half_h
+	lda painter_lo,y
+	sta .pj+1
+	lda painter_hi,y
+	sta .pj+2
+	ldy col
+.pj	jmp $0000
 
-	ldy #0					; character cell 0..23
-.cell
-	sty texy_l				; save cell (sample clobbers Y)
-
-	; high nibble = half-tile cell*2
-	tya
-	asl
-	jsr sample_half
-	asl
-	asl
-	asl
-	asl
-	sta tmp3
-
-	; low nibble = half-tile cell*2+1
-	lda texy_l
-	asl
-	clc
-	adc #1
-	jsr sample_half
-	ora tmp3
-
-	ldy texy_l
-	sta (col_base_l),y
-	iny
-	cpy #24
-	bne .cell
-	rts
-
-; A = half-tile row 0..47 → A = sky/floor/wall colour nibble
-sample_half
-	sta tmp0
-	cmp wall_top_ht
-	bcc .sky
-	cmp wall_end_ht
-	bcs .floor
-
-	; v = half_row + half_h - 24
-	clc
-	adc half_h
-	sec
-	sbc #24
-	sta tmp1
-
-	; tex_row = min(15, (v*8) / half_h) with 16-bit dividend
-	lda #0
-	sta tmp2
-	lda tmp1
-	asl
-	rol tmp2
-	asl
-	rol tmp2
-	asl
-	rol tmp2
-	sta tmp1				; tmp2:tmp1 = v*8
-	ldx #0
-.div
-	lda tmp2
-	bne .sub				; hi≠0 ⇒ ≥ half_h
-	lda tmp1
-	cmp half_h
-	bcc .div_done
-.sub
-	lda tmp1
-	sec
-	sbc half_h
-	sta tmp1
-	bcs +
-	dec tmp2
-+
-	inx
-	cpx #16
-	bcc .div
-	ldx #15
-.div_done
-	stx texy_h
-	jmp fetch_tex_nibble
-
-.sky
-	lda #$0b				; dark grey
-	rts
-.floor
-	lda #$0c				; medium grey
-	rts
-
-; texy_h = row 0..15 → A = colour nibble (clobbers Y)
-fetch_tex_nibble
-	lda texy_h
-	lsr
-	tay
-	lda (tex_ptr_l),y
-	bcs .odd
-	lsr
-	lsr
-	lsr
-	lsr
-	rts
-.odd
-	and #$0f
-	rts
-
+; Active cells 2..21 only (top/bottom 2 are static border)
 draw_sky_floor
-	ldx col
-	lda colbaselo,x
-	sta col_base_l
-	lda colbasehi,x
-	sta col_base_h
-	ldy #0
--
+	ldy col
 	lda #SKY_COLOR
-	sta (col_base_l),y
-	iny
-	cpy #12
-	bne -
--
+	sta (view_row2),y
+	sta (view_row3),y
+	sta (view_row4),y
+	sta (view_row5),y
+	sta (view_row6),y
+	sta (view_row7),y
+	sta (view_row8),y
+	sta (view_row9),y
+	sta (view_row10),y
+	sta (view_row11),y
 	lda #FLOOR_COLOR
-	sta (col_base_l),y
-	iny
-	cpy #24
-	bne -
+	sta (view_row12),y
+	sta (view_row13),y
+	sta (view_row14),y
+	sta (view_row15),y
+	sta (view_row16),y
+	sta (view_row17),y
+	sta (view_row18),y
+	sta (view_row19),y
+	sta (view_row20),y
+	sta (view_row21),y
 	rts

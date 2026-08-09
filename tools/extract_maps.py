@@ -477,6 +477,45 @@ def convert_level(walls: list[int], objs: list[int]) -> bytes:
         if out[ti] == T_EMPTY:
             out[ti] = T_PUSH_TRAJ + d
 
+    return flip_vertical(bytes(out))
+
+
+# Tile bases that pack NESW in low 2 bits (0=N,1=E,2=S,3=W)
+_FACING_BASES = (
+    T_PLAYER,
+    T_GUARD_PATROL,
+    T_GUARD_AMBUSH,
+    T_SS_PATROL,
+    T_SS_AMBUSH,
+    T_DOG,
+    T_BOSS,
+    T_TURN,
+    T_PUSH_TRAJ,
+)
+
+
+def _flip_facing_tile(t: int) -> int:
+    """N↔S on directed tiles; E/W and undirected tiles unchanged."""
+    for base in _FACING_BASES:
+        if base <= t <= base + 3:
+            d = t - base
+            if d == 0:
+                return base + 2			# N → S
+            if d == 2:
+                return base + 0			# S → N
+            return t
+    return t
+
+
+def flip_vertical(blob: bytes) -> bytes:
+    """Mirror map on Y (out[x,63-y]=in[x,y]) and N↔S facings."""
+    if len(blob) != MAP_W * MAP_H:
+        raise ValueError(f"map size {len(blob)}, want {MAP_W * MAP_H}")
+    out = bytearray(MAP_W * MAP_H)
+    for y in range(MAP_H):
+        fy = MAP_H - 1 - y
+        for x in range(MAP_W):
+            out[idx(x, fy)] = _flip_facing_tile(blob[idx(x, y)])
     return bytes(out)
 
 

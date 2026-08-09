@@ -53,20 +53,12 @@ def main() -> None:
     # sintab: 256 entries, amp 64 (SquareDoom / movement)
     sintab = [int(round(math.sin(i * 2 * math.pi / 256) * 64)) & 255 for i in range(256 + 64)]
 
-    # Half-height 1..12 from wallz high byte (≈ tiles).
-    # 16/z → at spawn (~3 tiles) half_h≈5 with visible sky/floor.
-    heightab = []
-    for wz in range(256):
-        if wz == 0:
-            h = 12
-        else:
-            h = min(12, max(1, 16 // wz))
-        heightab.append(h)
-
-    # Column bases into transposed FB at $E000 (24 bytes/col for char rows 1..24)
-    VIEW_ROWS = 24
-    colbaselo = [(c * VIEW_ROWS) & 255 for c in range(COLS)]
-    colbasehi = [0xE0 + ((c * VIEW_ROWS) >> 8) for c in range(COLS)]
+    # half_h ≈ $1800/(idx<<5) for idx = wallz>>5 (256 entries)
+    # 3/4 of former $2000 scale → squarer wall tiles on chunky view
+    # idx==0 (wallz<32) → exact divide in asm
+    heightab = [50]
+    for i in range(1, 256):
+        heightab.append(max(1, min(50, 0x1800 // (i << 5))))
 
     def bchunk(name: str, data: list[int], w: int = 16) -> str:
         lines = [f"{name}"]
@@ -82,11 +74,9 @@ def main() -> None:
         bchunk("fixsecl", fixsecl),
         bchunk("fixsech", fixsech),
         bchunk("fixcos", fixcos),
-        bchunk("heightab", heightab, 16),
-        bchunk("colbaselo", colbaselo),
-        bchunk("colbasehi", colbasehi),
         bchunk("sintab", sintab),
         "costab = sintab + 64\n",
+        bchunk("heightab", heightab),
     ]
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("".join(parts), encoding="utf-8")

@@ -1,0 +1,15 @@
+# Wolf3D shareware (obtain separately)
+shareware/
+
+# Build outputs
+*.prg
+*.lbl
+*.o
+*.sym
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/

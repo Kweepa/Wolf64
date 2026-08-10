@@ -334,7 +334,7 @@ def _match_stand_patrol(
     patrol_easy: int,
     tiers: tuple[int, ...],
 ) -> tuple[str, int] | None:
-    """Return ('stand'|'patrol', wolf_dir) if obj is in any difficulty tier."""
+    """Return ('stand'|'patrol', wolf_dir) if obj is in a selected difficulty tier."""
     for add in tiers:
         stand = stand_easy + add
         patrol = patrol_easy + add
@@ -345,30 +345,40 @@ def _match_stand_patrol(
     return None
 
 
+# Wolf skill gates (WL_GAME.C fallthrough): +0 always, +36 ≥ gd_medium
+# ("Bring 'em On!"), +72 ≥ gd_hard only. Mutants use +18 / +36.
+DIFF_BRING_EM_ON = (0, 36)			# exclude Death-incarnate-only (+72)
+DIFF_BRING_EM_ON_MUTANT = (0, 18)		# exclude hard-only (+36)
+
+
 def enemy_from_object(obj: int, ambush: bool) -> int | None:
-    """Map Wolf object-plane enemy codes onto our actor IDs (all difficulties)."""
-    # Guards / officers / SS / dogs (+36 medium, +72 hard). Officers -> guards.
+    """Map Wolf object-plane enemy codes onto our actor IDs (Bring 'em On)."""
+    # Guards / officers / SS / dogs. Officers -> guards.
+    # Stand (108–111…) = static until alert. Patrol (112–115…) = walk paths.
+    # Ambush wall-plane marks deaf stand; both stand IDs use T_*_AMBUSH for now
+    # (no chase/sound yet — both must not patrol).
+    del ambush  # reserved for EF_DEAF when alert AI lands
     for stand_easy, patrol_easy, patrol_id, ambush_id in (
         (108, 112, T_GUARD_PATROL, T_GUARD_AMBUSH),
         (116, 120, T_GUARD_PATROL, T_GUARD_AMBUSH),
         (126, 130, T_SS_PATROL, T_SS_AMBUSH),
         (134, 138, T_DOG, T_DOG),
     ):
-        hit = _match_stand_patrol(obj, stand_easy, patrol_easy, (0, 36, 72))
+        hit = _match_stand_patrol(obj, stand_easy, patrol_easy, DIFF_BRING_EM_ON)
         if hit is None:
             continue
         kind, wolf_dir = hit
         if kind == "patrol" or patrol_id == ambush_id:
             base = patrol_id
         else:
-            base = ambush_id if ambush else patrol_id
+            base = ambush_id
         return facing(base, wolf_dir)
 
     # Mutants (+18 medium, +36 hard) -> SS
-    hit = _match_stand_patrol(obj, 216, 220, (0, 18, 36))
+    hit = _match_stand_patrol(obj, 216, 220, DIFF_BRING_EM_ON_MUTANT)
     if hit is not None:
         kind, wolf_dir = hit
-        base = T_SS_AMBUSH if (kind == "stand" and ambush) else T_SS_PATROL
+        base = T_SS_AMBUSH if kind == "stand" else T_SS_PATROL
         return facing(base, wolf_dir)
 
     bosses = {

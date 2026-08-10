@@ -203,9 +203,14 @@ probe_solid
 	ldy #0
 	lda (tile_l),y
 	cmp #17				; solid walls + doors < 17
-	bcc .solid
-	lda #0
-	rts
+	bcs .clear
+	cmp #15				; unlocked door
+	bne .solid
+	lda probe_doors_pass
+	bne .clear			; enemies may walk door tiles
 .solid
 	lda #1
+	rts
+.clear
+	lda #0
 	rts

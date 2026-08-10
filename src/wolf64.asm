@@ -133,6 +133,8 @@ vis_i
 
 enemy_idx
 !byte 0
+probe_doors_pass
+!byte 0					; 1 = unlocked doors non-solid (enemy patrol)
 e_dx_l
 !byte 0
 e_dx_h
@@ -194,23 +196,23 @@ e_row
 e_pix
 !fill 16, 0
 
-; Door anim slots (2)
+; Door anim slots (NUM_DOOR_SLOTS = 8)
 door_x
-!fill 2, 0
+!fill 8, 0
 door_y
-!fill 2, 0
+!fill 8, 0
 door_pos
-!fill 2, 0
+!fill 8, 0
 door_state
-!fill 2, 0
+!fill 8, 0
 door_orient
-!fill 2, 0
+!fill 8, 0
 door_tic_l
-!fill 2, 0
+!fill 8, 0
 door_tic_h
-!fill 2, 0
+!fill 8, 0
 door_tile
-!fill 2, 0
+!fill 8, 0
 door_savex
 !byte 0
 door_savetl

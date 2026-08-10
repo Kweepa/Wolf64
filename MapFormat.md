@@ -108,7 +108,7 @@ Enemies are mapped with hardcoded directional orientations and AI awareness stat
 
 \* 52–55: Standard Guard - Patrol Mode (Facing N, E, S, W; moves on paths)
 
-\* 56–59: Standard Guard - Ambush/Deaf Mode (Facing N, E, S, W; static until line-of-sight)
+\* 56–59: Standard Guard - Stand Mode (Facing N, E, S, W; static until alert; includes deaf/ambush)
 
 \* 60–63: SS Officer - Patrol Mode (Facing N, E, S, W)
 

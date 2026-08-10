@@ -1,7 +1,7 @@
-; Two-slot sideways-sliding doors (Wolf3D-style midplane; one surface per column)
+; Sideways-sliding doors (Wolf3D-style midplane; one surface per column)
 !zone doors
 
-NUM_DOOR_SLOTS	= 2
+NUM_DOOR_SLOTS	= 8				; player + concurrent patrol doors
 ; dt_ms-driven: 255 pos steps × DOOR_STEP_MS ≈ 0.5s open/close
 DOOR_STEP_MS	= 2				; door_pos ±1 when accum ≥ this
 DOOR_HOLD_MS	= 2000				; fully open before auto-close
@@ -301,9 +301,9 @@ doors_update
 	jmp .du_next
 
 .du_open
-	jsr .du_player_in
+	jsr .du_blocker_in
 	bne .du_open_timer			; not in doorway → countdown
-	; player in doorway — keep open, refresh hold
+	; player/enemy in doorway — keep open, refresh hold
 	lda #<DOOR_HOLD_MS
 	sta door_tic_l,y
 	lda #>DOOR_HOLD_MS
@@ -324,7 +324,7 @@ doors_update
 	bcc .du_start_close			; underflow → close now
 	jmp .du_next
 .du_start_close
-	jsr .du_player_in
+	jsr .du_blocker_in
 	bne +					; clear → close
 	jmp .du_next				; still blocked — wait
 +
@@ -338,7 +338,7 @@ doors_update
 	jmp .du_next
 
 .du_closing
-	jsr .du_player_in
+	jsr .du_blocker_in
 	bne .du_closing_go			; clear → keep closing
 	lda #DS_OPENING			; blocked — reopen
 	sta door_state,y
@@ -362,17 +362,42 @@ doors_update
 	sta door_state,y
 	jmp .du_next
 
-; Z=1 if player tile == door_x/y for slot Y. Preserves Y.
-.du_player_in
+; Z=1 if player or any active enemy is on door_x/y for slot Y.
+; Preserves Y; clobbers A and uses door_savex for X.
+.du_blocker_in
 	lda door_x,y
 	cmp playerx_h
-	bne .du_pi_no
+	bne .du_bi_en
 	lda door_y,y
 	cmp playery_h
+	beq .du_bi_yes			; Z=1
+.du_bi_en
+	stx door_savex
+	ldx #0
+.du_bi_lp
+	cpx enemy_count
+	bcs .du_bi_no
+	lda enemy_flags,x
+	and #$01				; EF_ACTIVE
+	beq .du_bi_nx
+	lda enemy_xh,x
+	cmp door_x,y
+	bne .du_bi_nx
+	lda enemy_yh,x
+	cmp door_y,y
+	bne .du_bi_nx
+	ldx door_savex
+	lda #0					; Z=1 (ldx may clear Z)
 	rts
-.du_pi_no
+.du_bi_nx
+	inx
+	bne .du_bi_lp
+.du_bi_no
+	ldx door_savex
 	lda #1					; Z=0
 	rts
+.du_bi_yes
+	rts					; Z=1 from player cmp
 
 ; door_tic += dt_ms
 .du_add_dt

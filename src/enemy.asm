@@ -99,23 +99,19 @@ enemies_update
 	lda enemy_flags,x
 	and #EF_ACTIVE
 	beq .eu_next
-	; TODO: re-enable patrol — jsr enemy_patrol_one / walk anim below
-	; stand in place for now (all types)
-	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_AMBUSH)
-	sta enemy_flags,x
-!if 0 {
 	lda enemy_flags,x
 	and #EF_AMBUSH
 	bne .eu_stand
 	jsr enemy_patrol_one
 	jmp .eu_anim
 .eu_stand
+	; ambush: stand set only, clear walk bits
 	lda enemy_flags,x
 	and #(EF_ACTIVE | EF_AMBUSH)
 	sta enemy_flags,x
 	jmp .eu_next
 .eu_anim
+	; walk phase timer only while moving
 	lda enemy_flags,x
 	and #EF_MOVING
 	beq .eu_next
@@ -133,7 +129,6 @@ enemies_update
 	lda #0
 .eu_atim
 	sta enemy_anim_t,x
-}
 .eu_next
 	inx
 	bne .eu_loop
@@ -143,6 +138,8 @@ enemies_update
 ; X = enemy index — step along facing, honor turn tiles
 enemy_patrol_one
 	stx enemy_idx
+	lda #1
+	sta probe_doors_pass			; unlocked doors walkable
 	; clear moving until a step succeeds
 	lda enemy_flags,x
 	and #(EF_ACTIVE | EF_AMBUSH | EF_PHASE_B)
@@ -156,16 +153,18 @@ enemy_patrol_one
 	lda enemy_facing,x
 	tay
 	lda enemy_face_ang,y
-	tay					; angle in Y for sintab
+	sta tmp4				; angle (scale_vel clobbers Y)
 	lda #ENEMY_SPEED
 	sta vel_ms
 	; forward: +cos x, -sin y (same as player)
+	ldy tmp4
 	lda costab,y
 	jsr scale_vel
 	lda tmp0
 	sta move_dx_l
 	lda tmp1
 	sta move_dx_h
+	ldy tmp4
 	lda sintab,y
 	jsr neg_a
 	jsr scale_vel
@@ -210,7 +209,7 @@ enemy_patrol_one
 	lda tmp3
 	sta mapy
 	jsr probe_solid
-	bne .ep_turn
+	bne .ep_push
 	ldx enemy_idx
 	lda tmp2
 	sta enemy_yl,x
@@ -219,13 +218,29 @@ enemy_patrol_one
 	lda enemy_flags,x
 	ora #EF_MOVING
 	sta enemy_flags,x
+.ep_push
+	jsr enemy_push_walls
+.ep_door
+	; on a door cell → open / hold (not bump-triggered)
+	ldx enemy_idx
+	lda enemy_xh,x
+	sta mapx
+	sta tmp0
+	lda enemy_yh,x
+	sta mapy
+	sta tmp1
+	jsr door_is_door_xy
+	beq .ep_turn
+	jsr try_open_door
 .ep_turn
 	; turn node under feet?
 	ldx enemy_idx
 	lda enemy_xh,x
 	sta mapx
+	sta tmp0
 	lda enemy_yh,x
 	sta mapy
+	sta tmp1
 	jsr map_to_tile
 	ldy #0
 	lda (tile_l),y
@@ -238,7 +253,48 @@ enemy_patrol_one
 	ldx enemy_idx
 	sta enemy_facing,x
 .ep_out
+	lda #0
+	sta probe_doors_pass
 	ldx enemy_idx
+	rts
+
+; Same WALL_MARGIN as player: borrow player coords → push_walls → write back.
+enemy_push_walls
+	ldx enemy_idx
+	lda playerx_l
+	pha
+	lda playerx_h
+	pha
+	lda playery_l
+	pha
+	lda playery_h
+	pha
+	lda enemy_xl,x
+	sta playerx_l
+	lda enemy_xh,x
+	sta playerx_h
+	lda enemy_yl,x
+	sta playery_l
+	lda enemy_yh,x
+	sta playery_h
+	jsr push_walls
+	ldx enemy_idx
+	lda playerx_l
+	sta enemy_xl,x
+	lda playerx_h
+	sta enemy_xh,x
+	lda playery_l
+	sta enemy_yl,x
+	lda playery_h
+	sta enemy_yh,x
+	pla
+	sta playery_h
+	pla
+	sta playery_l
+	pla
+	sta playerx_h
+	pla
+	sta playerx_l
 	rts
 
 ; ---------------------------------------------------------------------------

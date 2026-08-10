@@ -284,6 +284,8 @@ check_line
 	lda tmp0
 +
 	sta ai_steps
+	; STA does not touch flags — Z may still be set from cmp when |dx|==|dy|
+	lda ai_steps
 	bne +
 	jmp .cl_clear				; same tile
 +

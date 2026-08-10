@@ -62,11 +62,14 @@ input_irq
 	pha
 	txa
 	pha
+	tya
+	pha
 	lda $dc0d				; ack
 	and #$01
-	bne .irq_keys
+	bne .irq_run
 	jmp .irq_rti
-.irq_keys
+.irq_run
+	jsr update_sfx
 
 	; J (PA4 = $EF) = turn left
 	lda #$ef
@@ -151,6 +154,8 @@ input_irq
 .irq_nospc
 
 .irq_rti
+	pla
+	tay
 	pla
 	tax
 	pla

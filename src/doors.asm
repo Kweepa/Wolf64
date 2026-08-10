@@ -206,6 +206,8 @@ try_open_door
 	bne .tod_hold
 	lda #DS_OPENING
 	sta door_state,y
+	lda #SOUND_OPENDOOR
+	jsr play_sound
 	rts
 .tod_hold
 	cmp #DS_OPEN
@@ -250,6 +252,8 @@ try_open_door
 	tay
 	lda tmp2
 	sta door_orient,y
+	lda #SOUND_OPENDOOR
+	jsr play_sound
 	rts
 
 doors_update
@@ -335,6 +339,8 @@ doors_update
 	sta door_tic_h,y
 	lda #DS_CLOSING
 	sta door_state,y
+	lda #SOUND_CLOSEDOOR
+	jsr play_sound
 	jmp .du_next
 
 .du_closing
@@ -342,6 +348,8 @@ doors_update
 	bne .du_closing_go			; clear → keep closing
 	lda #DS_OPENING			; blocked — reopen
 	sta door_state,y
+	lda #SOUND_OPENDOOR
+	jsr play_sound
 	jmp .du_next
 .du_closing_go
 	jsr .du_add_dt

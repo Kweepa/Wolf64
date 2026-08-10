@@ -1799,7 +1799,8 @@ damage_actor
 	and #(EF_ACTIVE | EF_PHASE_B)	; clear ambush / shot / moving
 	ora #EF_FIRSTATTACK
 	sta enemy_flags,x
-	rts
+	lda #SOUND_HITENEMY
+	jmp play_sound
 .da_kill
 	lda #0
 	sta enemy_hp,x
@@ -1811,4 +1812,15 @@ damage_actor
 	sta enemy_flags,x
 	lda #0
 	sta enemy_anim_t,x
-	rts
+	jsr rnd8
+	and #3
+	cmp #3
+	bcc +
+	lda #0
++
+	tax
+	lda .da_screams,x
+	jmp play_sound
+
+.da_screams
+	!byte SOUND_DEATHSCREAM1, SOUND_DEATHSCREAM2, SOUND_DEATHSCREAM3

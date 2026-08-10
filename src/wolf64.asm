@@ -20,6 +20,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; ~$B900  enemy SoA + packed guard frames
 ; $C000  map (4K) — PRG must not extend into $D000 I/O
 ; $E000  Judd SQTAB (2K, filled at runtime; KERNAL out)
+; $E800  PC SFX payloads + pcsfreq (copied from $6000 load image at start)
 
 SCREEN		= $4000
 SCREEN_B	= $4400
@@ -35,7 +36,7 @@ SQTAB1		= $E000			; runtime only — never *= into the PRG
 SQTAB2		= SQTAB1 + $200
 SQTAB3		= SQTAB1 + $400
 SQTAB4		= SQTAB1 + $600
-
+SFX_BASE	= $E800			; pcsounds + pcsfreq (after SQTAB)
 ; Spawn: map tiles 48..51 = player N,E,S,W (see find_spawn)
 
 !source "zp.asm"
@@ -55,9 +56,11 @@ start
 	sta $dc03
 
 	jsr init_sqtabs
+	jsr sfx_reloc				; bitmap load image → $E800 before VIC wipe
 	jsr init_vic
 	jsr prof_init
 	jsr input_irq_init
+	jsr play_sound_init
 
 	lda #$ff
 	sta smc_last_page
@@ -66,7 +69,7 @@ start
 	jsr find_spawn
 	jsr enemies_init
 	jsr init_weapon
-	cli					; CIA1 Timer A key sampling
+	cli					; CIA1 Timer A key sampling + SFX
 
 main_loop
 	jsr calc_frame_dt
@@ -93,6 +96,7 @@ main_loop
 !source "vic.asm"
 !source "profil.asm"
 !source "input.asm"
+!source "playsound.asm"
 !source "dda.asm"
 !source "doors.asm"
 !source "render.asm"
@@ -307,6 +311,17 @@ end_wpn_spr = *
 end_ai_tables = *
 !if end_ai_tables > BITMAP {
 	!error "AI/tables overlap BITMAP at $6000; end=$", end_ai_tables
+}
+
+; SFX load image in bitmap slot; sfx_reloc copies to SFX_BASE before init_vic
+*= BITMAP
+!pseudopc SFX_BASE {
+	!source "pcsounds.asm"
+	!source "pcsfreq.asm"
+}
+sfx_load_end = *
+!if sfx_load_end > PAINTERS {
+	!error "SFX load image overlaps PAINTERS; end=$", sfx_load_end
 }
 
 *= PAINTERS

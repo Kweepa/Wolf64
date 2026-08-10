@@ -284,6 +284,14 @@ setup_chaingun
 	lda muzzle_hi_cols,x
 	sta muzzle_hi_col
 	jsr .wpn_hi_bright
+	lda cur_weapon
+	beq .fs_pistol
+	lda #SOUND_ATKMACHINEGUN
+	bne .fs_snd
+.fs_pistol
+	lda #SOUND_ATKPISTOL
+.fs_snd
+	jsr play_sound
 	jmp gun_attack
 
 ; Per frame after render: muzzle timeout + fire while SPACE held + weapon keys.

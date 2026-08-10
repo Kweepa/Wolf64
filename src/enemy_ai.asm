@@ -319,7 +319,8 @@ first_sighting
 	sta enemy_state,x
 	lda #0
 	sta enemy_state_t,x
-	rts
+	lda #SOUND_HALT
+	jmp play_sound
 
 ; ---------------------------------------------------------------------------
 ; Chase: shoot chance + zigzag dirs + 3× speed move
@@ -814,6 +815,8 @@ enemy_shoot
 	ldx enemy_idx
 	jsr has_los_to_player
 	bcc .es_rts
+	lda #SOUND_NAZIFIRE
+	jsr play_sound
 	jsr enemy_tile_dist
 	lda tmp1
 	sta ai_dist

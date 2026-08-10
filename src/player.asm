@@ -225,4 +225,10 @@ take_damage
 	lda #0
 +
 	sta player_hp
-	rts
+	cmp #0
+	bne .td_hurt
+	lda #SOUND_PLAYERDEATH
+	jmp play_sound
+.td_hurt
+	lda #SOUND_TAKEDAMAGE
+	jmp play_sound

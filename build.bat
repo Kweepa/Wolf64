@@ -10,6 +10,8 @@ echo ACME not found. Set ACME in setup-env.bat ^(see c:\dev\Squaredoom\SETUP.md^
 exit /b 1
 
 :run
+python tools\gensounds.py
+if errorlevel 1 exit /b 1
 python tools\gentables.py
 if errorlevel 1 exit /b 1
 python tools\gen_painters.py

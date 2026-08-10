@@ -149,3 +149,8 @@ in_wpn_pistol		= $93
 in_wpn_chaingun		= $94
 key_wpn_pistol		= $95
 key_wpn_chaingun	= $96
+
+; PC-speaker SFX (IRQ update_sfx / play_sound)
+sound_index		= $9c			; $ff = idle
+sound_ptr_l		= $9d
+sound_ptr_h		= $9e

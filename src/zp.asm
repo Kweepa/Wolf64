@@ -75,6 +75,8 @@ in_fwd		= $3c
 in_back		= $3f
 in_turn_l	= $42
 in_turn_r	= $43
+in_strafel	= $97			; A held (strafe left)
+in_strafer	= $98			; D held (strafe right)
 vel_ms		= $4e
 dt_ms		= $4f				; last frame ≈ binary-ms (1..255)
 ; turn_acc_l/h in BSS (wolf64.asm) — fractional angle remainder

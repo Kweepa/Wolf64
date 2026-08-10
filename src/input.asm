@@ -11,7 +11,7 @@ SAMPLE_TA_HI	= >$4FFF
 ;   turn 90°/sec = 64 angle/sec → turn_acc += vel_ms<<6, deliver >>10
 ;   move ½ tile/sec = 4 world/sec → delta_8_8 = (sintab * vel_ms) >> 6
 ; sintab AMP=64; identity: sin=64, dt=1024 → 1024 = 4.0 world.
-; WASD: W/S move, A/D turn (Wolf64 bindings; no strafe).
+; W/S move, A/D strafe, J/L turn (SquareDoom bindings).
 
 input_irq_init
 	lda #0
@@ -19,6 +19,8 @@ input_irq_init
 	sta in_turn_r
 	sta in_fwd
 	sta in_back
+	sta in_strafel
+	sta in_strafer
 	sta in_fire
 	sta in_wpn_pistol
 	sta in_wpn_chaingun
@@ -62,9 +64,33 @@ input_irq
 	pha
 	lda $dc0d				; ack
 	and #$01
-	beq .irq_rti
+	bne .irq_keys
+	jmp .irq_rti
+.irq_keys
 
-	; W / A / S on PA1 = $FD
+	; J (PA4 = $EF) = turn left
+	lda #$ef
+	sta $dc00
+	lda $dc01
+	and #$04
+	bne .irq_noj
+	lda in_turn_l
+	jsr .irq_add_ms
+	sta in_turn_l
+.irq_noj
+
+	; L (PA5 = $DF) = turn right
+	lda #$df
+	sta $dc00
+	lda $dc01
+	and #$04
+	bne .irq_nol
+	lda in_turn_r
+	jsr .irq_add_ms
+	sta in_turn_r
+.irq_nol
+
+	; W / A / S / 4 on PA1 = $FD
 	lda #$fd
 	sta $dc00
 	lda $dc01
@@ -83,11 +109,11 @@ input_irq
 	sta in_back
 .irq_nos
 	txa
-	and #$04				; A = turn left
+	and #$04				; A = strafe left
 	bne .irq_noa
-	lda in_turn_l
+	lda in_strafel
 	jsr .irq_add_ms
-	sta in_turn_l
+	sta in_strafel
 .irq_noa
 	txa
 	and #$08				; 4 = chaingun (1/3 reserved knife/rifle)
@@ -100,11 +126,11 @@ input_irq
 	lda #$fb
 	sta $dc00
 	lda $dc01
-	and #$04				; D = turn right
+	and #$04				; D = strafe right
 	bne .irq_nod
-	lda in_turn_r
+	lda in_strafer
 	jsr .irq_add_ms
-	sta in_turn_r
+	sta in_strafer
 .irq_nod
 
 	; 2 / SPACE on PA7 = $7F
@@ -156,6 +182,10 @@ read_input
 	pha
 	lda in_back
 	pha
+	lda in_strafel
+	pha
+	lda in_strafer
+	pha
 	lda in_fire
 	sta key_fire
 	lda in_wpn_pistol
@@ -167,6 +197,8 @@ read_input
 	sta in_turn_r
 	sta in_fwd
 	sta in_back
+	sta in_strafel
+	sta in_strafer
 	sta in_fire
 	sta in_wpn_pistol
 	sta in_wpn_chaingun
@@ -200,7 +232,29 @@ read_input
 	sta playera
 .turn_done
 
-	; stack: back, fwd (top = back)
+	; stack: strafer, strafel, back, fwd (top = strafer)
+	pla					; strafer (D)
+	beq .no_d
+	sta vel_ms
+	ldy playera
+	lda sintab,y
+	jsr neg_a				; right: dx = -sin
+	jsr move_add_x
+	ldy playera
+	lda costab,y
+	jsr neg_a				; dy = -cos
+	jsr move_add_y
+.no_d
+	pla					; strafel (A)
+	beq .no_a
+	sta vel_ms
+	ldy playera
+	lda sintab,y				; left: dx = +sin
+	jsr move_add_x
+	ldy playera
+	lda costab,y				; dy = +cos
+	jsr move_add_y
+.no_a
 	pla					; back
 	beq .no_s
 	sta vel_ms

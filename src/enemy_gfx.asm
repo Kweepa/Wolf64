@@ -3,21 +3,23 @@
 ENEMY_FRAME_COUNT = 20
 
 enemy_frm_w
-	!byte 7, 6, 5, 5, 7, 6, 8, 10, 9, 7, 6, 9, 10, 7, 6, 8, 9, 14, 8, 8
+	!byte 7, 6, 5, 5, 7, 6, 8, 10, 9, 7, 8, 7, 6, 5, 7, 8, 9, 14, 8, 8
 enemy_frm_h
-	!byte 16, 16, 16, 16, 16, 15, 16, 16, 16, 16, 15, 15, 16, 16, 16, 15, 16, 5, 15, 15
+	!byte 16, 16, 16, 16, 16, 15, 16, 16, 16, 16, 16, 16, 16, 16, 16, 15, 16, 5, 15, 15
 enemy_frm_off_lo
-	!byte 0, 56, 104, 144, 184, 240, 32, 96, 176, 248, 48, 96, 168, 248, 48, 96, 160, 232, 18, 82
+	!byte 0, 56, 104, 144, 184, 240, 32, 96, 176, 248, 48, 112, 168, 216, 0, 56, 120, 192, 234, 42
 enemy_frm_off_hi
-	!byte 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4
+	!byte 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4
 
-; Frame sets: stand=0..4  walkA=5..9  walkB=10..14; combat 15..17
+; Frame sets: stand=0..4  walkA=5..9  walkB=10..14; combat 15..19
 EF_STAND = 0
 EF_WALKA = 5
 EF_WALKB = 10
 EF_DIE = 15
 EF_PAIN = 16
 EF_DEAD = 17
+EF_SHOOT2 = 18
+EF_SHOOT3 = 19
 
 ; enemy_gfx_data label lives in wolf64.asm (after SoA)
 

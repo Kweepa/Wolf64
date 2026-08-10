@@ -1,6 +1,9 @@
 # Wolf3D shareware (obtain separately)
 shareware/
 
+# Local reference dumps / reverse-engineering scratch
+refs/
+
 # Build outputs
 *.prg
 *.lbl

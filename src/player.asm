@@ -214,3 +214,15 @@ probe_solid
 .clear
 	lda #0
 	rts
+
+; A = damage — subtract from player_hp, floor at 0 (Wolf TakeDamage lite)
+take_damage
+	sta tmp0
+	lda player_hp
+	sec
+	sbc tmp0
+	bcs +
+	lda #0
++
+	sta player_hp
+	rts

@@ -1,4 +1,4 @@
-; Guard enemies — SoA pool, patrol/stand, depth-sorted masked billboards
+; Guard enemies — SoA pool, patrol/stand/chase/shoot, depth-sorted masked billboards
 !zone enemy
 
 MAX_ENEMIES	= 32
@@ -10,20 +10,31 @@ EF_ACTIVE	= $01
 EF_AMBUSH	= $02
 EF_PHASE_B	= $04				; walk A/B toggle (frame bases in enemy_gfx.asm)
 EF_MOVING	= $08				; moved this frame → walk anim
+EF_FIRSTATTACK	= $10				; allow 180° on first chase dir pick
+EF_SHOT_DONE	= $20				; fired during current ES_SHOOT
 ES_ALIVE	= 0
-ES_PAIN		= 1
-ES_DYING	= 2
-ES_DEAD		= 3
+ES_CHASE	= 1
+ES_SHOOT	= 2
+ES_PAIN		= 3
+ES_DYING	= 4
+ES_DEAD		= 5
 GUARD_HP	= 25				; Wolf starthitpoints[all][guard]
+PLAYER_HP0	= 100
 PAIN_T		= 42				; flinch in 8ms units (~336ms)
 DIE_T		= 84				; die1 dwell in 8ms units (~672ms)
+SHOOT_T		= 50				; ~400ms per aim/recover phase (8ms units)
 ENEMY_SPEED	= 24				; ~¼ player wish scale (sintab units via dt)
+CHASE_SPEED	= 72				; ENEMY_SPEED*3 (Wolf FirstSighting)
 ANIM_MS		= 180
 AIM_COL		= 20				; view-center hit column
+DOOR_LOS_MIN	= $80				; door_pos must be ≥ half open for LOS
 
 ; Facing NESW → playera-compatible angle
 enemy_face_ang
 	!byte 64, 0, 192, 128			; N E S W
+; opposite facing
+enemy_opp_face
+	!byte 2, 3, 0, 1				; S W N E
 
 ; ---------------------------------------------------------------------------
 ; Deathchase / SquareDoom GetRandom8 — new = 9 * old + 193; A = next rnd
@@ -46,8 +57,12 @@ enemies_init
 	sta random8
 	lda #0
 	sta enemy_count
-	tax
+	sta los_rr
+	lda #PLAYER_HP0
+	sta player_hp
+	ldx #0
 .ei_clr
+	lda #0
 	sta enemy_flags,x
 	sta enemy_state,x
 	sta enemy_state_t,x
@@ -134,7 +149,7 @@ enemies_update
 .eu_loop
 	cpx enemy_count
 	bcc .eu_cont
-	jmp .eu_done
+	jmp .eu_los
 .eu_cont
 	lda enemy_flags,x
 	and #EF_ACTIVE
@@ -143,6 +158,10 @@ enemies_update
 .eu_active
 	lda enemy_state,x
 	beq .eu_alive			; ES_ALIVE
+	cmp #ES_CHASE
+	beq .eu_chase
+	cmp #ES_SHOOT
+	beq .eu_shoot
 	cmp #ES_PAIN
 	beq .eu_pain
 	cmp #ES_DYING
@@ -156,8 +175,10 @@ enemies_update
 	lda #0
 +
 	sta enemy_state_t,x
-	bne .eu_next
-	lda #ES_ALIVE
+	beq +
+	jmp .eu_next
++
+	lda #ES_CHASE			; alerted → resume chase
 	sta enemy_state,x
 	jmp .eu_next
 .eu_dying
@@ -168,11 +189,28 @@ enemies_update
 	lda #0
 +
 	sta enemy_state_t,x
-	bne .eu_next
+	beq +
+	jmp .eu_next
++
 	lda #ES_DEAD
 	sta enemy_state,x
 	jmp .eu_next
 .eu_alive
+	; reaction countdown after sight (Wolf SightPlayer temp2)
+	lda enemy_state_t,x
+	beq .eu_idle_ai
+	sec
+	sbc dt8
+	bcs +
+	lda #0
++
+	sta enemy_state_t,x
+	beq +
+	jmp .eu_next
++
+	jsr first_sighting
+	jmp .eu_next
+.eu_idle_ai
 	lda enemy_flags,x
 	and #EF_AMBUSH
 	bne .eu_stand
@@ -184,11 +222,47 @@ enemies_update
 	and #(EF_ACTIVE | EF_AMBUSH)
 	sta enemy_flags,x
 	jmp .eu_next
+.eu_chase
+	jsr enemy_chase_one
+	jmp .eu_anim
+.eu_shoot
+	stx enemy_idx
+	lda enemy_state_t,x
+	sec
+	sbc dt8
+	bcs +
+	lda #0
++
+	sta enemy_state_t,x
+	beq +
+	jmp .eu_next
++
+	lda enemy_flags,x
+	and #EF_SHOT_DONE
+	bne .eu_shoot_done
+	; end of aim pose → fire, enter recover pose
+	jsr enemy_shoot
+	ldx enemy_idx
+	lda enemy_flags,x
+	ora #EF_SHOT_DONE
+	sta enemy_flags,x
+	lda #SHOOT_T
+	sta enemy_state_t,x
+	jmp .eu_next
+.eu_shoot_done
+	lda enemy_flags,x
+	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK)
+	sta enemy_flags,x
+	lda #ES_CHASE
+	sta enemy_state,x
+	jmp .eu_next
 .eu_anim
 	; walk phase timer only while moving
 	lda enemy_flags,x
 	and #EF_MOVING
-	beq .eu_next
+	bne +
+	jmp .eu_next
++
 	lda enemy_anim_t,x
 	clc
 	adc dt_ms
@@ -205,8 +279,10 @@ enemies_update
 	sta enemy_anim_t,x
 .eu_next
 	inx
-	beq .eu_done
+	beq .eu_los
 	jmp .eu_loop
+.eu_los
+	jsr enemy_los_rr
 .eu_done
 	rts
 
@@ -333,6 +409,7 @@ enemy_patrol_one
 	ldx enemy_idx
 	rts
 
+; ---------------------------------------------------------------------------
 ; Same WALL_MARGIN as player: borrow player coords → push_walls → write back.
 enemy_push_walls
 	ldx enemy_idx
@@ -827,6 +904,8 @@ enemy_draw_one
 
 	; combat frames override stand/walk
 	lda enemy_state,x
+	cmp #ES_SHOOT
+	beq .edo_shoot
 	cmp #ES_PAIN
 	beq .edo_pain
 	cmp #ES_DYING
@@ -834,8 +913,23 @@ enemy_draw_one
 	cmp #ES_DEAD
 	beq .edo_dead
 	lda #1
-	sta e_hitscan			; alive: write hit buffer
+	sta e_hitscan			; alive/chase: write hit buffer
 	bne .edo_livefrm
+.edo_shoot
+	lda #1
+	sta e_hitscan
+	lda enemy_flags,x
+	and #EF_SHOT_DONE
+	bne .edo_sh3
+	lda #EF_SHOOT2
+	bne .edo_shf
+.edo_sh3
+	lda #EF_SHOOT3
+.edo_shf
+	sta e_frm
+	lda #0
+	sta e_flip
+	jmp .edo_side
 .edo_pain
 	lda #1				; pain still shootable
 	sta e_hitscan
@@ -866,6 +960,13 @@ enemy_draw_one
 	lda enemy_flags,x
 	and #EF_AMBUSH
 	bne .edo_stand
+	lda enemy_state,x
+	cmp #ES_CHASE
+	beq .edo_walkchk
+	lda enemy_flags,x
+	and #EF_MOVING
+	beq .edo_stand
+.edo_walkchk
 	lda enemy_flags,x
 	and #EF_MOVING
 	beq .edo_stand
@@ -1677,6 +1778,7 @@ gun_attack
 ; X = enemy index, A = raw damage (Wolf DamageActor)
 damage_actor
 	sta tmp2
+	stx enemy_idx
 	lda enemy_flags,x
 	and #EF_AMBUSH
 	beq .da_sub
@@ -1688,13 +1790,14 @@ damage_actor
 	bcc .da_kill
 	beq .da_kill
 	sta enemy_hp,x
-	; pain
+	; pain → then chase (alerted)
 	lda #ES_PAIN
 	sta enemy_state,x
 	lda #PAIN_T
 	sta enemy_state_t,x
 	lda enemy_flags,x
-	and #$fd				; clear EF_AMBUSH → alerted
+	and #(EF_ACTIVE | EF_PHASE_B)	; clear ambush / shot / moving
+	ora #EF_FIRSTATTACK
 	sta enemy_flags,x
 	rts
 .da_kill

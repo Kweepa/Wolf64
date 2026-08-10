@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-Process the 20 purple-outlined frames on guards_sheet.png:
+Build C64 guard atlas from textures/guards/guards_sheet.png (VSWAP extract).
 
-  1. Identify frames from purple (107,94,181) selection boxes
+  1. Slice 20 frames from the 8×7 × 64px source sheet
   2. Scale uniformly so the tallest content height → 16px
   3. Remap to Pepto C64 palette minus black/white/cyan/green/yellow/light green;
-     pink + greys only in the top 4 rows, except ceiling dark grey is never used
-     in the top half of the sprite
+     pink + greys only in the top 4 rows; ceiling dark grey never in top half
   4. Clip transparent edges
-  5. Write textures/guards/c64_16/*.png (+ contact sheet)
+  5. Write only textures/guards/c64_16/guards_c64_16_sheet.png (5×4 contact sheet)
+
+Walk A = source walk row 1; walk B = source walk row 2 (not row 3).
+Hand edits go in guards_c64_sheet_edit.png — pack_enemies reads that file.
 """
 
 from __future__ import annotations
@@ -21,23 +23,27 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from extract_walls import C64_PALETTE  # noqa: E402
 
-# Frames inside the purple boxes on guards_sheet.png (WL order / cell layout).
-SELECTED = [
-    *[f"guard_s_{i}" for i in range(1, 6)],
-    *[f"guard_w1_{i}" for i in range(1, 6)],
-    *[f"guard_w3_{i}" for i in range(1, 6)],
-    "guard_die_1",
-    "guard_pain_2",
-    "guard_dead",
-    "guard_shoot_2",
-    "guard_shoot_3",
+# (name, sheet_row, sheet_col) on guards_sheet.png — 8 cols, stand then walk1–4 then combat
+SELECTED: list[tuple[str, int, int]] = [
+    *[(f"guard_s_{i}", 0, i - 1) for i in range(1, 6)],
+    *[(f"guard_w1_{i}", 1, i - 1) for i in range(1, 6)],
+    *[(f"guard_w2_{i}", 2, i - 1) for i in range(1, 6)],  # walk B = 2nd walk row
+    ("guard_die_1", 5, 1),
+    ("guard_pain_2", 5, 4),
+    ("guard_dead", 5, 5),
+    ("guard_shoot_2", 5, 7),
+    ("guard_shoot_3", 6, 0),
 ]
+
+SRC_COLS = 8
+SRC_CELL = 64
+OUT_COLS = 5
+OUT_ROWS = 4
 
 # Pepto indices excluded from guard remap: black, white, cyan, green, yellow, light green.
 C64_EXCLUDE = {0, 1, 3, 5, 7, 13}
 CEILING_GREY = 11  # sky $b — never in top half
 FLOOR_GREY = 12  # floor $c — corpses sit on it, must not use
-# Face-only (top 4 rows): pink/light red + medium/light grey (+ dark grey only in bottom half).
 FACE_ONLY = {10, 11, 12, 15}
 FACE_ROWS = 4
 C64_GUARD_FACE = [i for i in range(16) if i not in C64_EXCLUDE | {CEILING_GREY}]
@@ -84,8 +90,6 @@ def to_c64(img: Image.Image, *, ban_floor: bool = False) -> Image.Image:
     out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     opx = out.load()
     for y in range(h):
-        # Face rows: pink + med/light grey OK; ceiling grey banned (top half).
-        # Below: no pink/greys at all.
         allowed = C64_GUARD_FACE if y < FACE_ROWS else C64_GUARD_BODY
         if ban_floor:
             allowed = [i for i in allowed if i != FLOOR_GREY]
@@ -99,60 +103,81 @@ def to_c64(img: Image.Image, *, ban_floor: bool = False) -> Image.Image:
     return out
 
 
+def slice_src_cell(sheet: Image.Image, row: int, col: int) -> Image.Image:
+    x0 = col * SRC_CELL
+    y0 = row * SRC_CELL
+    return sheet.crop((x0, y0, x0 + SRC_CELL, y0 + SRC_CELL)).convert("RGBA")
+
+
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
-    src_dir = root / "textures" / "guards"
-    out_dir = src_dir / "c64_16"
+    src_sheet = root / "textures" / "guards" / "guards_sheet.png"
+    out_dir = root / "textures" / "guards" / "c64_16"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    assert len(SELECTED) == 20, len(SELECTED)
+    assert len(SELECTED) == OUT_COLS * OUT_ROWS, len(SELECTED)
+    if not src_sheet.is_file():
+        raise FileNotFoundError(src_sheet)
+
+    src = Image.open(src_sheet)
+    sw, sh = src.size
+    if sw != SRC_COLS * SRC_CELL or sh < 7 * SRC_CELL:
+        raise ValueError(f"expected {SRC_COLS}x7×{SRC_CELL} sheet, got {sw}x{sh}")
 
     frames: list[tuple[str, Image.Image, int]] = []
-    for name in SELECTED:
-        img = Image.open(src_dir / f"{name}.png").convert("RGBA")
+    for name, row, col in SELECTED:
+        img = slice_src_cell(src, row, col)
         frames.append((name, img, content_height(img)))
 
     tallest = max(h for _, _, h in frames)
     scale = 16 / tallest
     print(f"tallest content = {tallest}px  scale = {scale:.6f}")
 
-    results: list[tuple[str, tuple[int, int]]] = []
+    finals: list[tuple[str, Image.Image]] = []
     for name, img, ch in frames:
-        # Clip source content first so scale maps tallest → exactly 16,
-        # then resize, C64-remap, and clip any residual transparent edge.
         src_bbox = opaque_bbox(img)
         assert src_bbox is not None, name
         content = img.crop(src_bbox)
         nw = max(1, round(content.width * scale))
         nh = max(1, round(content.height * scale))
         scaled = content.resize((nw, nh), Image.NEAREST)
-        # Corpse lies on the floor — never quantize to floor grey ($c).
         c64 = to_c64(scaled, ban_floor=(name == "guard_dead"))
         bbox = opaque_bbox(c64)
         final = c64 if bbox is None else c64.crop(bbox)
+        finals.append((name, final))
+        print(f"{name:16} src_h={ch:2d} -> {final.size[0]}x{final.size[1]}")
 
-        path = out_dir / f"{name}.png"
-        final.save(path)
-        results.append((name, final.size))
-        print(
-            f"{name:16} src_h={ch:2d} -> {final.size[0]}x{final.size[1]}  {path.name}"
-        )
-
-    max_h = max(s[1] for _, s in results)
+    max_h = max(im.size[1] for _, im in finals)
+    max_w = max(im.size[0] for _, im in finals)
     print(f"max output height = {max_h} (target 16)")
 
-    max_w = max(s[0] for _, s in results)
-    cols = 5
-    rows = (len(results) + cols - 1) // cols
-    sheet = Image.new("RGBA", (cols * max_w, rows * max_h), (0, 0, 0, 0))
-    for i, (name, size) in enumerate(results):
-        im = Image.open(out_dir / f"{name}.png")
-        cx = (i % cols) * max_w + (max_w - size[0]) // 2
-        cy = (i // cols) * max_h + (max_h - size[1]) // 2
+    sheet = Image.new("RGBA", (OUT_COLS * max_w, OUT_ROWS * max_h), (0, 0, 0, 0))
+    for i, (name, im) in enumerate(finals):
+        cx = (i % OUT_COLS) * max_w + (max_w - im.size[0]) // 2
+        cy = (i // OUT_COLS) * max_h + (max_h - im.size[1]) // 2
         sheet.paste(im, (cx, cy), im)
     sheet_path = out_dir / "guards_c64_16_sheet.png"
     sheet.save(sheet_path)
     print(f"sheet {sheet.size[0]}x{sheet.size[1]} -> {sheet_path}")
+
+    # Refresh walk-B row on the hand-edit sheet; keep other cells (muzzle flash).
+    edit_path = out_dir / "guards_c64_sheet_edit.png"
+    if edit_path.is_file():
+        edit = Image.open(edit_path).convert("RGBA")
+        if edit.size == sheet.size:
+            cell_w = sheet.size[0] // OUT_COLS
+            cell_h = sheet.size[1] // OUT_ROWS
+            walk_b_row = 2
+            y0 = walk_b_row * cell_h
+            band = sheet.crop((0, y0, sheet.size[0], y0 + cell_h))
+            edit.paste(band, (0, y0), band)
+            edit.save(edit_path)
+            print(f"updated walk-B row in {edit_path.name}")
+        else:
+            print(
+                f"note: {edit_path.name} is {edit.size}, new sheet {sheet.size} — "
+                "copy guards_c64_16_sheet.png over it if you want a full refresh"
+            )
     return 0
 
 

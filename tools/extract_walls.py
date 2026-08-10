@@ -3,15 +3,17 @@
 Extract / rebuild Wolf64 wall textures.
 
 Default: pull MapFormat walls (IDs 0–15) from shareware VSWAP.WL1,
-downsample each 64×64 VGA page to 16×16, quantize to Pepto C64 palette.
+downsample each 64×64 VGA page to 16×16, quantize to Pepto C64 palette,
+write textures/walls.bin only (does not touch walls_preview.png).
 
 Authoring: edit textures/walls_preview.png (64×64 = 4×4 of native 16×16
 texels), then rebuild the engine blob with --from-preview.
 
 Outputs:
   textures/walls.bin          2 KB engine blob (16 × 128 bytes, 4-bit texels)
-  textures/walls_preview.png  64×64 atlas (1:1 texels) for visual QA / editing
-  textures/wall_XX_*.png      individual 16×16 previews (nearest-neighbor scaled)
+
+Hand-edit atlas (never overwritten by this tool):
+  textures/walls_preview.png  64×64 sheet (1:1 texels)
 """
 
 from __future__ import annotations
@@ -226,13 +228,6 @@ def pack_texture(indices: list[int]) -> bytes:
     return bytes(out)
 
 
-def indices_to_image(indices: list[int], scale: int = 1) -> Image.Image:
-    img = Image.new("P", (TEX_SIZE, TEX_SIZE))
-    img.putpalette([c for rgb in C64_PALETTE for c in rgb] + [0] * (768 - 48))
-    img.putdata(indices)
-    if scale != 1:
-        img = img.resize((TEX_SIZE * scale, TEX_SIZE * scale), Image.NEAREST)
-    return img.convert("RGB")
 
 
 PREVIEW_SCALE = 1  # walls_preview is 1:1 (64×64 atlas of 16×16 cells)
@@ -244,10 +239,9 @@ def write_outputs(
     *,
     labels: list[str] | None = None,
 ) -> Path:
-    """Pack 16 index grids into walls.bin + preview PNGs."""
+    """Pack 16 index grids into walls.bin. Does not write or overwrite PNGs."""
     out_dir.mkdir(parents=True, exist_ok=True)
     blob = bytearray()
-    previews: list[Image.Image] = []
 
     for slot, (name, indices) in enumerate(packed_slots):
         assert len(indices) == TEX_SIZE * TEX_SIZE
@@ -255,9 +249,6 @@ def write_outputs(
         assert len(packed) == TEX_STRIDE
         blob.extend(packed)
 
-        preview = indices_to_image(indices, scale=8)
-        preview.save(out_dir / f"wall_{slot:02d}_{name}.png")
-        previews.append(indices_to_image(indices, scale=PREVIEW_SCALE))
         colors = sorted(set(indices))
         prefix = labels[slot] if labels else f"{slot:2} {name:14}"
         print(f"{prefix}  c64={colors}")
@@ -265,15 +256,7 @@ def write_outputs(
     assert len(blob) == NUM_TEXTURES * TEX_STRIDE
     bin_path = out_dir / "walls.bin"
     bin_path.write_bytes(blob)
-
-    cell = TEX_SIZE * PREVIEW_SCALE
-    atlas = Image.new("RGB", (cell * 4, cell * 4), (0, 0, 0))
-    for i, img in enumerate(previews):
-        atlas.paste(img, ((i % 4) * cell, (i // 4) * cell))
-    atlas_path = out_dir / "walls_preview.png"
-    atlas.save(atlas_path)
     print(f"Wrote {bin_path} ({len(blob)} bytes)")
-    print(f"Wrote {atlas_path}")
     return bin_path
 
 

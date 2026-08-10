@@ -101,7 +101,6 @@ main_loop
 !source "enemy.asm"
 !source "enemy_gfx.asm"
 !source "enemy_painters.asm"
-!source "tables.asm"
 !source "painter_tables.asm"
 
 col_texid
@@ -120,6 +119,41 @@ col_enemy
 ; --- enemy SoA (MAX_ENEMIES = 32) arrays live after painters (see below) ---
 enemy_count
 !byte 0
+
+los_rr
+!byte 0
+player_hp
+!byte 0
+ai_dx
+!byte 0
+ai_dy
+!byte 0
+ai_steps
+!byte 0
+ai_xl
+!byte 0
+ai_xh
+!byte 0
+ai_yl
+!byte 0
+ai_yh
+!byte 0
+ai_xsl
+!byte 0
+ai_xsh
+!byte 0
+ai_ysl
+!byte 0
+ai_ysh
+!byte 0
+ai_dist
+!byte 0
+ai_turn
+!byte 0
+ai_old
+!byte 0
+ai_dirtry
+!fill 5, 0
 
 vis_count
 !byte 0
@@ -264,6 +298,15 @@ end_code = *
 end_wpn_spr = *
 !if end_wpn_spr > BITMAP {
 	!error "Weapon sprites overlap BITMAP at $6000; end=$", end_wpn_spr
+}
+
+; Tables + enemy AI in VIC bank gap before bitmap ($54C0..$5FFF)
+*= end_wpn_spr
+!source "tables.asm"
+!source "enemy_ai.asm"
+end_ai_tables = *
+!if end_ai_tables > BITMAP {
+	!error "AI/tables overlap BITMAP at $6000; end=$", end_ai_tables
 }
 
 *= PAINTERS

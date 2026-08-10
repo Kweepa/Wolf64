@@ -4,9 +4,17 @@
 
 TEXTURES	= $4800
 tmp0		= $02
+tmp1		= $03
+tmp2		= $04
+tmp3		= $05
+tmp4		= $3a
+tmp5		= $3b
+half_h		= $31
+tex_ptr_l	= $36
+tex_ptr_h	= $37
 view_row0	= $50
 view_row1	= $52
-view_row2	= $54
+view_row2	= $54				; near painter dest start
 view_row3	= $56
 view_row4	= $58
 view_row5	= $5a

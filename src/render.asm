@@ -88,9 +88,9 @@ paint_column
 	bne +
 	lda #1
 +
-	cmp #51
+	cmp #MAX_HALF_H + 1
 	bcc +
-	lda #50
+	lda #MAX_HALF_H
 +
 	sta half_h
 

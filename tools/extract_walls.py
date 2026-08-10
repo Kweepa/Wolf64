@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-Extract Wolf64 wall textures from shareware VSWAP.WL1.
+Extract / rebuild Wolf64 wall textures.
 
-Pulls the MapFormat wall set (IDs 0–15), downsamples each 64×64 VGA wall
-page to 16×16, and quantizes to the Pepto Commodore 64 palette.
+Default: pull MapFormat walls (IDs 0–15) from shareware VSWAP.WL1,
+downsample each 64×64 VGA page to 16×16, quantize to Pepto C64 palette.
+
+Authoring: edit textures/walls_preview.png (64×64 = 4×4 of native 16×16
+texels), then rebuild the engine blob with --from-preview.
 
 Outputs:
   textures/walls.bin          2 KB engine blob (16 × 128 bytes, 4-bit texels)
-  textures/walls_preview.png  atlas for visual QA
+  textures/walls_preview.png  64×64 atlas (1:1 texels) for visual QA / editing
   textures/wall_XX_*.png      individual 16×16 previews (nearest-neighbor scaled)
 """
 
@@ -232,6 +235,91 @@ def indices_to_image(indices: list[int], scale: int = 1) -> Image.Image:
     return img.convert("RGB")
 
 
+PREVIEW_SCALE = 1  # walls_preview is 1:1 (64×64 atlas of 16×16 cells)
+
+
+def write_outputs(
+    out_dir: Path,
+    packed_slots: list[tuple[str, list[int]]],
+    *,
+    labels: list[str] | None = None,
+) -> Path:
+    """Pack 16 index grids into walls.bin + preview PNGs."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    blob = bytearray()
+    previews: list[Image.Image] = []
+
+    for slot, (name, indices) in enumerate(packed_slots):
+        assert len(indices) == TEX_SIZE * TEX_SIZE
+        packed = pack_texture(indices)
+        assert len(packed) == TEX_STRIDE
+        blob.extend(packed)
+
+        preview = indices_to_image(indices, scale=8)
+        preview.save(out_dir / f"wall_{slot:02d}_{name}.png")
+        previews.append(indices_to_image(indices, scale=PREVIEW_SCALE))
+        colors = sorted(set(indices))
+        prefix = labels[slot] if labels else f"{slot:2} {name:14}"
+        print(f"{prefix}  c64={colors}")
+
+    assert len(blob) == NUM_TEXTURES * TEX_STRIDE
+    bin_path = out_dir / "walls.bin"
+    bin_path.write_bytes(blob)
+
+    cell = TEX_SIZE * PREVIEW_SCALE
+    atlas = Image.new("RGB", (cell * 4, cell * 4), (0, 0, 0))
+    for i, img in enumerate(previews):
+        atlas.paste(img, ((i % 4) * cell, (i // 4) * cell))
+    atlas_path = out_dir / "walls_preview.png"
+    atlas.save(atlas_path)
+    print(f"Wrote {bin_path} ({len(blob)} bytes)")
+    print(f"Wrote {atlas_path}")
+    return bin_path
+
+
+def cell_rgb_to_indices(cell: Image.Image) -> list[int]:
+    """
+    Preview cell → 16×16 C64 indices.
+
+    At PREVIEW_SCALE==1 the cell is already native texels. If scaled, samples
+    the top-left of each block (matches NEAREST upscale when writing the atlas).
+    """
+    want = TEX_SIZE * PREVIEW_SCALE
+    if cell.size != (want, want):
+        cell = cell.resize((want, want), Image.NEAREST)
+    rgb = cell.convert("RGB")
+    px = rgb.load()
+    out: list[int] = []
+    for y in range(TEX_SIZE):
+        for x in range(TEX_SIZE):
+            out.append(nearest_c64(px[x * PREVIEW_SCALE, y * PREVIEW_SCALE]))
+    return out
+
+
+def extract_from_preview(preview_path: Path, out_dir: Path) -> Path:
+    """Chop walls_preview.png (4×4 of 16×16) into 16 textures and rebuild walls.bin."""
+    if not preview_path.is_file():
+        raise FileNotFoundError(preview_path)
+
+    atlas = Image.open(preview_path).convert("RGB")
+    cell = TEX_SIZE * PREVIEW_SCALE
+    expected = (cell * 4, cell * 4)  # 64×64 at 1:1
+    if atlas.size != expected:
+        raise ValueError(
+            f"{preview_path}: expected {expected[0]}×{expected[1]} "
+            f"(4×4 of {cell}×{cell} cells), got {atlas.size[0]}×{atlas.size[1]}"
+        )
+
+    names = [name for _, name, _ in TEXTURE_SOURCES]
+    slots: list[tuple[str, list[int]]] = []
+    for i, name in enumerate(names):
+        cx, cy = (i % 4) * cell, (i // 4) * cell
+        tile = atlas.crop((cx, cy, cx + cell, cy + cell))
+        slots.append((name, cell_rgb_to_indices(tile)))
+
+    return write_outputs(out_dir, slots)
+
+
 def extract(shareware: Path, out_dir: Path) -> Path:
     vswap_path = shareware / "VSWAP.WL1"
     if not vswap_path.is_file():
@@ -248,10 +336,8 @@ def extract(shareware: Path, out_dir: Path) -> Path:
     else:
         sources = TEXTURE_SOURCES
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    blob = bytearray()
-    previews: list[Image.Image] = []
-
+    slots: list[tuple[str, list[int]]] = []
+    labels: list[str] = []
     for slot, name, page in sources:
         if page is None:
             indices = [0] * (TEX_SIZE * TEX_SIZE)
@@ -263,31 +349,10 @@ def extract(shareware: Path, out_dir: Path) -> Path:
                 indices = quantize_blue_stone(rgb16)
             else:
                 indices = quantize(rgb16)
+        slots.append((name, indices))
+        labels.append(f"{slot:2} {name:14} page={str(page):>4}")
 
-        packed = pack_texture(indices)
-        assert len(packed) == TEX_STRIDE
-        blob.extend(packed)
-
-        preview = indices_to_image(indices, scale=8)
-        preview.save(out_dir / f"wall_{slot:02d}_{name}.png")
-        previews.append(indices_to_image(indices, scale=4))
-        colors = sorted(set(indices))
-        print(f"{slot:2} {name:14} page={str(page):>4}  c64={colors}")
-
-    assert len(blob) == NUM_TEXTURES * TEX_STRIDE
-    bin_path = out_dir / "walls.bin"
-    bin_path.write_bytes(blob)
-
-    # 4×4 atlas of the 16 slots
-    cell = TEX_SIZE * 4
-    atlas = Image.new("RGB", (cell * 4, cell * 4), (0, 0, 0))
-    for i, img in enumerate(previews):
-        atlas.paste(img, ((i % 4) * cell, (i // 4) * cell))
-    atlas_path = out_dir / "walls_preview.png"
-    atlas.save(atlas_path)
-    print(f"Wrote {bin_path} ({len(blob)} bytes)")
-    print(f"Wrote {atlas_path}")
-    return bin_path
+    return write_outputs(out_dir, slots, labels=labels)
 
 
 def main(argv: list[str]) -> int:
@@ -295,8 +360,25 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--shareware", type=Path, default=root / "shareware")
     ap.add_argument("--out", type=Path, default=root / "textures")
+    ap.add_argument(
+        "--from-preview",
+        nargs="?",
+        const="__default__",
+        default=None,
+        metavar="PNG",
+        help="rebuild walls.bin from walls_preview.png (optional path; "
+        "default: <out>/walls_preview.png)",
+    )
     args = ap.parse_args(argv)
-    extract(args.shareware, args.out)
+    if args.from_preview is not None:
+        preview = (
+            args.out / "walls_preview.png"
+            if args.from_preview == "__default__"
+            else Path(args.from_preview)
+        )
+        extract_from_preview(preview, args.out)
+    else:
+        extract(args.shareware, args.out)
     return 0
 
 

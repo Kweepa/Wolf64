@@ -7,6 +7,8 @@ tmp2	= $04
 tmp3	= $05
 aux_l	= $06
 aux_h	= $07
+tmp4	= $3a
+tmp5	= $3b
 
 ; Judd square-table ZP pointers (lo patched per multiply)
 sq1_l	= $08
@@ -53,7 +55,7 @@ tex_id		= $2d
 texx		= $2e
 wallz_l		= $2f
 wallz_h		= $30
-half_h		= $31		; 1..50 half-tiles (TDD)
+half_h		= $31		; 1..75 half-tiles (TDD)
 side		= $32		; 0=x-hit, 1=y-hit
 view_back	= $33		; 0 = paint SCREEN; 1 = paint SCREEN_B
 scr_front_l	= $34		; visible matrix base (HUD) — must be contiguous word

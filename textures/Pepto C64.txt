@@ -1,0 +1,25 @@
+; Paint.NET Palette File
+; Pepto VIC-II / VICE pepto-ntsc (matches tools/extract_walls.py)
+; Format: aarrggbb (AA=alpha, FF=opaque)
+; Index order matches Wolf64 C64 texture indices 0-15
+;
+; Install: Colors window → palette menu (▼) → Open Palettes Folder
+; Copy this file there, then pick "Pepto C64" from the palette list.
+; Expand the Colors window (More >>) if you only see the first 32 slots.
+;
+FF000000
+FFFFFFFF
+FF67372B
+FF70A3B1
+FF6F3D86
+FF588C42
+FF342879
+FFB7C66E
+FF6F4E25
+FF423800
+FF996659
+FF434343
+FF6B6B6B
+FF9AD183
+FF6B5EB5
+FF959595

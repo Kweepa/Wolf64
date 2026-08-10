@@ -6,13 +6,15 @@ painter_lo
 	!byte $00, $45, $92, $f9, $66, $e4, $5f, $e9, $2e, $cf, $78, $3b, $04, $e9, $d6, $dd
 	!byte $1a, $43, $74, $bb, $08, $55, $a4, $00, $29, $85, $e3, $3b, $91, $e9, $43, $9b
 	!byte $18, $7f, $e8, $4f, $b4, $1b, $84, $eb, $30, $93, $f6, $59, $be, $21, $84, $e7
-	!byte $64, $c7
+	!byte $64, $c7, $2a, $2a, $2a, $2a, $2a, $2a, $2a, $2a, $2a, $2a, $2a, $2a, $2a, $2a
+	!byte $2a, $2a, $2a, $2a, $2a, $2a, $2a, $2a, $2a, $2a, $2a
 painter_hi
 	!byte 0
 	!byte $80, $80, $80, $80, $81, $81, $82, $82, $83, $83, $84, $85, $86, $86, $87, $88
 	!byte $8a, $8b, $8c, $8d, $8f, $90, $91, $93, $94, $95, $96, $98, $99, $9a, $9c, $9d
 	!byte $9f, $a0, $a1, $a3, $a4, $a6, $a7, $a8, $aa, $ab, $ac, $ae, $af, $b1, $b2, $b3
-	!byte $b5, $b6
+	!byte $b5, $b6, $b8, $b8, $b8, $b8, $b8, $b8, $b8, $b8, $b8, $b8, $b8, $b8, $b8, $b8
+	!byte $b8, $b8, $b8, $b8, $b8, $b8, $b8, $b8, $b8, $b8, $b8
 
 ph_patch_h01
 	!byte 2
@@ -484,16 +486,93 @@ ph_patch_h50
 	!byte $e2, $b7, $04, $eb, $b7, $04, $f6, $b7, $05, $01, $b8, $05, $08, $b8, $05
 	!byte $13, $b8, $05, $1a, $b8, $05, $25, $b8, $05
 
+ph_patch_h51
+	!byte 0
+
+ph_patch_h52
+	!byte 0
+
+ph_patch_h53
+	!byte 0
+
+ph_patch_h54
+	!byte 0
+
+ph_patch_h55
+	!byte 0
+
+ph_patch_h56
+	!byte 0
+
+ph_patch_h57
+	!byte 0
+
+ph_patch_h58
+	!byte 0
+
+ph_patch_h59
+	!byte 0
+
+ph_patch_h60
+	!byte 0
+
+ph_patch_h61
+	!byte 0
+
+ph_patch_h62
+	!byte 0
+
+ph_patch_h63
+	!byte 0
+
+ph_patch_h64
+	!byte 0
+
+ph_patch_h65
+	!byte 0
+
+ph_patch_h66
+	!byte 0
+
+ph_patch_h67
+	!byte 0
+
+ph_patch_h68
+	!byte 0
+
+ph_patch_h69
+	!byte 0
+
+ph_patch_h70
+	!byte 0
+
+ph_patch_h71
+	!byte 0
+
+ph_patch_h72
+	!byte 0
+
+ph_patch_h73
+	!byte 0
+
+ph_patch_h74
+	!byte 0
+
+ph_patch_h75
+	!byte 0
+
 ph_patch_lo
 	!byte 0
 	!byte <ph_patch_h01, <ph_patch_h02, <ph_patch_h03, <ph_patch_h04, <ph_patch_h05, <ph_patch_h06, <ph_patch_h07, <ph_patch_h08, <ph_patch_h09, <ph_patch_h10, <ph_patch_h11, <ph_patch_h12, <ph_patch_h13, <ph_patch_h14, <ph_patch_h15, <ph_patch_h16
 	!byte <ph_patch_h17, <ph_patch_h18, <ph_patch_h19, <ph_patch_h20, <ph_patch_h21, <ph_patch_h22, <ph_patch_h23, <ph_patch_h24, <ph_patch_h25, <ph_patch_h26, <ph_patch_h27, <ph_patch_h28, <ph_patch_h29, <ph_patch_h30, <ph_patch_h31, <ph_patch_h32
 	!byte <ph_patch_h33, <ph_patch_h34, <ph_patch_h35, <ph_patch_h36, <ph_patch_h37, <ph_patch_h38, <ph_patch_h39, <ph_patch_h40, <ph_patch_h41, <ph_patch_h42, <ph_patch_h43, <ph_patch_h44, <ph_patch_h45, <ph_patch_h46, <ph_patch_h47, <ph_patch_h48
-	!byte <ph_patch_h49, <ph_patch_h50
+	!byte <ph_patch_h49, <ph_patch_h50, <ph_patch_h51, <ph_patch_h52, <ph_patch_h53, <ph_patch_h54, <ph_patch_h55, <ph_patch_h56, <ph_patch_h57, <ph_patch_h58, <ph_patch_h59, <ph_patch_h60, <ph_patch_h61, <ph_patch_h62, <ph_patch_h63, <ph_patch_h64
+	!byte <ph_patch_h65, <ph_patch_h66, <ph_patch_h67, <ph_patch_h68, <ph_patch_h69, <ph_patch_h70, <ph_patch_h71, <ph_patch_h72, <ph_patch_h73, <ph_patch_h74, <ph_patch_h75
 ph_patch_hi
 	!byte 0
 	!byte >ph_patch_h01, >ph_patch_h02, >ph_patch_h03, >ph_patch_h04, >ph_patch_h05, >ph_patch_h06, >ph_patch_h07, >ph_patch_h08, >ph_patch_h09, >ph_patch_h10, >ph_patch_h11, >ph_patch_h12, >ph_patch_h13, >ph_patch_h14, >ph_patch_h15, >ph_patch_h16
 	!byte >ph_patch_h17, >ph_patch_h18, >ph_patch_h19, >ph_patch_h20, >ph_patch_h21, >ph_patch_h22, >ph_patch_h23, >ph_patch_h24, >ph_patch_h25, >ph_patch_h26, >ph_patch_h27, >ph_patch_h28, >ph_patch_h29, >ph_patch_h30, >ph_patch_h31, >ph_patch_h32
 	!byte >ph_patch_h33, >ph_patch_h34, >ph_patch_h35, >ph_patch_h36, >ph_patch_h37, >ph_patch_h38, >ph_patch_h39, >ph_patch_h40, >ph_patch_h41, >ph_patch_h42, >ph_patch_h43, >ph_patch_h44, >ph_patch_h45, >ph_patch_h46, >ph_patch_h47, >ph_patch_h48
-	!byte >ph_patch_h49, >ph_patch_h50
+	!byte >ph_patch_h49, >ph_patch_h50, >ph_patch_h51, >ph_patch_h52, >ph_patch_h53, >ph_patch_h54, >ph_patch_h55, >ph_patch_h56, >ph_patch_h57, >ph_patch_h58, >ph_patch_h59, >ph_patch_h60, >ph_patch_h61, >ph_patch_h62, >ph_patch_h63, >ph_patch_h64
+	!byte >ph_patch_h65, >ph_patch_h66, >ph_patch_h67, >ph_patch_h68, >ph_patch_h69, >ph_patch_h70, >ph_patch_h71, >ph_patch_h72, >ph_patch_h73, >ph_patch_h74, >ph_patch_h75
 

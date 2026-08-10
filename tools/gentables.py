@@ -55,10 +55,11 @@ def main() -> None:
 
     # half_h ≈ $1800/(idx<<5) for idx = wallz>>5 (256 entries)
     # 3/4 of former $2000 scale → squarer wall tiles on chunky view
-    # idx==0 (wallz<32) → exact divide in asm
-    heightab = [50]
+    # idx==0 (wallz<32) → exact divide in asm; clamp 1..75
+    MAX_HALF_H = 75
+    heightab = [MAX_HALF_H]
     for i in range(1, 256):
-        heightab.append(max(1, min(50, 0x1800 // (i << 5))))
+        heightab.append(max(1, min(MAX_HALF_H, 0x1800 // (i << 5))))
 
     def bchunk(name: str, data: list[int], w: int = 16) -> str:
         lines = [f"{name}"]

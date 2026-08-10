@@ -7,6 +7,7 @@
 PROFILE		= 1				; stage buckets on bitmap row 0
 PROF_SPLIT	= 0				; 1 = per-col R/D (~80 CIA samples; +~20ms)
 DBG_FPS		= 1				; F ≈ frame ms (cols 0–2)
+MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 
 ; --- memory map -----------------------------------------------------------
 ; $0801  BASIC stub + code + painter tables
@@ -29,9 +30,7 @@ SQTAB2		= SQTAB1 + $200
 SQTAB3		= SQTAB1 + $400
 SQTAB4		= SQTAB1 + $600
 
-SPAWN_X		= 29
-SPAWN_Y		= 6				; 63-57 after vertical map flip
-SPAWN_A		= 0
+; Spawn: map tiles 48..51 = player N,E,S,W (see find_spawn)
 
 !source "zp.asm"
 
@@ -57,15 +56,7 @@ start
 	sta smc_last_page
 	sta smc_last_h
 
-	lda #$80
-	sta playerx_l
-	sta playery_l
-	lda #SPAWN_X
-	sta playerx_h
-	lda #SPAWN_Y
-	sta playery_h
-	lda #SPAWN_A
-	sta playera
+	jsr find_spawn
 
 main_loop
 	jsr player_move

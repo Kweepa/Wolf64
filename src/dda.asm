@@ -387,7 +387,7 @@ hit_wall
 	sta col_texx,x
 	rts
 
-; wallz 8.8 → half_h in 1..50 (256-entry heightab, idx = wallz>>5)
+; wallz 8.8 → half_h in 1..MAX_HALF_H (256-entry heightab, idx = wallz>>5)
 ; Scale $1800 = 3/4 of former $2000 (squarer tiles)
 calc_half_h
 	lda wallz_h
@@ -412,7 +412,7 @@ calc_half_h
 	lda wallz_l
 	ora wallz_h
 	bne +
-	lda #50
+	lda #MAX_HALF_H
 	sta half_h
 	rts
 +
@@ -434,7 +434,7 @@ calc_half_h
 	sta tmp3
 	inc tmp0
 	lda tmp0
-	cmp #50
+	cmp #MAX_HALF_H
 	bcc .sublp
 .divdone
 	lda tmp0

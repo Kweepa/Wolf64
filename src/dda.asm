@@ -1,5 +1,5 @@
 ; The Keep–style DDA for a 64×64 Wolf64 map
-; Solid: tile < 16; walkable: >= 16 (empty=16; doors parked at 251..253 for now)
+; 1..14 solid walls, 15..16 doors, >=17 walkable (empty=17)
 !zone dda
 
 MAX_DDA = 64
@@ -7,10 +7,15 @@ MAX_DDA = 64
 setup_player_tile
 	lda playerx_l
 	sta fracx
-	; 256−frac (not 255−frac): at center $80, both axes must match for L/R symmetry
+	; 256−frac (not 255−frac): at center $80, both axes must match for L/R symmetry.
+	; frac=0 → 256 wraps to 0 in 8-bit; that makes sdx=0 and pops the view
+	; every E/W tile crossing that lands on $00. Use $FF (≈1 tile) instead.
 	eor #$ff
 	clc
 	adc #1
+	bne +
+	lda #$ff
++
 	sta fracx_inv
 	lda playerx_h
 	sta plr_mapx
@@ -20,6 +25,9 @@ setup_player_tile
 	eor #$ff
 	clc
 	adc #1
+	bne +
+	lda #$ff
++
 	sta fracy_inv
 	lda playery_h
 	sta plr_mapy
@@ -52,7 +60,9 @@ render_frame
 }
 }
 	jsr set_view_rows
-	; Painters/SMC under $A000 need BASIC out (see hacks.md)
+	; Painters/SMC under $A000 need BASIC out (see hacks.md).
+	; SEI while $01=$34: CIA key IRQ must not run in that bank window.
+	sei
 	lda #$34
 	sta $01
 	lda #COL_FIRST
@@ -65,6 +75,7 @@ render_frame
 	bne .paint_loop
 	lda #$35
 	sta $01
+	cli
 !if PROFILE = 1 {
 	ldy #PROF_PAINT
 	jsr prof_add_bucket
@@ -183,10 +194,10 @@ cast_column
 
 ; Inner DDA + hit_wall / miss (expects tile_*, ddx/ddy/sdx/sdy, SMC patched)
 cast_march
-	ldy #0					; Y=0 for (tile_l) reads
 	ldx #MAX_DDA				; step budget in X
 
 .inner
+	ldy #0					; door_* helpers clobber Y
 	lda sdx_h
 	cmp sdy_h
 	bcc .adv_x
@@ -205,8 +216,10 @@ cast_march
 .smc_mapx
 	inc mapx
 	lda (tile_l),y
-	cmp #16
-	bcs .ax_miss
+	cmp #17
+	bcs .ax_miss				; walkable — common case
+	cmp #15
+	bcs .ax_door				; 15..16 door
 	sta tex_id
 	lda #0
 	sta side
@@ -215,6 +228,10 @@ cast_march
 	lda sdx_h
 	sta wallz_h
 	jmp hit_wall
+.ax_door
+	jsr door_try_x
+	bcc .ax_miss
+	jmp hit_door
 .ax_miss
 	clc
 	lda sdx_l
@@ -242,8 +259,10 @@ cast_march
 .smc_mapy
 	inc mapy
 	lda (tile_l),y
-	cmp #16
-	bcs .ay_miss
+	cmp #17
+	bcs .ay_miss				; walkable — common case
+	cmp #15
+	bcs .ay_door				; 15..16 door
 	sta tex_id
 	lda #1
 	sta side
@@ -252,6 +271,10 @@ cast_march
 	lda sdy_h
 	sta wallz_h
 	jmp hit_wall
+.ay_door
+	jsr door_try_y
+	bcc .ay_miss
+	jmp hit_door
 .ay_miss
 	clc
 	lda sdy_l
@@ -311,6 +334,8 @@ map_to_tile
 	rts
 
 hit_wall
+	; Walls beside a door use jamb texture (slot 15)
+	jsr door_jamb_check
 	lda tex_id
 	ldx col
 	sta col_texid,x

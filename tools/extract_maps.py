@@ -21,8 +21,8 @@ EXITTILE = 99
 ICONARROWS = 90
 ELEVATORTILE = 21
 
-# Wolf64 geometry (0–15)
-T_EMPTY = 0
+# Wolf64 geometry: 1..14 solid, 15..16 doors, 17+ walkable
+T_EMPTY = 17
 T_GREY = 1
 T_GREY_BANNER = 2
 T_BLUE = 3
@@ -33,20 +33,20 @@ T_BRICK = 7
 T_BRICK_WREATH = 8
 T_PURPLE = 9
 T_PURPLE_BLOOD = 10
-T_DOOR = 11
-T_LOCKED = 12
 T_ELEVATOR = 13
 T_PUSHWALL = 14
+T_DOOR = 15
+T_LOCKED = 16
 
-# Items / props / actors (16+)
-T_AMMO = 16
-T_FIRSTAID = 17
-T_FOOD = 18
-T_GOLD_KEY = 19
-T_SILVER_KEY = 20
-T_CROSS = 21
-T_CHALICE = 22
-T_MACHINEGUN = 23
+# Items / props / actors (18+; 17 = empty floor)
+T_AMMO = 18
+T_FIRSTAID = 19
+T_FOOD = 20
+T_GOLD_KEY = 21
+T_SILVER_KEY = 22
+T_CROSS = 23
+T_CHALICE = 24
+T_MACHINEGUN = 25
 T_PILLAR = 32
 T_TABLE = 33
 T_LAMP = 34

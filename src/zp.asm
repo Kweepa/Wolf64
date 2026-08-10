@@ -69,8 +69,16 @@ move_dx_l	= $3d
 move_dx_h	= $3e
 move_dy_l	= $40
 move_dy_h	= $41
-key_bits	= $42
-border_tick	= $43				; write-only $d020 shadow (optional HUD)
+
+; SquareDoom-style hold-ms input (CIA1 Timer A IRQ → read_input)
+in_fwd		= $3c
+in_back		= $3f
+in_turn_l	= $42
+in_turn_r	= $43
+vel_ms		= $4e
+dt_ms		= $4f				; last frame ≈ binary-ms (1..255)
+; turn_acc_l/h in BSS (wolf64.asm) — fractional angle remainder
+
 ; SquareDoom-style CIA profiler (Timer A snap)
 prof_snap_l	= $44
 prof_snap_h	= $45

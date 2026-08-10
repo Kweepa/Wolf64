@@ -51,15 +51,19 @@ start
 	jsr init_sqtabs
 	jsr init_vic
 	jsr prof_init
+	jsr input_irq_init
 
 	lda #$ff
 	sta smc_last_page
 	sta smc_last_h
 
 	jsr find_spawn
+	cli					; CIA1 Timer A key sampling
 
 main_loop
+	jsr calc_frame_dt
 	jsr player_move
+	jsr doors_update
 	jsr render_frame
 	jsr prof_frame_sample
 	jsr prof_print
@@ -68,7 +72,9 @@ main_loop
 !source "mul.asm"
 !source "vic.asm"
 !source "profil.asm"
+!source "input.asm"
 !source "dda.asm"
+!source "doors.asm"
 !source "render.asm"
 !source "player.asm"
 !source "tables.asm"
@@ -80,6 +86,35 @@ col_half_h
 !fill 40, 0
 col_texx
 !fill 40, 0
+
+; Door anim slots (2)
+door_x
+!fill 2, 0
+door_y
+!fill 2, 0
+door_pos
+!fill 2, 0
+door_state
+!fill 2, 0
+door_orient
+!fill 2, 0
+door_tic_l
+!fill 2, 0
+door_tic_h
+!fill 2, 0
+door_tile
+!fill 2, 0
+door_savex
+!byte 0
+door_savetl
+!byte 0
+door_saveth
+!byte 0
+
+turn_acc_l
+!byte 0
+turn_acc_h
+!byte 0
 
 ; Profiler BSS (SquareDoom PROF_BSS layout, trimmed)
 frame_t0

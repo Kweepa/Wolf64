@@ -1,7 +1,6 @@
 ; WASD only (no joystick — floating CIA bits cause phantom input)
 !zone player
 
-TURN_SPEED = 4
 WALL_MARGIN = $40				; 1/4 tile keep-out from solid faces
 WALL_MARGIN_HI = $100 - WALL_MARGIN	; $C0 — max frac when east/south neighbor solid
 T_PLAYER	= 48				; +0..3 = N,E,S,W
@@ -68,133 +67,15 @@ find_spawn
 	!byte 128				; W
 
 
-; key_bits: 0=fwd 1=back 2=turn L 3=turn R
-read_keys
-	lda #0
-	sta key_bits
-
-	; SquareDoom warmstart DDR — if PB is outputs, $dc01 never sees the matrix
-	lda #$ff
-	sta $dc02				; PA outputs (column select)
-	lda #0
-	sta $dc03				; PB inputs (row read)
-
-	; W / A / S on PA1 = $FD
-	lda #$fd
-	sta $dc00
-	lda $dc01
-	tax
-	and #$02				; W = forward
-	bne +
-	lda key_bits
-	ora #%00000001
-	sta key_bits
-+
-	txa
-	and #$20				; S = back
-	bne +
-	lda key_bits
-	ora #%00000010
-	sta key_bits
-+
-	txa
-	and #$04				; A = turn left
-	bne +
-	lda key_bits
-	ora #%00000100
-	sta key_bits
-+
-
-	; D on PA2 = $FB
-	lda #$fb
-	sta $dc00
-	lda $dc01
-	and #$04				; D = turn right
-	bne +
-	lda key_bits
-	ora #%00001000
-	sta key_bits
-+
-	rts
-
+; Hold-ms turn + wish from IRQ; apply move_dx/dy with wall slide
 player_move
-	jsr read_keys
-
-	lda key_bits
-	and #%00000100				; left → turn CCW
-	beq +
-	sec
-	lda playera
-	sbc #TURN_SPEED
-	sta playera
-+
-	lda key_bits
-	and #%00001000				; right → turn CW
-	beq +
-	clc
-	lda playera
-	adc #TURN_SPEED
-	sta playera
-+
-
-	lda key_bits
-	and #%00000001				; up → forward
-	beq .back
-	lda #0
-	sta tmp0
-	jsr walk
+	jsr read_input
+	lda move_dx_l
+	ora move_dx_h
+	ora move_dy_l
+	ora move_dy_h
+	bne .apply
 	rts
-.back
-	lda key_bits
-	and #%00000010
-	beq .done
-	lda #1
-	sta tmp0
-	jsr walk
-.done
-	rts
-
-; Walk along facing. tmp0=0 forward, 1 back.
-; sintab/costab amp 64 → 8.8 frac (±64/256 ≈ 0.25 tile/frame).
-walk
-	ldy playera
-	lda costab,y
-	sta move_dx_l
-	cmp #$80
-	lda #0
-	bcc +
-	lda #$ff
-+
-	sta move_dx_h
-	; Y grows south; negate sin so angle 64 (north) decreases Y
-	lda #0
-	sec
-	sbc sintab,y
-	sta move_dy_l
-	cmp #$80
-	lda #0
-	bcc +
-	lda #$ff
-+
-	sta move_dy_h
-
-	lda tmp0
-	beq .apply
-	; negate (backwards)
-	lda #0
-	sec
-	sbc move_dx_l
-	sta move_dx_l
-	lda #0
-	sbc move_dx_h
-	sta move_dx_h
-	lda #0
-	sec
-	sbc move_dy_l
-	sta move_dy_l
-	lda #0
-	sbc move_dy_h
-	sta move_dy_h
 
 .apply
 	; X axis
@@ -210,7 +91,10 @@ walk
 	lda playery_h
 	sta mapy
 	jsr probe_solid
-	bne .try_y
+	beq .x_ok
+	jsr try_open_door
+	jmp .try_y
+.x_ok
 	lda tmp2
 	sta playerx_l
 	lda tmp3
@@ -228,7 +112,10 @@ walk
 	lda tmp3
 	sta mapy
 	jsr probe_solid
-	bne .push
+	beq .y_ok
+	jsr try_open_door
+	jmp .push
+.y_ok
 	lda tmp2
 	sta playery_l
 	lda tmp3
@@ -315,7 +202,7 @@ probe_solid
 	jsr map_to_tile
 	ldy #0
 	lda (tile_l),y
-	cmp #16				; solid < 16; floor/open >= 16
+	cmp #17				; solid walls + doors < 17
 	bcc .solid
 	lda #0
 	rts

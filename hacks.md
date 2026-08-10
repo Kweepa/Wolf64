@@ -38,13 +38,16 @@ Painters write colour nibbles straight into the **back** video matrix via ZP `vi
 Pipelined render stores per-column `col_texid` / `col_half_h` / `col_texx`, then paints the back matrix.
 Default **`PROF_SPLIT=0`**: stage-boundary buckets only.  
 **`PROF_SPLIT=1`**: per-column **R**/**D** (~80 samples; adds ~20ms to **F** — useful for ratio, not absolute frame cost).  
-`setup_player_tile` is folded into **C** / first **R** (sub-ms; not shown).
+`setup_player_tile` is folded into **C** / first **R** (sub-ms; not shown).  
+**U** = `enemies_update`; **O** = `enemies_draw` (paint sample excludes objects; brief `$01=$35` between paint and draw for the CIA read).
 
 | Cols | `PROF_SPLIT=0` | `PROF_SPLIT=1` |
 |------|----------------|----------------|
 | 0–2 | **F** frame | **F** |
 | 4–6 | **C** cast×40 | **R** ray setup×40 |
 | 8–10 | **P** paint | **D** march+hit×40 |
-| 12–14 | — | **P** |
+| 12–14 | **U** obj update | **P** |
+| 16–18 | **O** obj draw | **U** |
+| 20–22 | — | **O** |
 
 HUD screen nibbles go to the **front** matrix (`set_scr_front` after `swap_view`). CIA2 must only be read while I/O is banked in (today: `$01=$35`). Does not touch `$dd00` (VIC bank).

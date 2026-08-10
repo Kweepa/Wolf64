@@ -71,8 +71,18 @@ start
 main_loop
 	jsr calc_frame_dt
 	jsr player_move
+!if PROFILE = 1 {
+	jsr prof_reset_frame
+}
 	jsr enemies_update
+!if PROFILE = 1 {
+	ldy #PROF_OBJUPD
+	jsr prof_add_bucket
+}
 	jsr doors_update
+!if PROFILE = 1 {
+	jsr prof_snap			; doors not folded into C/R
+}
 	jsr render_frame
 	jsr update_weapon
 	jsr prof_frame_sample

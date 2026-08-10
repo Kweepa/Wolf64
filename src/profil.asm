@@ -1,7 +1,7 @@
 ; CIA2 cascade frame timer + optional buckets (SquareDoom-style)
 ; DBG_FPS=1: F ≈ ms.
-; PROFILE=1, PROF_SPLIT=0: C (cast×40) P — few CIA samples
-; PROFILE=1, PROF_SPLIT=1: R D P — R/D timed per column (~80 samples)
+; PROFILE=1, PROF_SPLIT=0: C (cast×40) P U O — few CIA samples
+; PROFILE=1, PROF_SPLIT=1: R D P U O — R/D timed per column (~80 samples)
 !zone profil
 
 ; CIA2 — timers only; do not touch $dd00 (VIC bank)
@@ -18,11 +18,15 @@ CIA2_CRB	= $dd0f
 PROF_RAY	= 0				; fold/secant/sdx/sdy/SMC/map_to_tile (×40)
 PROF_DDA	= 1				; inner march + hit_wall (×40)
 PROF_PAINT	= 2
-PROF_NBUCKET	= 3
+PROF_OBJUPD	= 3				; enemies_update
+PROF_OBJDRAW	= 4				; enemies_draw
+PROF_NBUCKET	= 5
 } else {
 PROF_CAST	= 0				; setup + cast_column ×40
 PROF_PAINT	= 1
-PROF_NBUCKET	= 2
+PROF_OBJUPD	= 2				; enemies_update
+PROF_OBJDRAW	= 3				; enemies_draw
+PROF_NBUCKET	= 4
 }
 }
 
@@ -189,8 +193,8 @@ prof_add_bucket
 }
 
 ; Bitmap row 0 ms digits (≈ (cy>>8)>>2)
-; PROF_SPLIT=0: F C P
-; PROF_SPLIT=1: F R D P
+; PROF_SPLIT=0: F C P U O
+; PROF_SPLIT=1: F R D P U O
 prof_print
 	jsr set_scr_front
 !if DBG_FPS = 1 {
@@ -213,6 +217,14 @@ prof_print
 	lda prof_cy + PROF_PAINT * 4 + 2
 	ldy prof_cy + PROF_PAINT * 4 + 1
 	jsr .pp_ms3
+	ldx #16
+	lda prof_cy + PROF_OBJUPD * 4 + 2
+	ldy prof_cy + PROF_OBJUPD * 4 + 1
+	jsr .pp_ms3
+	ldx #20
+	lda prof_cy + PROF_OBJDRAW * 4 + 2
+	ldy prof_cy + PROF_OBJDRAW * 4 + 1
+	jsr .pp_ms3
 } else {
 	ldx #4
 	lda prof_cy + PROF_CAST * 4 + 2
@@ -221,6 +233,14 @@ prof_print
 	ldx #8
 	lda prof_cy + PROF_PAINT * 4 + 2
 	ldy prof_cy + PROF_PAINT * 4 + 1
+	jsr .pp_ms3
+	ldx #12
+	lda prof_cy + PROF_OBJUPD * 4 + 2
+	ldy prof_cy + PROF_OBJUPD * 4 + 1
+	jsr .pp_ms3
+	ldx #16
+	lda prof_cy + PROF_OBJDRAW * 4 + 2
+	ldy prof_cy + PROF_OBJDRAW * 4 + 1
 	jsr .pp_ms3
 }
 }

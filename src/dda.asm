@@ -41,9 +41,7 @@ COL_FIRST	= 1
 COL_LIMIT	= 39				; exclusive
 
 render_frame
-!if PROFILE = 1 {
-	jsr prof_reset_frame
-}
+	; PROFILE: buckets reset in main_loop before enemies_update
 	jsr setup_player_tile
 	lda #COL_FIRST
 	sta col
@@ -73,12 +71,20 @@ render_frame
 	lda col
 	cmp #COL_LIMIT
 	bne .paint_loop
+!if PROFILE = 1 {
+	lda #$35				; CIA sample needs I/O in
+	sta $01
+	ldy #PROF_PAINT
+	jsr prof_add_bucket
+	lda #$34
+	sta $01
+}
 	jsr enemies_draw
 	lda #$35
 	sta $01
 	cli
 !if PROFILE = 1 {
-	ldy #PROF_PAINT
+	ldy #PROF_OBJDRAW
 	jsr prof_add_bucket
 }
 	jsr swap_view

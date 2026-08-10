@@ -11,10 +11,13 @@ enemy_frm_off_lo
 enemy_frm_off_hi
 	!byte 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4
 
-; Frame sets: stand=0..4  walkA=5..9  walkB=10..14
+; Frame sets: stand=0..4  walkA=5..9  walkB=10..14; combat 15..17
 EF_STAND = 0
 EF_WALKA = 5
 EF_WALKB = 10
+EF_DIE = 15
+EF_PAIN = 16
+EF_DEAD = 17
 
 ; enemy_gfx_data label lives in wolf64.asm (after SoA)
 

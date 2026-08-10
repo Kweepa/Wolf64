@@ -36,6 +36,7 @@ SELECTED = [
 # Pepto indices excluded from guard remap: black, white, cyan, green, yellow, light green.
 C64_EXCLUDE = {0, 1, 3, 5, 7, 13}
 CEILING_GREY = 11  # sky $b — never in top half
+FLOOR_GREY = 12  # floor $c — corpses sit on it, must not use
 # Face-only (top 4 rows): pink/light red + medium/light grey (+ dark grey only in bottom half).
 FACE_ONLY = {10, 11, 12, 15}
 FACE_ROWS = 4
@@ -77,7 +78,7 @@ def content_height(img: Image.Image) -> int:
     return 0 if b is None else b[3] - b[1]
 
 
-def to_c64(img: Image.Image) -> Image.Image:
+def to_c64(img: Image.Image, *, ban_floor: bool = False) -> Image.Image:
     px = img.load()
     w, h = img.size
     out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
@@ -86,6 +87,8 @@ def to_c64(img: Image.Image) -> Image.Image:
         # Face rows: pink + med/light grey OK; ceiling grey banned (top half).
         # Below: no pink/greys at all.
         allowed = C64_GUARD_FACE if y < FACE_ROWS else C64_GUARD_BODY
+        if ban_floor:
+            allowed = [i for i in allowed if i != FLOOR_GREY]
         for x in range(w):
             r, g, b, a = px[x, y]
             if a < 128:
@@ -123,7 +126,8 @@ def main() -> int:
         nw = max(1, round(content.width * scale))
         nh = max(1, round(content.height * scale))
         scaled = content.resize((nw, nh), Image.NEAREST)
-        c64 = to_c64(scaled)
+        # Corpse lies on the floor — never quantize to floor grey ($c).
+        c64 = to_c64(scaled, ban_floor=(name == "guard_dead"))
         bbox = opaque_bbox(c64)
         final = c64 if bbox is None else c64.crop(bbox)
 

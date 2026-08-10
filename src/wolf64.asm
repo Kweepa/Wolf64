@@ -114,6 +114,8 @@ col_wallz_l
 !fill 40, 0
 col_wallz_h
 !fill 40, 0
+col_enemy
+!fill 40, $ff				; enemy index per column; $ff = empty
 
 ; --- enemy SoA (MAX_ENEMIES = 32) arrays live after painters (see below) ---
 enemy_count
@@ -281,6 +283,12 @@ enemy_depth_h
 enemy_perp_l
 !fill 32, 0
 enemy_perp_h
+!fill 32, 0
+enemy_hp
+!fill 32, 0
+enemy_state
+!fill 32, 0
+enemy_state_t
 !fill 32, 0
 vis_slot
 !fill 32, 0

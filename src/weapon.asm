@@ -283,7 +283,8 @@ setup_chaingun
 	tax
 	lda muzzle_hi_cols,x
 	sta muzzle_hi_col
-	jmp .wpn_hi_bright
+	jsr .wpn_hi_bright
+	jmp gun_attack
 
 ; Per frame after render: muzzle timeout + fire while SPACE held + weapon keys.
 update_weapon

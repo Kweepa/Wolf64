@@ -10,20 +10,48 @@ EF_ACTIVE	= $01
 EF_AMBUSH	= $02
 EF_PHASE_B	= $04				; walk A/B toggle (frame bases in enemy_gfx.asm)
 EF_MOVING	= $08				; moved this frame → walk anim
+ES_ALIVE	= 0
+ES_PAIN		= 1
+ES_DYING	= 2
+ES_DEAD		= 3
+GUARD_HP	= 25				; Wolf starthitpoints[all][guard]
+PAIN_T		= 42				; flinch in 8ms units (~336ms)
+DIE_T		= 84				; die1 dwell in 8ms units (~672ms)
 ENEMY_SPEED	= 24				; ~¼ player wish scale (sintab units via dt)
 ANIM_MS		= 180
+AIM_COL		= 20				; view-center hit column
 
 ; Facing NESW → playera-compatible angle
 enemy_face_ang
 	!byte 64, 0, 192, 128			; N E S W
 
 ; ---------------------------------------------------------------------------
+; Deathchase / SquareDoom GetRandom8 — new = 9 * old + 193; A = next rnd
+GetRandom8
+rnd8
+	lda random8
+	asl
+	asl
+	asl
+	clc
+	adc random8
+	clc
+	adc #193
+	sta random8
+	rts
+
+; ---------------------------------------------------------------------------
 enemies_init
+	lda #$a5
+	sta random8
 	lda #0
 	sta enemy_count
 	tax
 .ei_clr
 	sta enemy_flags,x
+	sta enemy_state,x
+	sta enemy_state_t,x
+	sta enemy_hp,x
 	inx
 	cpx #MAX_ENEMIES
 	bne .ei_clr
@@ -68,6 +96,10 @@ enemies_init
 	lda #0
 	sta enemy_anim_t,x
 	sta enemy_view,x
+	sta enemy_state,x			; ES_ALIVE
+	sta enemy_state_t,x
+	lda #GUARD_HP
+	sta enemy_hp,x
 	; clear spawn tile → floor
 	lda #T_FLOOR
 	sta (tmp0),y
@@ -92,13 +124,55 @@ enemies_init
 
 ; ---------------------------------------------------------------------------
 enemies_update
+	; dt in 8ms units for state timers (frames are ~100ms; finer is pointless)
+	lda dt_ms
+	lsr
+	lsr
+	lsr					; /8
+	sta dt8
 	ldx #0
 .eu_loop
 	cpx enemy_count
-	bcs .eu_done
+	bcc .eu_cont
+	jmp .eu_done
+.eu_cont
 	lda enemy_flags,x
 	and #EF_ACTIVE
-	beq .eu_next
+	bne .eu_active
+	jmp .eu_next
+.eu_active
+	lda enemy_state,x
+	beq .eu_alive			; ES_ALIVE
+	cmp #ES_PAIN
+	beq .eu_pain
+	cmp #ES_DYING
+	beq .eu_dying
+	jmp .eu_next			; ES_DEAD — corpse stays
+.eu_pain
+	lda enemy_state_t,x
+	sec
+	sbc dt8
+	bcs +
+	lda #0
++
+	sta enemy_state_t,x
+	bne .eu_next
+	lda #ES_ALIVE
+	sta enemy_state,x
+	jmp .eu_next
+.eu_dying
+	lda enemy_state_t,x
+	sec
+	sbc dt8
+	bcs +
+	lda #0
++
+	sta enemy_state_t,x
+	bne .eu_next
+	lda #ES_DEAD
+	sta enemy_state,x
+	jmp .eu_next
+.eu_alive
 	lda enemy_flags,x
 	and #EF_AMBUSH
 	bne .eu_stand
@@ -131,7 +205,8 @@ enemies_update
 	sta enemy_anim_t,x
 .eu_next
 	inx
-	bne .eu_loop
+	beq .eu_done
+	jmp .eu_loop
 .eu_done
 	rts
 
@@ -304,6 +379,14 @@ enemies_draw
 	bne +
 	rts
 +
+	; clear hit buffer
+	ldx #39
+	lda #$ff
+-
+	sta col_enemy,x
+	dex
+	bpl -
+
 	lda #0
 	sta vis_count
 	tax					; slot
@@ -756,6 +839,43 @@ enemy_draw_one
 	sta enemy_view,x
 	sta e_view
 
+	; combat frames override stand/walk
+	lda enemy_state,x
+	cmp #ES_PAIN
+	beq .edo_pain
+	cmp #ES_DYING
+	beq .edo_dying
+	cmp #ES_DEAD
+	beq .edo_dead
+	lda #1
+	sta e_hitscan			; alive: write hit buffer
+	bne .edo_livefrm
+.edo_pain
+	lda #1				; pain still shootable
+	sta e_hitscan
+	lda #EF_PAIN
+	sta e_frm
+	lda #0
+	sta e_flip
+	jmp .edo_side
+.edo_dying
+	lda #0
+	sta e_hitscan
+	lda #EF_DIE
+	sta e_frm
+	lda #0
+	sta e_flip
+	jmp .edo_side
+.edo_dead
+	lda #0
+	sta e_hitscan
+	lda #EF_DEAD
+	sta e_frm
+	lda #0
+	sta e_flip
+	jmp .edo_side
+
+.edo_livefrm
 	; frame set: ambush/idle → stand; moving → walk A/B
 	lda enemy_flags,x
 	and #EF_AMBUSH
@@ -798,6 +918,7 @@ enemy_draw_one
 	adc e_src_i
 	sta e_frm
 
+.edo_side
 	; screen center from side transform
 	jsr enemy_calc_side
 	; FOV cull: |side_mid| > perp_mid (perp>>2) → outside ~45°
@@ -843,7 +964,8 @@ enemy_draw_one
 .edo_rts_fov
 	rts
 .edo_sized
-	; width in columns: height scale / 2 — chunky cells are 8×4 (2:1)
+	; width in columns: (frm_w * spr_h / SRC_H) / 2 — chunky cells are 8×4 (2:1)
+	; Use canonical SRC_H=16, not cropped frm_h (dead is 5px tall → blew up width).
 	ldy e_frm
 	lda enemy_frm_w,y
 	sta e_frm_w
@@ -854,8 +976,8 @@ enemy_draw_one
 	jsr mul_8x8				; X=lo A=hi
 	sta tmp1
 	stx tmp0
-	lda e_frm_h
-	jsr enemy_udiv			; tmp0 = frm_w * spr_h / frm_h
+	lda #ENEMY_SRC_H
+	jsr enemy_udiv			; tmp0 = frm_w * spr_h / 16
 	lda tmp0
 	lsr					; /2 for aspect
 	bne +
@@ -1272,7 +1394,7 @@ enemy_paint_col
 	adc #0
 	sta e_col_h
 
-	; unpack column to e_pix[16]
+	; unpack column to e_pix[16], ground-aligned (short frames sit on floor)
 	ldx #0
 	lda #0
 .epc_z
@@ -1280,11 +1402,16 @@ enemy_paint_col
 	inx
 	cpx #16
 	bne .epc_z
+	lda #ENEMY_SRC_H
+	sec
+	sbc e_frm_h
+	tax					; dest row = 16 - frm_h
+	lda e_frm_h
+	sta tmp4				; texels left
 	ldy #0
-	ldx #0
 .epc_unp
-	cpx e_frm_h
-	bcs .epc_draw
+	lda tmp4
+	beq .epc_draw
 	lda (e_col_l),y
 	sta tmp0
 	lsr
@@ -1293,12 +1420,13 @@ enemy_paint_col
 	lsr
 	sta e_pix,x
 	inx
-	cpx e_frm_h
-	bcs .epc_draw
+	dec tmp4
+	beq .epc_draw
 	lda tmp0
 	and #$0f
 	sta e_pix,x
 	inx
+	dec tmp4
 	iny
 	bne .epc_unp
 .epc_draw
@@ -1333,6 +1461,13 @@ enemy_paint_col
 	lda e_pix,x
 	beq .epc_nr				; 0 = transparent
 	sta tmp4
+	; hit buffer: nearest opaque writer for this column
+	lda e_hitscan
+	beq .epc_nobuf
+	lda enemy_idx
+	ldy col
+	sta col_enemy,y
+.epc_nobuf
 	; cell = v >> 1 → view_row pointer
 	lda e_row
 	lsr					; A=cell, C=1 if bottom nibble
@@ -1374,4 +1509,145 @@ enemy_paint_col
 	inc e_row
 	bne .epc_row
 .epc_rts
+	rts
+
+; ---------------------------------------------------------------------------
+; Wolf GunAttack via col_enemy[20/19/21] + DamageActor
+; ---------------------------------------------------------------------------
+gun_attack
+	ldx col_enemy + AIM_COL		; center first
+	cpx #$ff
+	bne .ga_got
+	ldx col_enemy + AIM_COL - 1
+	cpx #$ff
+	bne .ga_got
+	ldx col_enemy + AIM_COL + 1
+	cpx #$ff
+	beq .ga_miss
+.ga_got
+	cpx enemy_count
+	bcs .ga_miss
+	lda enemy_flags,x
+	and #EF_ACTIVE
+	beq .ga_miss
+	lda enemy_state,x
+	cmp #ES_DYING
+	bcs .ga_miss			; dying/dead not shootable
+	; Chebyshev tile distance
+	lda enemy_xh,x
+	sec
+	sbc playerx_h
+	bcs +
+	eor #$ff
+	clc
+	adc #1
++
+	sta tmp0
+	lda enemy_yh,x
+	sec
+	sbc playery_h
+	bcs +
+	eor #$ff
+	clc
+	adc #1
++
+	cmp tmp0
+	bcs +
+	lda tmp0
++
+	sta tmp1				; dist
+	cmp #2
+	bcs .ga_d4
+	jsr rnd8
+	lsr
+	lsr					; /4
+	jmp .ga_dmg
+.ga_d4
+	lda tmp1
+	cmp #4
+	bcs .ga_far
+	jsr rnd8
+	jsr .div6
+	jmp .ga_dmg
+.ga_far
+	jsr rnd8
+	jsr .div12
+	cmp tmp1
+	bcc .ga_miss			; (rnd/12) < dist → miss
+	jsr rnd8
+	jsr .div6
+.ga_dmg
+	; A = damage, X = enemy
+	jmp damage_actor
+.ga_miss
+	rts
+
+; A = value → A = A/6 (unsigned)
+.div6
+	sta tmp2
+	lda #0
+	sta tmp3
+.d6_lp
+	lda tmp2
+	cmp #6
+	bcc .d6_done
+	sbc #6
+	sta tmp2
+	inc tmp3
+	bne .d6_lp
+.d6_done
+	lda tmp3
+	rts
+
+; A = value → A = A/12
+.div12
+	sta tmp2
+	lda #0
+	sta tmp3
+.d12_lp
+	lda tmp2
+	cmp #12
+	bcc .d12_done
+	sbc #12
+	sta tmp2
+	inc tmp3
+	bne .d12_lp
+.d12_done
+	lda tmp3
+	rts
+
+; X = enemy index, A = raw damage (Wolf DamageActor)
+damage_actor
+	sta tmp2
+	lda enemy_flags,x
+	and #EF_AMBUSH
+	beq .da_sub
+	asl tmp2				; surprise: double damage
+.da_sub
+	lda enemy_hp,x
+	sec
+	sbc tmp2
+	bcc .da_kill
+	beq .da_kill
+	sta enemy_hp,x
+	; pain
+	lda #ES_PAIN
+	sta enemy_state,x
+	lda #PAIN_T
+	sta enemy_state_t,x
+	lda enemy_flags,x
+	and #$fd				; clear EF_AMBUSH → alerted
+	sta enemy_flags,x
+	rts
+.da_kill
+	lda #0
+	sta enemy_hp,x
+	lda #ES_DYING
+	sta enemy_state,x
+	lda #DIE_T
+	sta enemy_state_t,x
+	lda #EF_ACTIVE				; keep drawable; drop walk/ambush
+	sta enemy_flags,x
+	lda #0
+	sta enemy_anim_t,x
 	rts

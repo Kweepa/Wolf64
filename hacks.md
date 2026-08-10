@@ -48,6 +48,9 @@ Default **`PROF_SPLIT=0`**: stage-boundary buckets only.
 | 8–10 | **P** paint | **D** march+hit×40 |
 | 12–14 | **U** obj update | **P** |
 | 16–18 | **O** obj draw | **U** |
-| 20–22 | — | **O** |
+| 20–22 | **L** LOS grant | **O** |
+| 24–26 | — | **L** |
+
+**L** times the single `enemy_los_rr` grant (`check_sight` / chase LOS / `enemy_shoot`) via nested CIA sample — also counted inside **U**.
 
 HUD screen nibbles go to the **front** matrix (`set_scr_front` after `swap_view`). CIA2 must only be read while I/O is banked in (today: `$01=$35`). Does not touch `$dd00` (VIC bank).

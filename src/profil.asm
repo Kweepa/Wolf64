@@ -1,7 +1,7 @@
 ; CIA2 cascade frame timer + optional buckets (SquareDoom-style)
 ; DBG_FPS=1: F ≈ ms.
-; PROFILE=1, PROF_SPLIT=0: C (cast×40) P U O — few CIA samples
-; PROFILE=1, PROF_SPLIT=1: R D P U O — R/D timed per column (~80 samples)
+; PROFILE=1, PROF_SPLIT=0: C P U O L — L = one LOS grant (nested)
+; PROFILE=1, PROF_SPLIT=1: R D P U O L — R/D timed per column (~80 samples)
 !zone profil
 
 ; CIA2 — timers only; do not touch $dd00 (VIC bank)
@@ -20,13 +20,15 @@ PROF_DDA	= 1				; inner march + hit_wall (×40)
 PROF_PAINT	= 2
 PROF_OBJUPD	= 3				; enemies_update
 PROF_OBJDRAW	= 4				; enemies_draw
-PROF_NBUCKET	= 5
+PROF_LOS	= 5				; single RR LOS grant (nested; also inside U)
+PROF_NBUCKET	= 6
 } else {
 PROF_CAST	= 0				; setup + cast_column ×40
 PROF_PAINT	= 1
 PROF_OBJUPD	= 2				; enemies_update
 PROF_OBJDRAW	= 3				; enemies_draw
-PROF_NBUCKET	= 4
+PROF_LOS	= 4				; single RR LOS grant (nested; also inside U)
+PROF_NBUCKET	= 5
 }
 }
 
@@ -190,11 +192,55 @@ prof_add_bucket
 	lda casc_now + 3
 	sta casc_snap + 3
 	rts
+
+; Nested LOS sample — does not touch casc_snap (U/C/P/O stay sequential).
+prof_los_begin
+	jsr prof_read_casc
+	lda casc_now
+	sta los_t0
+	lda casc_now + 1
+	sta los_t0 + 1
+	lda casc_now + 2
+	sta los_t0 + 2
+	lda casc_now + 3
+	sta los_t0 + 3
+	rts
+
+prof_los_end
+	jsr prof_read_casc
+	ldx #PROF_LOS * 4
+	sec
+	lda los_t0
+	sbc casc_now
+	sta prof_dt + 0
+	lda los_t0 + 1
+	sbc casc_now + 1
+	sta prof_dt + 1
+	lda los_t0 + 2
+	sbc casc_now + 2
+	sta prof_dt + 2
+	lda los_t0 + 3
+	sbc casc_now + 3
+	sta prof_dt + 3
+	clc
+	lda prof_cy,x
+	adc prof_dt + 0
+	sta prof_cy,x
+	lda prof_cy + 1,x
+	adc prof_dt + 1
+	sta prof_cy + 1,x
+	lda prof_cy + 2,x
+	adc prof_dt + 2
+	sta prof_cy + 2,x
+	lda prof_cy + 3,x
+	adc prof_dt + 3
+	sta prof_cy + 3,x
+	rts
 }
 
 ; Bitmap row 0 ms digits (≈ (cy>>8)>>2)
-; PROF_SPLIT=0: F C P U O
-; PROF_SPLIT=1: F R D P U O
+; PROF_SPLIT=0: F C P U O L
+; PROF_SPLIT=1: F R D P U O L
 prof_print
 	jsr set_scr_front
 !if DBG_FPS = 1 {
@@ -225,6 +271,10 @@ prof_print
 	lda prof_cy + PROF_OBJDRAW * 4 + 2
 	ldy prof_cy + PROF_OBJDRAW * 4 + 1
 	jsr .pp_ms3
+	ldx #24
+	lda prof_cy + PROF_LOS * 4 + 2
+	ldy prof_cy + PROF_LOS * 4 + 1
+	jsr .pp_ms3
 } else {
 	ldx #4
 	lda prof_cy + PROF_CAST * 4 + 2
@@ -241,6 +291,10 @@ prof_print
 	ldx #16
 	lda prof_cy + PROF_OBJDRAW * 4 + 2
 	ldy prof_cy + PROF_OBJDRAW * 4 + 1
+	jsr .pp_ms3
+	ldx #20
+	lda prof_cy + PROF_LOS * 4 + 2
+	ldy prof_cy + PROF_LOS * 4 + 1
 	jsr .pp_ms3
 }
 }

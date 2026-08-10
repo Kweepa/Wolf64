@@ -12,6 +12,7 @@ EF_PHASE_B	= $04				; walk A/B toggle (frame bases in enemy_gfx.asm)
 EF_MOVING	= $08				; moved this frame → walk anim
 EF_FIRSTATTACK	= $10				; allow 180° on first chase dir pick
 EF_SHOT_DONE	= $20				; fired during current ES_SHOOT
+EF_DODGE_FACE	= $40				; RR dodge: keep facing for next chase move
 ES_ALIVE	= 0
 ES_CHASE	= 1
 ES_SHOOT	= 2
@@ -28,6 +29,7 @@ CHASE_SPEED	= 72				; ENEMY_SPEED*3 (Wolf FirstSighting)
 ANIM_MS		= 180
 AIM_COL		= 20				; view-center hit column
 DOOR_LOS_MIN	= $80				; door_pos must be ≥ half open for LOS
+THINK_DIST	= 12				; Chebyshev tiles: no AI (move/LOS/shoot) beyond this
 
 ; Facing NESW → playera-compatible angle
 enemy_face_ang
@@ -156,17 +158,31 @@ enemies_update
 	bne .eu_active
 	jmp .eu_next
 .eu_active
+	; pain / dying / dead always tick — not "think"
 	lda enemy_state,x
-	beq .eu_alive			; ES_ALIVE
-	cmp #ES_CHASE
-	beq .eu_chase
-	cmp #ES_SHOOT
-	beq .eu_shoot
 	cmp #ES_PAIN
+	bcc .eu_may_think
 	beq .eu_pain
 	cmp #ES_DYING
 	beq .eu_dying
 	jmp .eu_next			; ES_DEAD — corpse stays
+.eu_may_think
+	; ALIVE / CHASE / SHOOT: no AI beyond THINK_DIST
+	jsr enemy_tile_dist
+	lda tmp1
+	cmp #THINK_DIST
+	bcc .eu_think
+	lda enemy_flags,x
+	and #$ff-EF_MOVING
+	sta enemy_flags,x
+	jmp .eu_next
+.eu_think
+	lda enemy_state,x
+	beq .eu_alive			; ES_ALIVE
+	cmp #ES_CHASE
+	beq .eu_chase
+	; ES_SHOOT
+	jmp .eu_shoot
 .eu_pain
 	lda enemy_state_t,x
 	sec
@@ -228,26 +244,21 @@ enemies_update
 .eu_shoot
 	stx enemy_idx
 	lda enemy_state_t,x
+	beq .eu_shoot_ready		; 0 = hold aim for RR, or recover done
 	sec
 	sbc dt8
 	bcs +
 	lda #0
 +
 	sta enemy_state_t,x
-	beq +
-	jmp .eu_next
-+
+	bne .eu_shoot_wait
+.eu_shoot_ready
 	lda enemy_flags,x
 	and #EF_SHOT_DONE
 	bne .eu_shoot_done
-	; end of aim pose → fire, enter recover pose
-	jsr enemy_shoot
-	ldx enemy_idx
-	lda enemy_flags,x
-	ora #EF_SHOT_DONE
-	sta enemy_flags,x
-	lda #SHOOT_T
-	sta enemy_state_t,x
+	; aim done — hold pose until enemy_los_rr fires
+	jmp .eu_next
+.eu_shoot_wait
 	jmp .eu_next
 .eu_shoot_done
 	lda enemy_flags,x
@@ -360,7 +371,7 @@ enemy_patrol_one
 	lda tmp3
 	sta mapy
 	jsr probe_solid
-	bne .ep_push
+	bne .ep_door
 	ldx enemy_idx
 	lda tmp2
 	sta enemy_yl,x
@@ -369,9 +380,12 @@ enemy_patrol_one
 	lda enemy_flags,x
 	ora #EF_MOVING
 	sta enemy_flags,x
-.ep_push
-	jsr enemy_push_walls
 .ep_door
+	ldx enemy_idx
+	lda enemy_flags,x
+	and #EF_MOVING
+	beq .ep_turn				; no step → skip push
+	jsr enemy_push_walls
 	; on a door cell → open / hold (not bump-triggered)
 	ldx enemy_idx
 	lda enemy_xh,x
@@ -473,7 +487,7 @@ enemies_draw
 	lda enemy_flags,x
 	and #EF_ACTIVE
 	beq .ed_cn
-	; |xh - playerx_h| < 16
+	; |xh - playerx_h| < THINK_DIST
 	lda enemy_xh,x
 	sec
 	sbc playerx_h
@@ -482,7 +496,7 @@ enemies_draw
 	clc
 	adc #1
 +
-	cmp #16
+	cmp #THINK_DIST
 	bcs .ed_cn
 	lda enemy_yh,x
 	sec
@@ -492,7 +506,7 @@ enemies_draw
 	clc
 	adc #1
 +
-	cmp #16
+	cmp #THINK_DIST
 	bcs .ed_cn
 	; visible
 	ldy vis_count

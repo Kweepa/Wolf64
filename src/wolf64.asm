@@ -280,6 +280,8 @@ casc_snap
 !fill 4, 0
 prof_dt
 !fill 4, 0
+los_t0
+!fill 4, 0
 prof_cy						; NBUCKET × 4-byte cycle totals
 !fill PROF_NBUCKET * 4, 0
 }

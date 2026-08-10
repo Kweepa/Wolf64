@@ -1,11 +1,13 @@
 ; Enemy AI — LOS, chase, shoot (placed in VIC gap before bitmap)
 !zone enemy_ai
 
-; Round-robin: at most one idle CheckSight per frame
+; Round-robin: at most one LOS resolve per frame (idle / chase / fire)
 ; ---------------------------------------------------------------------------
 enemy_los_rr
 	lda enemy_count
-	beq .elr_rts
+	bne +
+	rts
++
 	sta tmp5				; probes left
 	ldx los_rr
 .elr_find
@@ -17,12 +19,35 @@ enemy_los_rr
 	and #EF_ACTIVE
 	beq .elr_next
 	lda enemy_state,x
-	bne .elr_next			; only ES_ALIVE
+	beq .elr_idle			; ES_ALIVE
+	cmp #ES_CHASE
+	beq .elr_chase
+	cmp #ES_SHOOT
+	beq .elr_shoot
+.elr_next
+	inx
+	stx los_rr
+	dec tmp5
+	bne .elr_find
+	rts
+.elr_idle
 	lda enemy_state_t,x
 	bne .elr_next			; already reacting
-	stx los_rr
 	stx enemy_idx
+	jsr enemy_tile_dist
+	lda tmp1
+	cmp #THINK_DIST
+	bcs .elr_next			; too far to spot
+	stx los_rr
+!if PROFILE = 1 {
+	jsr prof_los_begin
+}
 	jsr check_sight
+!if PROFILE = 1 {
+	php
+	jsr prof_los_end
+	plp
+}
 	bcc .elr_adv			; not spotted
 	; start reaction delay: 1 + rnd/4 (Wolf temp2)
 	jsr rnd8
@@ -32,17 +57,128 @@ enemy_los_rr
 	adc #1
 	ldx enemy_idx
 	sta enemy_state_t,x
+	jmp .elr_adv
+.elr_chase
+	stx enemy_idx
+	jsr enemy_tile_dist
+	lda tmp1
+	cmp #THINK_DIST
+	bcs .elr_next			; too far — don't burn LOS slot
+	sta ai_dist
+	stx los_rr
+	jsr enemy_rr_chase
+	jmp .elr_adv
+.elr_shoot
+	lda enemy_state_t,x
+	bne .elr_next			; still aiming / recovering
+	lda enemy_flags,x
+	and #EF_SHOT_DONE
+	bne .elr_next			; recover handled in update
+	stx enemy_idx
+	jsr enemy_tile_dist
+	lda tmp1
+	cmp #THINK_DIST
+	bcc .elr_fire
+	; walked out of range — drop aim, no LOS used
+	ldx enemy_idx
+	lda enemy_flags,x
+	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK)
+	sta enemy_flags,x
+	lda #ES_CHASE
+	sta enemy_state,x
+	jmp .elr_next
+.elr_fire
+	; aim done — fire on this LOS slot, enter recover
+	stx los_rr
+!if PROFILE = 1 {
+	jsr prof_los_begin
+}
+	jsr enemy_shoot
+!if PROFILE = 1 {
+	jsr prof_los_end
+}
+	ldx enemy_idx
+	lda enemy_flags,x
+	ora #EF_SHOT_DONE
+	sta enemy_flags,x
+	lda #SHOOT_T
+	sta enemy_state_t,x
 .elr_adv
 	ldx los_rr
 	inx
 	stx los_rr
-.elr_rts
 	rts
-.elr_next
-	inx
-	stx los_rr
-	dec tmp5
-	bne .elr_find
+
+; Chase LOS slot: shoot chance or dodge face (enemy_idx + ai_dist set)
+enemy_rr_chase
+!if PROFILE = 1 {
+	jsr prof_los_begin
+}
+	jsr has_los_to_player
+!if PROFILE = 1 {
+	php
+	jsr prof_los_end
+	plp
+}
+	bcc .erc_rts			; no LOS → slot used, keep chasing
+	; chance: close → 48; else min(40, max(1, (dt8<<2)/dist))
+	lda ai_dist
+	beq .erc_shot
+	cmp #1
+	bne .erc_ch
+.erc_shot
+	lda #48
+	bne .erc_roll
+.erc_ch
+	; (dt8<<2) / ai_dist — 8-iter bitdiv, quot in tmp0
+	lda dt8
+	asl
+	asl
+	sta tmp0
+	lda #0
+	sta tmp1				; rem
+	ldx #8
+.erc_bd
+	asl tmp0
+	rol tmp1
+	lda tmp1
+	cmp ai_dist
+	bcc .erc_bdn
+	sbc ai_dist
+	sta tmp1
+	inc tmp0
+.erc_bdn
+	dex
+	bne .erc_bd
+	lda tmp0
+	bne +
+	lda #1
++
+	cmp #41
+	bcc .erc_roll
+	lda #40
+.erc_roll
+	sta tmp3				; chance
+	jsr rnd8
+	cmp tmp3
+	bcs .erc_dodge			; rnd >= chance → dodge face
+	; enter shoot
+	ldx enemy_idx
+	lda #ES_SHOOT
+	sta enemy_state,x
+	lda #SHOOT_T
+	sta enemy_state_t,x
+	lda enemy_flags,x
+	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK)
+	sta enemy_flags,x			; clear SHOT_DONE/MOVING/DODGE
+.erc_rts
+	rts
+.erc_dodge
+	jsr select_dodge_dir
+	ldx enemy_idx
+	lda enemy_flags,x
+	ora #EF_DODGE_FACE
+	sta enemy_flags,x
 	rts
 
 ; X = enemy. C=1 if spots player (facing + LOS)
@@ -206,6 +342,7 @@ check_line
 	rts
 
 ; A = signed tile delta → tmp2/tmp3 = signed 8.8 (delta<<8)/ai_steps
+; Special-case 0 and |delta|==steps; else 16-iter bit divide (not subtract-loop).
 .cl_mkstep
 	sta tmp4				; keep sign
 	bpl +
@@ -213,31 +350,44 @@ check_line
 	clc
 	adc #1
 +
-	; dividend |delta|<<8 = hi:A lo:0
+	beq .cl_mkz				; 0 → 0
+	cmp ai_steps
+	beq .cl_mkone				; |delta|==steps → ±1.0
+	; dividend |delta|<<8 in tmp0:tmp1 (lo:hi), rem in tmp2
 	sta tmp1
 	lda #0
 	sta tmp0
-	sta tmp2				; quot lo
-	sta tmp3				; quot hi
-.cl_div
-	lda tmp0
+	sta tmp2
+	ldx #16
+.cl_bd
+	asl tmp0
+	rol tmp1
+	rol tmp2
+	lda tmp2
 	cmp ai_steps
-	lda tmp1
-	sbc #0
-	bcc .cl_divdone
-	sec
-	lda tmp0
+	bcc .cl_bdn
 	sbc ai_steps
-	sta tmp0
-	bcs +
-	dec tmp1
-+
-	inc tmp2
-	bne .cl_div
-	inc tmp3
-	bne .cl_div
-.cl_divdone
-	; apply sign to 8.8 in tmp2/tmp3
+	sta tmp2
+	inc tmp0				; set quot bit just shifted in
+.cl_bdn
+	dex
+	bne .cl_bd
+	; quot lo:hi in tmp0:tmp1 → tmp2:tmp3
+	lda tmp0
+	sta tmp2
+	lda tmp1
+	sta tmp3
+	jmp .cl_mksign
+.cl_mkz
+	sta tmp2
+	sta tmp3
+	rts
+.cl_mkone
+	lda #0
+	sta tmp2
+	lda #1
+	sta tmp3
+.cl_mksign
 	lda tmp4
 	bpl .cl_mkok
 	sec
@@ -259,11 +409,29 @@ check_line
 	cmp playery_h
 	beq .clc_ok
 +
-	lda tmp0
-	sta mapx
+	; tile = MAP + y*64 + x (inline map_to_tile)
+	lda #0
+	sta tile_l
 	lda tmp1
-	sta mapy
-	jsr map_to_tile
+	sta tile_h
+	lsr tile_h
+	ror tile_l
+	lsr tile_h
+	ror tile_l
+	clc
+	lda tile_l
+	adc tmp0
+	sta tile_l
+	lda tile_h
+	adc #0
+	sta tile_h
+	clc
+	lda tile_l
+	adc #<MAP
+	sta tile_l
+	lda tile_h
+	adc #>MAP
+	sta tile_h
 	ldy #0
 	lda (tile_l),y
 	cmp #1
@@ -272,6 +440,10 @@ check_line
 	bcc .clc_wall			; 1..14 solid
 	cmp #17
 	bcs .clc_ok			; ≥17 floor
+	lda tmp0
+	sta mapx
+	lda tmp1
+	sta mapy
 	jsr door_pos_at
 	cmp #DOOR_LOS_MIN
 	bcc .clc_wall
@@ -323,74 +495,24 @@ first_sighting
 	jmp play_sound
 
 ; ---------------------------------------------------------------------------
-; Chase: shoot chance + zigzag dirs + 3× speed move
+; Chase: path + 3× speed move (shoot / dodge face via enemy_los_rr)
 ; ---------------------------------------------------------------------------
 enemy_chase_one
 	stx enemy_idx
-	jsr enemy_tile_dist
-	lda tmp1
-	sta ai_dist
-	jsr has_los_to_player
-	bcc .ec_move			; no LOS → chase dir only
-	; chance: close → 48; else min(40, max(1, (dt8<<2)/dist))
-	lda ai_dist
-	beq .ec_shot
-	cmp #1
-	bne .ec_ch
-.ec_shot
-	lda #48
-	bne .ec_roll
-.ec_ch
-	lda dt8
-	asl
-	asl					; dt8<<2
-	sta tmp0
-	lda #0
-	sta tmp1
-	lda #0
-	sta tmp2
-.ec_div
-	lda tmp0
-	cmp ai_dist
-	lda tmp1
-	sbc #0
-	bcc .ec_divdone
-	sec
-	lda tmp0
-	sbc ai_dist
-	sta tmp0
-	bcs +
-	dec tmp1
-+
-	inc tmp2
-	bne .ec_div
-.ec_divdone
-	lda tmp2
-	bne +
-	lda #1
-+
-	cmp #41
-	bcc .ec_roll
-	lda #40
-.ec_roll
-	sta tmp3				; chance
-	jsr rnd8
-	cmp tmp3
-	bcs .ec_dodge			; rnd >= chance → dodge instead
-	; enter shoot
-	ldx enemy_idx
-	lda #ES_SHOOT
-	sta enemy_state,x
-	lda #SHOOT_T
-	sta enemy_state_t,x
 	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK)
-	sta enemy_flags,x			; clear SHOT_DONE/MOVING
-	rts
-.ec_dodge
-	jsr select_dodge_dir
+	and #EF_DODGE_FACE
+	beq .ec_was
+	; RR set dodge facing last frame — walk it, then clear
+	lda enemy_flags,x
+	and #$ff-EF_DODGE_FACE
+	sta enemy_flags,x
 	jmp .ec_domove
-.ec_move
+.ec_was
+	; still walking last frame → keep facing (skip SelectChaseDir probes)
+	lda enemy_flags,x
+	and #EF_MOVING
+	bne .ec_domove
+.ec_pick
 	jsr select_chase_dir
 .ec_domove
 	ldx enemy_idx
@@ -462,7 +584,7 @@ enemy_chase_one
 	lda tmp3
 	sta mapy
 	jsr probe_solid
-	bne .ec_push
+	bne .ec_door
 	ldx enemy_idx
 	lda tmp2
 	sta enemy_yl,x
@@ -471,7 +593,11 @@ enemy_chase_one
 	lda enemy_flags,x
 	ora #EF_MOVING
 	sta enemy_flags,x
-.ec_push
+.ec_door
+	ldx enemy_idx
+	lda enemy_flags,x
+	and #EF_MOVING
+	beq .ec_out				; no step → skip push_walls
 	jsr enemy_push_walls
 	ldx enemy_idx
 	lda enemy_xh,x
@@ -820,7 +946,7 @@ enemy_shoot
 	jsr enemy_tile_dist
 	lda tmp1
 	sta ai_dist
-	cmp #16
+	cmp #THINK_DIST
 	bcs .es_rts
 	; hitchance: in col_enemy → 256-dist*16 else 256-dist*8
 	stx tmp4

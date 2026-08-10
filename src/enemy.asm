@@ -698,7 +698,7 @@ enemy_draw_one
 	jsr enemy_calc_spr_h
 
 	; feet on floor in chunky space (40×48): horizon at v=24
-	; wall floor edge = 24 + half_h; active v = 4..43 (cells 2..21)
+	; wall floor edge = 24 + half_h; active v = 4..43 (cells 2..21 → screen rows 5..24)
 	clc
 	lda #24
 	adc half_h

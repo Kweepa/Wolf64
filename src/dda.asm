@@ -35,7 +35,7 @@ setup_player_tile
 	rts
 
 ; Pipelined: setup → cast cols 1..38 → paint back → $d018 swap
-; Letterbox 38x40 chunky: skip col 0/39 and top/bottom 2 cells (see gen_painters).
+; Viewport flush bottom: skip col 0/39; painters cells 2..21 → screen rows 5..24.
 ; Cast cannot split setup×40 then march×40: SMC tile ops are per-column.
 COL_FIRST	= 1
 COL_LIMIT	= 39				; exclusive

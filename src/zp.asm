@@ -123,3 +123,24 @@ e_col_h		= $81
 ; enemy_atan2: 2*|min| scratch for dominance test
 e_abs2_l	= $82
 e_abs2_h	= $83
+
+; Weapons (SquareDoom-style HUD sprites)
+key_fire		= $84		; 1 = SPACE held
+spr_en			= $85		; mirror of $d015 (write-only)
+fire_rpt_l		= $86
+fire_rpt_h		= $87
+muzzle_ms_l		= $88
+muzzle_ms_h		= $89
+wpn_fire_ms_l		= $8a
+wpn_fire_ms_h		= $8b
+cur_weapon		= $8c		; 0=pistol 1=chaingun
+owned_weapons		= $8d		; bit0 pistol, bit1 chaingun
+wpn_visible		= $8e
+mg_frame		= $8f		; chaingun A/B body
+muzzle_flash_var	= $90
+muzzle_hi_cycle		= $91
+in_fire			= $92		; IRQ OR-latch
+in_wpn_pistol		= $93
+in_wpn_chaingun		= $94
+key_wpn_pistol		= $95
+key_wpn_chaingun	= $96

@@ -93,55 +93,55 @@ clear_screens
 	rts
 
 draw_ui_row
-	; Placeholder until first frame; profiler draws each frame
-	ldx #39
+	; Clear top 5 rows (fat wolf UI placeholder); profiler uses row 0
+	lda #<(SCREEN)
+	sta tmp0
+	lda #>(SCREEN)
+	sta tmp1
+	jsr .dui_five
+	lda #<(SCREEN_B)
+	sta tmp0
+	lda #>(SCREEN_B)
+	sta tmp1
+	jsr .dui_five
+	ldx #0
 	lda #0
 -
-	sta SCREEN,x
-	sta SCREEN_B,x
-	sta $d800,x
+	sta $d800,x				; colour RAM rows 0..4
+	inx
+	cpx #200
+	bne -
+	rts
+.dui_five
+	ldx #200				; 5*40
+	lda #0
+	tay
+-
+	sta (tmp0),y
+	iny
 	dex
-	bpl -
+	bne -
 	rts
 
-; Black letterbox: cols 0/39 all viewport rows; rows 1-2 and 23-24 all cols
-; (HUD row 0 left alone). Both matrices.
+; Viewport on screen rows 5..24 (cols 0/39 black). Rows 0..4 = UI (untouched).
 fill_view_border
-	lda #<(SCREEN + 40)
+	lda #<(SCREEN + 200)
 	sta tmp0
-	lda #>(SCREEN + 40)
+	lda #>(SCREEN + 200)
 	sta tmp1
 	jsr .fvb_one
-	lda #<(SCREEN_B + 40)
+	lda #<(SCREEN_B + 200)
 	sta tmp0
-	lda #>(SCREEN_B + 40)
+	lda #>(SCREEN_B + 200)
 	sta tmp1
 .fvb_one
-	ldx #24					; screen rows 1..24
+	ldx #20					; rows 5..24
 .fvb_row
 	ldy #0
 	lda #0
 	sta (tmp0),y			; col 0
 	ldy #39
 	sta (tmp0),y			; col 39
-	; top two / bottom two viewport rows: black across
-	cpx #24
-	beq .fvb_full
-	cpx #23
-	beq .fvb_full
-	cpx #2
-	beq .fvb_full
-	cpx #1
-	beq .fvb_full
-	jmp .fvb_next
-.fvb_full
-	ldy #38
-	lda #0
--
-	sta (tmp0),y
-	dey
-	bne -					; cols 1..38 (Y=0 already black)
-.fvb_next
 	clc
 	lda tmp0
 	adc #40
@@ -153,10 +153,10 @@ fill_view_border
 	bne .fvb_row
 	rts
 
-; Point view_row0..23 at back matrix rows 1..24 (skip HUD row 0)
-; Painters only use view_row2..21
+; Point view_row0..23 so painters' cells 2..21 = screen rows 5..24.
+; view_row0 -> matrix row 3; unused row slots 0..1 sit in the UI band.
 set_view_rows
-	lda #$28				; +40
+	lda #$78				; +120 = row 3
 	sta tmp0
 	lda view_back
 	beq .base_a

@@ -19,6 +19,9 @@ input_irq_init
 	sta in_turn_r
 	sta in_fwd
 	sta in_back
+	sta in_fire
+	sta in_wpn_pistol
+	sta in_wpn_chaingun
 	sta turn_acc_l
 	sta turn_acc_h
 	sta $d01a				; no VIC IRQs
@@ -86,6 +89,12 @@ input_irq
 	jsr .irq_add_ms
 	sta in_turn_l
 .irq_noa
+	txa
+	and #$08				; 4 = chaingun (1/3 reserved knife/rifle)
+	bne .irq_no4
+	lda #1
+	sta in_wpn_chaingun
+.irq_no4
 
 	; D on PA2 = $FB
 	lda #$fb
@@ -97,6 +106,23 @@ input_irq
 	jsr .irq_add_ms
 	sta in_turn_r
 .irq_nod
+
+	; 2 / SPACE on PA7 = $7F
+	lda #$7f
+	sta $dc00
+	lda $dc01
+	tax
+	and #$08				; 2 = pistol
+	bne .irq_no2
+	lda #1
+	sta in_wpn_pistol
+.irq_no2
+	txa
+	and #$10				; SPACE = fire
+	bne .irq_nospc
+	lda #1
+	sta in_fire
+.irq_nospc
 
 .irq_rti
 	pla
@@ -130,11 +156,20 @@ read_input
 	pha
 	lda in_back
 	pha
+	lda in_fire
+	sta key_fire
+	lda in_wpn_pistol
+	sta key_wpn_pistol
+	lda in_wpn_chaingun
+	sta key_wpn_chaingun
 	lda #0
 	sta in_turn_l
 	sta in_turn_r
 	sta in_fwd
 	sta in_back
+	sta in_fire
+	sta in_wpn_pistol
+	sta in_wpn_chaingun
 	cli
 
 	; --- turn: net hold ms (right − left) ---

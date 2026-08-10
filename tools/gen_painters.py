@@ -10,9 +10,10 @@ after painters.bin is assembled.
 
 Entry: X = texx*8, Y = column. Stores go to (view_rowN),y — back screen matrix.
 
-Viewport letterbox: only cells 2..21 (20 cells = 40 chunky rows). Cells 0..1 and
-22..23 are a static border (see fill_view_border). Columns 0 and 39 are skipped
-in the cast/paint loops (38 columns).
+Viewport letterbox: painters use cells 2..21 (20 cells = 40 chunky rows).
+view_row0 is anchored so those cells land on screen rows 5..24 (bottom of
+the 25-row display); rows 0..4 are reserved for the fat wolf UI.
+Columns 0 and 39 are skipped in the cast/paint loops (38 columns).
 """
 
 from __future__ import annotations

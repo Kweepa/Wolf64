@@ -100,8 +100,7 @@ def main() -> int:
         "EF_WALKA = 5",
         "EF_WALKB = 10",
         "",
-        "enemy_gfx_data",
-        '!binary "../textures/enemies.bin"',
+        "; enemy_gfx_data label lives in wolf64.asm (after SoA)",
         "",
     ]
     out_asm.write_text("\n".join(lines) + "\n", encoding="utf-8")

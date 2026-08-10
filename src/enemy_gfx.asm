@@ -16,6 +16,5 @@ EF_STAND = 0
 EF_WALKA = 5
 EF_WALKB = 10
 
-enemy_gfx_data
-!binary "../textures/enemies.bin"
+; enemy_gfx_data label lives in wolf64.asm (after SoA)
 

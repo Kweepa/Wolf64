@@ -14,19 +14,24 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $4000  VIC screen A (bank 1)
 ; $4400  VIC screen B (double-buffer)
 ; $4800  textures (2K)
-; $5000  map (4K)
+; $5000  weapon sprites (pistol / chaingun / muzzle)
 ; $6000  bitmap (8K, shared)
 ; $8000  compiled height painters
-; ~$B900  enemy SoA / vis_slot (after painters.bin)
-; $C800  Judd SQTAB (2K)
+; ~$B900  enemy SoA + packed guard frames
+; $C000  map (4K) — PRG must not extend into $D000 I/O
+; $E000  Judd SQTAB (2K, filled at runtime; KERNAL out)
 
 SCREEN		= $4000
 SCREEN_B	= $4400
 BITMAP		= $6000
 TEXTURES	= $4800
-MAP		= $5000
+PISTOL_SPRITES		= $5000			; 6×64
+MINIGUN_B_SPRITES	= $5180			; 3×64 chaingun frame B
+MINIGUN_SPRITES		= $5240			; 6×64 chaingun A/shared
+MUZZLE_FLASH_SPRITES	= $53C0			; 4×64 shared flash A/B
 PAINTERS	= $8000
-SQTAB1		= $C800
+MAP		= $C000
+SQTAB1		= $E000			; runtime only — never *= into the PRG
 SQTAB2		= SQTAB1 + $200
 SQTAB3		= SQTAB1 + $400
 SQTAB4		= SQTAB1 + $600
@@ -60,6 +65,7 @@ start
 
 	jsr find_spawn
 	jsr enemies_init
+	jsr init_weapon
 	cli					; CIA1 Timer A key sampling
 
 main_loop
@@ -68,6 +74,7 @@ main_loop
 	jsr enemies_update
 	jsr doors_update
 	jsr render_frame
+	jsr update_weapon
 	jsr prof_frame_sample
 	jsr prof_print
 	jmp main_loop
@@ -80,6 +87,7 @@ main_loop
 !source "doors.asm"
 !source "render.asm"
 !source "player.asm"
+!source "weapon.asm"
 !source "enemy.asm"
 !source "enemy_gfx.asm"
 !source "enemy_painters.asm"
@@ -224,13 +232,22 @@ end_code = *
 *= TEXTURES
 !binary "../textures/walls.bin", 2048
 
-*= MAP
-!binary "../maps/00_Wolf1_Map1.bin", 4096
+; Weapon HUD sprites (VIC bank 1) — after textures, before bitmap
+*= PISTOL_SPRITES
+!source "weapons/pistol_sprites.asm"
+*= MINIGUN_B_SPRITES
+!source "weapons/minigun_weapon.asm"
+*= MUZZLE_FLASH_SPRITES
+!source "weapons/muzzle_flash.asm"
+end_wpn_spr = *
+!if end_wpn_spr > BITMAP {
+	!error "Weapon sprites overlap BITMAP at $6000; end=$", end_wpn_spr
+}
 
 *= PAINTERS
 !binary "painters.bin"
 
-; Enemy SoA + vis order — after painters, before SQTAB at $C800
+; Enemy SoA + vis order + frame pixels — before map at $C000
 enemy_xh
 !fill 32, 0
 enemy_xl
@@ -258,7 +275,17 @@ enemy_perp_h
 vis_slot
 !fill 32, 0
 
-end_painters = *
-!if end_painters > $c800 {
-	!error "Painters overlap SQTAB at $C800; end=$", end_painters
+ENEMY_GFX = *
+enemy_gfx_data
+!binary "../textures/enemies.bin"
+end_enemy_gfx = *
+!if end_enemy_gfx > MAP {
+	!error "Enemy gfx overlaps MAP at $C000; end=$", end_enemy_gfx
+}
+
+*= MAP
+!binary "../maps/00_Wolf1_Map1.bin", 4096
+end_map = *
+!if end_map > $d000 {
+	!error "Map extends into I/O at $D000; end=$", end_map
 }

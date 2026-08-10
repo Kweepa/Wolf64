@@ -1,5 +1,5 @@
 ; Column dispatch — compiled height painters (TechDesignDoc §4)
-; Textures: 16 × 128-byte stripes at $4800 (checked-in layout)
+; Textures: 16 × 128-byte stripes at TEXTURES ($4800)
 !zone render
 
 SKY_COLOR	= $bb

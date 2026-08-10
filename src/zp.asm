@@ -116,3 +116,7 @@ view_row20	= $78
 view_row21	= $7a
 view_row22	= $7c
 view_row23	= $7e
+
+; Enemy column paint pointer (must be ZP for (ind),y)
+e_col_l		= $80
+e_col_h		= $81

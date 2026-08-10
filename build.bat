@@ -14,6 +14,10 @@ python tools\gentables.py
 if errorlevel 1 exit /b 1
 python tools\gen_painters.py
 if errorlevel 1 exit /b 1
+python tools\pack_enemies.py
+if errorlevel 1 exit /b 1
+python tools\gen_enemy_painters.py
+if errorlevel 1 exit /b 1
 
 pushd src
 "%ACME%" -v3 --vicelabels ..\painters.lbl painters_bin.asm

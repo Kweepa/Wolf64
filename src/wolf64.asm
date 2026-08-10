@@ -58,11 +58,13 @@ start
 	sta smc_last_h
 
 	jsr find_spawn
+	jsr enemies_init
 	cli					; CIA1 Timer A key sampling
 
 main_loop
 	jsr calc_frame_dt
 	jsr player_move
+	jsr enemies_update
 	jsr doors_update
 	jsr render_frame
 	jsr prof_frame_sample
@@ -77,6 +79,9 @@ main_loop
 !source "doors.asm"
 !source "render.asm"
 !source "player.asm"
+!source "enemy.asm"
+!source "enemy_gfx.asm"
+!source "enemy_painters.asm"
 !source "tables.asm"
 !source "painter_tables.asm"
 
@@ -86,6 +91,108 @@ col_half_h
 !fill 40, 0
 col_texx
 !fill 40, 0
+col_wallz_l
+!fill 40, 0
+col_wallz_h
+!fill 40, 0
+
+; --- enemy SoA (MAX_ENEMIES = 32) ---
+enemy_count
+!byte 0
+enemy_xh
+!fill 32, 0
+enemy_xl
+!fill 32, 0
+enemy_yh
+!fill 32, 0
+enemy_yl
+!fill 32, 0
+enemy_facing
+!fill 32, 0
+enemy_flags
+!fill 32, 0
+enemy_anim_t
+!fill 32, 0
+enemy_view
+!fill 32, 0
+enemy_depth_l
+!fill 32, 0
+enemy_depth_h
+!fill 32, 0
+enemy_perp_l
+!fill 32, 0
+enemy_perp_h
+!fill 32, 0
+
+vis_count
+!byte 0
+vis_slot
+!fill 32, 0
+vis_i
+!byte 0
+
+enemy_idx
+!byte 0
+e_dx_l
+!byte 0
+e_dx_h
+!byte 0
+e_dy_l
+!byte 0
+e_dy_h
+!byte 0
+e_mul
+!byte 0
+e_acc_l
+!byte 0
+e_acc_h
+!byte 0
+e_side_l
+!byte 0
+e_side_h
+!byte 0
+e_spr_h
+!byte 0
+e_top
+!byte 0
+e_bot
+!byte 0
+e_view
+!byte 0
+e_frm_base
+!byte 0
+e_src_i
+!byte 0
+e_flip
+!byte 0
+e_frm
+!byte 0
+e_frm_w
+!byte 0
+e_frm_h
+!byte 0
+e_scr_w
+!byte 0
+e_col_cx
+!byte 0
+e_col0
+!byte 0
+e_sx
+!byte 0
+e_scol
+!byte 0
+e_gfx_l
+!byte 0
+e_gfx_h
+!byte 0
+e_step_l
+!byte 0
+e_step_h
+!byte 0
+e_row
+!byte 0
+e_pix
+!fill 16, 0
 
 ; Door anim slots (2)
 door_x

@@ -73,6 +73,7 @@ render_frame
 	lda col
 	cmp #COL_LIMIT
 	bne .paint_loop
+	jsr enemies_draw
 	lda #$35
 	sta $01
 	cli
@@ -294,6 +295,9 @@ cast_march
 	sta col_texid,x
 	sta col_half_h,x
 	sta col_texx,x
+	lda #$ff
+	sta col_wallz_l,x
+	sta col_wallz_h,x
 	rts
 
 ; A = angle → 0..64 secant index (Keep-style fold)
@@ -402,6 +406,11 @@ hit_wall
 	jsr mul_16x8
 	sta wallz_l
 	stx wallz_h
+	ldx col
+	lda wallz_l
+	sta col_wallz_l,x
+	lda wallz_h
+	sta col_wallz_h,x
 
 	; half_h: wallz>>5 → heightab; wallz<32 (close) → exact $1800/wallz
 	jsr calc_half_h

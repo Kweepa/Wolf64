@@ -605,6 +605,11 @@ hit_door
 	jsr mul_16x8
 	sta wallz_l
 	stx wallz_h
+	ldx col
+	lda wallz_l
+	sta col_wallz_l,x
+	lda wallz_h
+	sta col_wallz_h,x
 	jsr calc_half_h
 	ldx col
 	lda half_h

@@ -1,19 +1,31 @@
 # Hacks / workarounds
 
-## `$01` banking: `$35` main loop, `$34` only during `render_frame`
+## `$01` banking (temporary — not the intended map)
+
+### Intended end state (not done)
+
+**Game code and data live in full RAM:** BASIC, KERNAL, and I/O all banked out so `$A000–$FFFF` (under-BASIC, under-I/O, under-KERNAL) is ordinary usable memory. Nothing in the main loop should need a `$01` flip to fetch painters or touch game data.
+
+**Only the IRQ** banks I/O in (briefly) to read the keyboard CIA and, later, to drive audio — then banks out again. That is the *only* planned dance.
+
+Under-I/O (`$D000–$DFFF`) and under-KERNAL (`$E000–$FFFF`) are therefore **free real estate**, not “awkward shadow RAM.” Treat them as available once the permanent all-RAM map works.
+
+### What the code does now (hack)
+
+(`src/dda.asm` `render_frame`, `src/wolf64.asm` `start`)
+
+- Stay on **`$35`** (BASIC in, KERNAL out, I/O in) for init, main loop, `$d018` swap, profiler CIA reads.
+- Enter **`$34`** (BASIC out, KERNAL out, I/O in per the usual PLA table) only for column/painter/SMC work inside `render_frame`, then restore **`$35`**.
+
+**Why the flip exists today:** Compiled painters extend through `$A000–$BFFF`. With `$35` the CPU fetches **BASIC ROM** there; `$34` exposes the painter **RAM**. This is a crutch so painters can sit under the BASIC window without a working all-RAM `$01`.
+
+### Why permanent all-RAM failed (unresolved)
 
 **Symptom:** With `$01 = $34` left on for the whole run, the bitmap still updated (walls looked correct) but VIC/CIA traffic died — border colour stuck, WASD via `$dc00`/`$dc01` did nothing. Switching back to `$35` for the main loop restored border + keyboard.
 
-**What the code does now** (`src/dda.asm` `render_frame`, `src/wolf64.asm` `start`):
+**Why this is still a hack:** On the standard PLA map, `$34` and `$35` both leave I/O at `$D000–$DFFF` (CHAREN=1). Permanent `$34` (or a true all-RAM mode with I/O out except in IRQ) *should* be enough for painters + game RAM; VIC/CIA would only need I/O during the IRQ. Empirically, leaving `$34` on killed I/O access from the main loop. Root cause unresolved — possibly VICE/config interaction, uncleared CIA state under `sei`, wrong `$01` value for “RAM everywhere + I/O when we want it,” or something else not pinned down.
 
-- Stay on **`$35`** (BASIC in, KERNAL out, I/O in) for init, `player_move`, and `$d018` swap.
-- Enter **`$34`** (BASIC out, KERNAL out, I/O in per the usual PLA table) only for the column/painter/SMC work inside `render_frame`, then restore **`$35`**.
-
-**Why `$34` is needed at all:** Compiled painters live at `$8000`–~$`C5A2`, so part of that image sits under `$A000–$BFFF`. With `$35` the CPU fetches **BASIC ROM** there; with `$34` it fetches the painter **RAM** loaded under that window. Keyboard itself does not need BASIC — we never call it; CIA is polled directly.
-
-**Why this is a hack:** On the standard PLA map, `$34` and `$35` both leave I/O at `$D000–$DFFF` (CHAREN=1). Permanent `$34` should have been enough for painters + VIC + CIA. Empirically it was not (I/O looked dead; RAM writes still worked). Root cause unresolved — possibly VICE/config interaction, uncleared CIA state under `sei`, or something else we have not pinned down.
-
-**Cleaner end state (not done):** Use **`$36`** (BASIC out, I/O in, KERNAL in) once painters no longer need the `$A000` window conflict with a static map — or keep painters below `$A000`.
+**Do not “fix” this by inventing more main-loop bank flips.** Fix the permanent map so the IRQ owns I/O and the rest of `$A000–$FFFF` stays RAM.
 
 ## Screen double-buffer (`$4000` / `$4400`)
 
@@ -35,4 +47,4 @@ Default **`PROF_SPLIT=0`**: stage-boundary buckets only.
 | 8–10 | **P** paint | **D** march+hit×40 |
 | 12–14 | — | **P** |
 
-HUD screen nibbles go to the **front** matrix (`set_scr_front` after `swap_view`). CIA2 must only be read while `$01=$35`. Does not touch `$dd00` (VIC bank).
+HUD screen nibbles go to the **front** matrix (`set_scr_front` after `swap_view`). CIA2 must only be read while I/O is banked in (today: `$01=$35`). Does not touch `$dd00` (VIC bank).

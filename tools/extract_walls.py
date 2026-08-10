@@ -12,6 +12,9 @@ texels), then rebuild the engine blob with --from-preview.
 Outputs:
   textures/walls.bin          2 KB engine blob (16 × 128 bytes, 4-bit texels)
 
+Optional (--sheet PATH): write a separate 1:1 64×64 atlas (never auto-writes
+walls_preview.png). Purple / purple_blood use a blue-shadow bias.
+
 Hand-edit atlas (never overwritten by this tool):
   textures/walls_preview.png  64×64 sheet (1:1 texels)
 """
@@ -163,6 +166,62 @@ def box_downsample(rgb: list[tuple[int, int, int]], src: int, dst: int) -> list[
                     continue
             out.append(avg)
     return out
+
+
+def box_downsample_purple(
+    rgb: list[tuple[int, int, int]], src: int, dst: int, *, accent_blend: float = 0.895
+) -> list[tuple[int, int, int]]:
+    """
+    Like box_downsample, but softens magenta accent lock so crack averages
+    pull stone faces toward the blue/dark mortar between blocks (~40/60 purple/blue).
+    Pure red blood accents stay full-strength.
+    """
+    scale = src // dst
+    out: list[tuple[int, int, int]] = []
+    for y in range(dst):
+        for x in range(dst):
+            rs = gs = bs = 0
+            best = None
+            best_score = -1
+            for dy in range(scale):
+                for dx in range(scale):
+                    pix = rgb[(y * scale + dy) * src + (x * scale + dx)]
+                    r, g, b = pix
+                    rs += r
+                    gs += g
+                    bs += b
+                    sat = _saturation(pix)
+                    ink = 255 - max(r, g, b)
+                    red_bias = max(0, r - g) + max(0, r - b)
+                    score = sat * 2 + red_bias + (ink if ink > 180 else 0)
+                    if (sat >= 40 or red_bias >= 60) and score > best_score:
+                        best_score = score
+                        best = pix
+            n = scale * scale
+            avg = (rs // n, gs // n, bs // n)
+            if best is not None:
+                br, bg, bb = best
+                keep = (br - bg >= 40 and br - bb >= 40) or _saturation(best) >= _saturation(
+                    avg
+                ) + 20
+                if keep:
+                    # Blood splat: keep vivid red. Magenta stone: soft-blend with avg.
+                    if br - bg >= 40 and br - bb >= 40 and br > bb + 20:
+                        out.append(best)
+                    else:
+                        t = accent_blend
+                        out.append(
+                            (
+                                int(br * t + avg[0] * (1 - t)),
+                                int(bg * t + avg[1] * (1 - t)),
+                                int(bb * t + avg[2] * (1 - t)),
+                            )
+                        )
+                    continue
+            out.append(avg)
+    return out
+
+
 def nearest_c64(rgb: tuple[int, int, int]) -> int:
     r, g, b = rgb
     best = 0
@@ -177,13 +236,40 @@ def nearest_c64(rgb: tuple[int, int, int]) -> int:
     return best
 
 
+def _luma(rgb: tuple[int, int, int]) -> int:
+    r, g, b = rgb
+    return (r * 2 + g * 5 + b) // 8
+
+
+def nearest_c64_purple(rgb: tuple[int, int, int]) -> int:
+    """
+    Prefer C64 blue (6) for dark mortar/cracks; bias purple walls toward
+    roughly 40% purple / 60% blue among those two colours.
+    """
+    r, g, b = rgb
+    luma = _luma(rgb)
+    shadow = luma < 46
+    best = 0
+    best_d = 1 << 30
+    for i, (cr, cg, cb) in enumerate(C64_PALETTE):
+        dr, dg, db = r - cr, g - cg, b - cb
+        d = dr * dr * 2 + dg * dg * 4 + db * db * 3
+        if i == 4:  # purple
+            d = int(d * (1.5 if shadow else 1.15))
+        elif i == 6:  # blue
+            d = int(d * (0.55 if shadow else 0.96))
+        if d < best_d:
+            best_d = d
+            best = i
+    return best
+
+
 def quantize(rgb: list[tuple[int, int, int]]) -> list[int]:
     return [nearest_c64(p) for p in rgb]
 
 
-def _luma(rgb: tuple[int, int, int]) -> int:
-    r, g, b = rgb
-    return (r * 2 + g * 5 + b) // 8
+def quantize_purple_stone(rgb: list[tuple[int, int, int]]) -> list[int]:
+    return [nearest_c64_purple(p) for p in rgb]
 
 
 def quantize_blue_stone(rgb: list[tuple[int, int, int]]) -> list[int]:
@@ -233,12 +319,36 @@ def pack_texture(indices: list[int]) -> bytes:
 PREVIEW_SCALE = 1  # walls_preview is 1:1 (64×64 atlas of 16×16 cells)
 
 
+def indices_to_image(indices: list[int], scale: int = 1) -> Image.Image:
+    img = Image.new("P", (TEX_SIZE, TEX_SIZE))
+    img.putpalette([c for rgb in C64_PALETTE for c in rgb] + [0] * (768 - 48))
+    img.putdata(indices)
+    if scale != 1:
+        img = img.resize((TEX_SIZE * scale, TEX_SIZE * scale), Image.NEAREST)
+    return img.convert("RGB")
+
+
+def write_preview_sheet(packed_slots: list[tuple[str, list[int]]], path: Path) -> Path:
+    """Write a 1:1 4×4 atlas (64×64). Never used for walls_preview unless path says so."""
+    cell = TEX_SIZE * PREVIEW_SCALE
+    atlas = Image.new("RGB", (cell * 4, cell * 4), (0, 0, 0))
+    for i, (_name, indices) in enumerate(packed_slots):
+        assert len(indices) == TEX_SIZE * TEX_SIZE
+        tile = indices_to_image(indices, scale=PREVIEW_SCALE)
+        atlas.paste(tile, ((i % 4) * cell, (i // 4) * cell))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atlas.save(path)
+    print(f"Wrote {path} ({atlas.size[0]}x{atlas.size[1]})")
+    return path
+
+
 def write_outputs(
     out_dir: Path,
     packed_slots: list[tuple[str, list[int]]],
     *,
     labels: list[str] | None = None,
-) -> Path:
+    write_bin: bool = True,
+) -> Path | None:
     """Pack 16 index grids into walls.bin. Does not write or overwrite PNGs."""
     out_dir.mkdir(parents=True, exist_ok=True)
     blob = bytearray()
@@ -254,6 +364,8 @@ def write_outputs(
         print(f"{prefix}  c64={colors}")
 
     assert len(blob) == NUM_TEXTURES * TEX_STRIDE
+    if not write_bin:
+        return None
     bin_path = out_dir / "walls.bin"
     bin_path.write_bytes(blob)
     print(f"Wrote {bin_path} ({len(blob)} bytes)")
@@ -303,7 +415,9 @@ def extract_from_preview(preview_path: Path, out_dir: Path) -> Path:
     return write_outputs(out_dir, slots)
 
 
-def extract(shareware: Path, out_dir: Path) -> Path:
+def build_slots_from_vswap(
+    shareware: Path,
+) -> tuple[list[tuple[str, list[int]]], list[str]]:
     vswap_path = shareware / "VSWAP.WL1"
     if not vswap_path.is_file():
         raise FileNotFoundError(vswap_path)
@@ -327,15 +441,31 @@ def extract(shareware: Path, out_dir: Path) -> Path:
         else:
             page_bytes = read_wall_page(data, offsets, page)
             rgb64 = page_to_rgb(page_bytes)
-            rgb16 = box_downsample(rgb64, WALL_SIZE, TEX_SIZE)
-            if name in ("blue_stone", "blue_cell"):
-                indices = quantize_blue_stone(rgb16)
+            if name in ("purple", "purple_blood"):
+                rgb16 = box_downsample_purple(rgb64, WALL_SIZE, TEX_SIZE)
+                indices = quantize_purple_stone(rgb16)
             else:
-                indices = quantize(rgb16)
+                rgb16 = box_downsample(rgb64, WALL_SIZE, TEX_SIZE)
+                if name in ("blue_stone", "blue_cell"):
+                    indices = quantize_blue_stone(rgb16)
+                else:
+                    indices = quantize(rgb16)
         slots.append((name, indices))
         labels.append(f"{slot:2} {name:14} page={str(page):>4}")
+    return slots, labels
 
-    return write_outputs(out_dir, slots, labels=labels)
+
+def extract(
+    shareware: Path,
+    out_dir: Path,
+    *,
+    write_bin: bool = True,
+    sheet_path: Path | None = None,
+) -> Path | None:
+    slots, labels = build_slots_from_vswap(shareware)
+    if sheet_path is not None:
+        write_preview_sheet(slots, sheet_path)
+    return write_outputs(out_dir, slots, labels=labels, write_bin=write_bin)
 
 
 def main(argv: list[str]) -> int:
@@ -352,6 +482,18 @@ def main(argv: list[str]) -> int:
         help="rebuild walls.bin from walls_preview.png (optional path; "
         "default: <out>/walls_preview.png)",
     )
+    ap.add_argument(
+        "--sheet",
+        type=Path,
+        default=None,
+        metavar="PNG",
+        help="write a 1:1 64×64 atlas to this path (does not touch walls_preview.png)",
+    )
+    ap.add_argument(
+        "--no-bin",
+        action="store_true",
+        help="skip writing walls.bin (sheet-only / dry extract)",
+    )
     args = ap.parse_args(argv)
     if args.from_preview is not None:
         preview = (
@@ -361,7 +503,15 @@ def main(argv: list[str]) -> int:
         )
         extract_from_preview(preview, args.out)
     else:
-        extract(args.shareware, args.out)
+        sheet = args.sheet
+        if sheet is not None and not sheet.is_absolute():
+            sheet = args.out / sheet
+        extract(
+            args.shareware,
+            args.out,
+            write_bin=not args.no_bin,
+            sheet_path=sheet,
+        )
     return 0
 
 

@@ -120,3 +120,6 @@ view_row23	= $7e
 ; Enemy column paint pointer (must be ZP for (ind),y)
 e_col_l		= $80
 e_col_h		= $81
+; enemy_atan2: 2*|min| scratch for dominance test
+e_abs2_l	= $82
+e_abs2_h	= $83

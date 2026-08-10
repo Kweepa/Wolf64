@@ -10,13 +10,14 @@ DBG_FPS		= 1				; F ≈ frame ms (cols 0–2)
 MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 
 ; --- memory map -----------------------------------------------------------
-; $0801  BASIC stub + code + painter tables
+; $0801  BASIC stub + code + small BSS
 ; $4000  VIC screen A (bank 1)
 ; $4400  VIC screen B (double-buffer)
 ; $4800  textures (2K)
 ; $5000  map (4K)
 ; $6000  bitmap (8K, shared)
 ; $8000  compiled height painters
+; ~$B900  enemy SoA / vis_slot (after painters.bin)
 ; $C800  Judd SQTAB (2K)
 
 SCREEN		= $4000
@@ -96,38 +97,12 @@ col_wallz_l
 col_wallz_h
 !fill 40, 0
 
-; --- enemy SoA (MAX_ENEMIES = 32) ---
+; --- enemy SoA (MAX_ENEMIES = 32) arrays live after painters (see below) ---
 enemy_count
 !byte 0
-enemy_xh
-!fill 32, 0
-enemy_xl
-!fill 32, 0
-enemy_yh
-!fill 32, 0
-enemy_yl
-!fill 32, 0
-enemy_facing
-!fill 32, 0
-enemy_flags
-!fill 32, 0
-enemy_anim_t
-!fill 32, 0
-enemy_view
-!fill 32, 0
-enemy_depth_l
-!fill 32, 0
-enemy_depth_h
-!fill 32, 0
-enemy_perp_l
-!fill 32, 0
-enemy_perp_h
-!fill 32, 0
 
 vis_count
 !byte 0
-vis_slot
-!fill 32, 0
 vis_i
 !byte 0
 
@@ -254,6 +229,34 @@ end_code = *
 
 *= PAINTERS
 !binary "painters.bin"
+
+; Enemy SoA + vis order — after painters, before SQTAB at $C800
+enemy_xh
+!fill 32, 0
+enemy_xl
+!fill 32, 0
+enemy_yh
+!fill 32, 0
+enemy_yl
+!fill 32, 0
+enemy_facing
+!fill 32, 0
+enemy_flags
+!fill 32, 0
+enemy_anim_t
+!fill 32, 0
+enemy_view
+!fill 32, 0
+enemy_depth_l
+!fill 32, 0
+enemy_depth_h
+!fill 32, 0
+enemy_perp_l
+!fill 32, 0
+enemy_perp_h
+!fill 32, 0
+vis_slot
+!fill 32, 0
 
 end_painters = *
 !if end_painters > $c800 {

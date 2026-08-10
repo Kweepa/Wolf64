@@ -961,35 +961,53 @@ enemy_draw_one
 	!byte 3, 2, 1				; view 5,6,7
 
 ; Coarse atan2(e_dx, e_dy) → A angle (0=E, 64=N, 128=W, 192=S)
-; 8-way: cardinals when one axis dominates; else diagonal.
+; 8-way on full 16-bit deltas (fracs matter up close).
+; tmp0/1 = |dx| lo/hi, tmp2/3 = |dy| lo/hi; e_abs2 = 2*min scratch.
 enemy_atan2
-	lda e_dx_h
+	lda e_dx_l
 	sta tmp0
-	lda e_dy_h
+	lda e_dx_h
 	sta tmp1
+	bpl +
+	lda #0
+	sec
+	sbc tmp0
+	sta tmp0
+	lda #0
+	sbc tmp1
+	sta tmp1
++
+	lda e_dy_l
+	sta tmp2
+	lda e_dy_h
+	sta tmp3
+	bpl +
+	lda #0
+	sec
+	sbc tmp2
+	sta tmp2
+	lda #0
+	sbc tmp3
+	sta tmp3
++
+	; |dx| >= |dy| ?
 	lda tmp0
-	bpl +
-	eor #$ff
-	clc
-	adc #1
-+
-	sta tmp2				; |dx|
-	lda tmp1
-	bpl +
-	eor #$ff
-	clc
-	adc #1
-+
-	sta tmp3				; |dy|
-	; diagonal if min*2 >= max (neither axis dominates)
-	lda tmp2
-	cmp tmp3
-	bcc .ea_dy_dom
-	; |dx| >= |dy|
-	lda tmp3
-	asl
 	cmp tmp2
-	bcc .ea_card_x			; |dy|*2 < |dx| → E/W
+	lda tmp1
+	sbc tmp3
+	bcc .ea_dy_dom
+	; |dx| >= |dy|: cardinal E/W if 2*|dy| < |dx|
+	lda tmp2
+	asl
+	sta e_abs2_l
+	lda tmp3
+	rol
+	sta e_abs2_h
+	lda e_abs2_l
+	cmp tmp0
+	lda e_abs2_h
+	sbc tmp1
+	bcc .ea_card_x
 	; diagonal
 	lda e_dx_h
 	bmi .ea_w_diag
@@ -1017,12 +1035,18 @@ enemy_atan2
 	lda #128				; W
 	rts
 .ea_dy_dom
-	; |dy| > |dx|
-	lda tmp2
+	; |dy| > |dx|: cardinal N/S if 2*|dx| < |dy|
+	lda tmp0
 	asl
-	cmp tmp3
+	sta e_abs2_l
+	lda tmp1
+	rol
+	sta e_abs2_h
+	lda e_abs2_l
+	cmp tmp2
+	lda e_abs2_h
+	sbc tmp3
 	bcc .ea_card_y
-	; diagonal (same as above)
 	lda e_dx_h
 	bmi .ea_w_diag2
 	lda e_dy_h

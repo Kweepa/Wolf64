@@ -178,6 +178,16 @@ e_sx
 !byte 0
 e_scol
 !byte 0
+e_scol_raw
+!byte 0
+e_scol_cache
+!byte 0
+e_u_numer
+!byte 0
+e_u_denom
+!byte 0
+e_clip_skip
+!byte 0
 e_gfx_l
 !byte 0
 e_gfx_h

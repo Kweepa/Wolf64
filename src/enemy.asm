@@ -782,26 +782,12 @@ enemy_draw_one
 
 	; feet on floor in chunky space (40×48): horizon at v=24
 	; wall floor edge = 24 + half_h; active v = 4..43 (cells 2..21 → screen rows 5..24)
+	; e_bot kept unclamped so close sprites clip off the bottom (not glued to y=44)
+	; e_top set later from paint_h = frm_h*spr_h/16
 	clc
 	lda #24
 	adc half_h
 	sta e_bot
-	cmp #44
-	bcc +
-	lda #44
-	sta e_bot
-+
-	sec
-	lda e_bot
-	sbc e_spr_h
-	bcs +
-	lda #4
-+
-	cmp #4
-	bcs +
-	lda #4
-+
-	sta e_top
 
 	; view 0..7: (atan2(to_player) - facing) → octant
 	ldx enemy_idx
@@ -974,16 +960,81 @@ enemy_draw_one
 	ldy e_frm_w
 	lda e_spr_h
 	jsr mul_8x8				; X=lo A=hi
-	sta tmp1
 	stx tmp0
-	lda #ENEMY_SRC_H
-	jsr enemy_udiv			; tmp0 = frm_w * spr_h / 16
+	lsr					; /16 (hi in A)
+	ror tmp0
+	lsr
+	ror tmp0
+	lsr
+	ror tmp0
+	lsr
+	ror tmp0
 	lda tmp0
 	lsr					; /2 for aspect
 	bne +
 	lda #1
 +
 	sta e_scr_w
+
+	; paint span: (frm_h * spr_h / 16) — short frames skip empty upper rows
+	ldy e_frm_h
+	lda e_spr_h
+	jsr mul_8x8
+	stx tmp0
+	lsr
+	ror tmp0
+	lsr
+	ror tmp0
+	lsr
+	ror tmp0
+	lsr
+	ror tmp0
+	lda tmp0
+	bne +
+	lda #1
++
+	sta tmp2				; paint_h
+	sec
+	lda e_bot
+	sbc tmp2
+	bcs +
+	lda #0					; top above world origin
++
+	sta e_top
+	; fully below or above the 4..43 view → nothing to paint
+	cmp #44
+	bcc +
+	jmp .edo_done
++
+	lda e_bot
+	cmp #5
+	bcs +
+	jmp .edo_done
++
+	; clip to view: skip texels for rows above v=4; clamp bot to 44
+	lda #0
+	sta e_clip_skip
+	lda e_top
+	cmp #4
+	bcs +
+	lda #4
+	sec
+	sbc e_top
+	sta e_clip_skip
+	lda #4
+	sta e_top
++
+	lda e_bot
+	cmp #44
+	bcc +
+	lda #44
+	sta e_bot
++
+	lda e_top
+	cmp e_bot
+	bcc +
+	jmp .edo_done
++
 
 	; left = cx - scr_w/2
 	lda e_scr_w
@@ -1004,51 +1055,40 @@ enemy_draw_one
 	adc enemy_frm_off_hi,y
 	sta e_gfx_h
 
+	; Bresenham U: scol = (2*sx+1)*frm_w / (2*scr_w)
+	lda e_scr_w
+	asl
+	bne +
+	lda #2
++
+	sta e_u_denom
+	lda e_frm_w
+	sta e_u_numer
+	lda #0
+	sta e_scol_raw
+.edo_uinit
+	lda e_u_numer
+	cmp e_u_denom
+	bcc .edo_uready
+	sec
+	sbc e_u_denom
+	sta e_u_numer
+	inc e_scol_raw
+	bne .edo_uinit
+.edo_uready
+	lda #$ff
+	sta e_scol_cache
+
 	; for each screen column across billboard width
 	lda #0
 	sta e_sx
 .edo_cloop
 	lda e_sx
 	cmp e_scr_w
-	bcs .edo_done
-	; source col = (e_sx + 0.5) * frm_w / scr_w  — center of span
-	; so scr_w=1 samples mid texture, not the left elbow column
-	lda e_sx
-	asl
-	clc
-	adc #1					; 2*sx+1
-	tay
-	lda e_frm_w
-	jsr mul_8x8				; (2*sx+1)*frm_w
-	sta tmp1
-	stx tmp0
-	lda e_scr_w
-	asl					; *2 denominator
-	bne +
-	lda #2
-+
-	jsr enemy_udiv
-	lda tmp0
-	cmp e_frm_w
-	bcc +
-	lda e_frm_w
-	sec
-	sbc #1
-+
-	sta tmp2				; raw source col
-	lda e_flip
-	beq .edo_sraw
-	sec
-	lda e_frm_w
-	sbc #1
-	sec
-	sbc tmp2
-	jmp .edo_suse
-.edo_sraw
-	lda tmp2
-.edo_suse
-	sta e_scol
-	; screen col = e_col0 + e_sx
+	bcc .edo_cgo
+	jmp .edo_done
+.edo_cgo
+	; clip / Z before texture work
 	clc
 	lda e_col0
 	adc e_sx
@@ -1057,8 +1097,6 @@ enemy_draw_one
 	bcc .edo_cnxt
 	cmp #COL_LIMIT
 	bcs .edo_cnxt
-
-	; Z test: sprite depth < col_wallz
 	ldx enemy_idx
 	lda enemy_depth_h,x
 	ldx col
@@ -1071,10 +1109,55 @@ enemy_draw_one
 	cmp col_wallz_l,x
 	bcs .edo_cnxt
 .edo_zok
+	lda e_scol_raw
+	cmp e_frm_w
+	bcc +
+	lda e_frm_w
+	sec
+	sbc #1
++
+	sta tmp2
+	lda e_flip
+	beq .edo_sraw
+	sec
+	lda e_frm_w
+	sbc #1
+	sec
+	sbc tmp2
+	jmp .edo_suse
+.edo_sraw
+	lda tmp2
+.edo_suse
+	sta e_scol
 	jsr enemy_paint_col
 .edo_cnxt
+	; advance U for every sx (including rejects)
+	lda e_frm_w
+	asl
+	clc
+	adc e_u_numer
+	sta e_u_numer
+.edo_uadv
+	lda e_u_numer
+	cmp e_u_denom
+	bcc .edo_udone
+	sec
+	sbc e_u_denom
+	sta e_u_numer
+	lda e_scol_raw
+	clc
+	adc #1
+	cmp e_frm_w
+	bcc +
+	lda e_frm_w
+	sec
+	sbc #1
++
+	sta e_scol_raw
+	jmp .edo_uadv
+.edo_udone
 	inc e_sx
-	bne .edo_cloop
+	jmp .edo_cloop
 .edo_done
 	ldx enemy_idx
 	rts
@@ -1336,56 +1419,21 @@ enemy_project_col
 	sta e_col_cx
 	rts
 
-; tmp0/tmp1 (16-bit LE) ÷ A → tmp0 (quot 0..255)
-enemy_udiv
-	sta tmp2
-	lda #0
-	sta tmp3
-.eud_loop
-	lda tmp1
-	ora tmp0
-	beq .eud_done
-	lda tmp0
-	cmp tmp2
-	lda tmp1
-	sbc #0
-	bcc .eud_done
-	sec
-	lda tmp0
-	sbc tmp2
-	sta tmp0
-	lda tmp1
-	sbc #0
-	sta tmp1
-	inc tmp3
-	lda tmp3
-	bne .eud_loop
-.eud_done
-	lda tmp3
-	sta tmp0
-	rts
-
 ; Paint one masked column in chunky rows (two nibbles per character cell).
 ; e_top/e_bot/e_row are 40×48 chunky V (4..43). Even V = hi nibble, odd = lo.
 enemy_paint_col
+	lda e_scol
+	cmp e_scol_cache
+	beq .epc_draw
+	sta e_scol_cache
 	; column byte offset = scol * ceil(frm_h/2)
 	lda e_frm_h
 	clc
 	adc #1
 	lsr					; bytes per col
-	sta tmp2
-	lda #0
-	sta tmp3
 	ldy e_scol
-	beq .epc_ptr
-.epc_mulc
-	clc
-	lda tmp3
-	adc tmp2
-	sta tmp3
-	dey
-	bne .epc_mulc
-.epc_ptr
+	jsr mul_8x8				; X=lo A=hi
+	stx tmp3
 	clc
 	lda e_gfx_l
 	adc tmp3
@@ -1394,14 +1442,7 @@ enemy_paint_col
 	adc #0
 	sta e_col_h
 
-	; unpack column to e_pix[16], ground-aligned (short frames sit on floor)
-	ldx #0
-	lda #0
-.epc_z
-	sta e_pix,x
-	inx
-	cpx #16
-	bne .epc_z
+	; unpack frm_h texels into e_pix[16-frm_h..] (no full clear — upper unused)
 	lda #ENEMY_SRC_H
 	sec
 	sbc e_frm_h
@@ -1435,23 +1476,40 @@ enemy_paint_col
 	sta e_step_l
 	lda enemy_vstep_hi,x
 	sta e_step_h
-	; start at half step → sample span centers (keeps boots when short)
+	; start at (16-frm_h) + half step → opaque band centers
 	lda e_step_h
 	lsr
 	sta e_acc_h
 	lda e_step_l
 	ror
 	sta e_acc_l
+	lda #ENEMY_SRC_H
+	sec
+	sbc e_frm_h
+	clc
+	adc e_acc_h
+	sta e_acc_h
+	; advance past rows clipped above the view
+	ldy e_clip_skip
+	beq .epc_row0
+.epc_skp
+	clc
+	lda e_acc_l
+	adc e_step_l
+	sta e_acc_l
+	lda e_acc_h
+	adc e_step_h
+	sta e_acc_h
+	dey
+	bne .epc_skp
+.epc_row0
 	lda e_top
 	sta e_row
 .epc_row
 	lda e_row
 	cmp e_bot
 	bcs .epc_rts
-	cmp #4
-	bcc .epc_nr
-	cmp #44
-	bcs .epc_nr
+	; e_top/e_bot already clipped to 4..44
 	lda e_acc_h
 	cmp #16
 	bcc +

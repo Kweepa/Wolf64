@@ -389,3 +389,97 @@ enemy_spawn_one
 	inx
 	stx enemy_count
 	rts
+
+; ---------------------------------------------------------------------------
+; Patrol turn — tmp0/tmp1 = pre-step xl/yl. Center-cross on T_TURN → snap + face.
+; ---------------------------------------------------------------------------
+enemy_patrol_turn
+	lda tmp0
+	pha
+	lda tmp1
+	pha
+	ldx enemy_idx
+	lda enemy_xh,x
+	sta tmp0
+	lda enemy_yh,x
+	sta tmp1
+	jsr map_to_tile
+	ldy #0
+	lda (tile_l),y
+	tay
+	pla
+	sta tmp1
+	pla
+	sta tmp0
+	tya
+	cmp #T_TURN
+	bcc .ept_rts
+	cmp #T_TURN + 8
+	bcs .ept_rts
+	sec
+	sbc #T_TURN
+	sta tmp5
+	lda #0
+	sta tmp4
+	ldx enemy_idx
+	lda move_dx_l
+	ora move_dx_h
+	beq .ept_y
+	lda enemy_xl,x
+	cmp tmp0
+	beq .ept_y
+	lda move_dx_h
+	sta tmp3
+	lda enemy_xl,x
+	ldy tmp0
+	jsr .ept_axis
+	bcc .ept_rts
+.ept_y
+	lda move_dy_l
+	ora move_dy_h
+	beq .ept_ck
+	lda enemy_yl,x
+	cmp tmp1
+	beq .ept_ck
+	lda move_dy_h
+	sta tmp3
+	lda enemy_yl,x
+	ldy tmp1
+	jsr .ept_axis
+	bcc .ept_rts
+.ept_ck
+	lda tmp4
+	beq .ept_rts
+	lda #$80
+	sta enemy_xl,x
+	sta enemy_yl,x
+	lda tmp5
+	sta enemy_facing,x
+.ept_rts
+	rts
+
+; A=new frac, Y=old, tmp3=move_*_h. C=1 past center; tmp4++ if was-before.
+.ept_axis
+	bit tmp3
+	bmi .ept_neg
+	cmp #$80
+	bcc .ept_fail
+	cpy #$80
+	bcs .ept_ok
+	inc tmp4
+.ept_ok
+	sec
+	rts
+.ept_neg
+	cmp #$80
+	beq .ept_n1
+	bcs .ept_fail
+.ept_n1
+	cpy #$80
+	beq .ept_ok
+	bcc .ept_ok
+	inc tmp4
+	bne .ept_ok
+.ept_fail
+	clc
+	rts

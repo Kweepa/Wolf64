@@ -376,6 +376,10 @@ enemy_patrol_one
 	lda enemy_flags,x
 	and #(EF_ACTIVE | EF_AMBUSH | EF_PHASE_B)
 	sta enemy_flags,x
+	lda enemy_yl,x				; pre-step fracs for center-cross
+	pha
+	lda enemy_xl,x
+	pha
 	; wish delta from facing
 	lda #0
 	sta move_dx_l
@@ -468,25 +472,12 @@ enemy_patrol_one
 	beq .ep_turn
 	jsr try_open_door
 .ep_turn
-	; turn node under feet?
-	ldx enemy_idx
-	lda enemy_xh,x
-	sta mapx
+	; pre-step fracs → tmp0/tmp1; apply T_TURN only on center-cross
+	pla
 	sta tmp0
-	lda enemy_yh,x
-	sta mapy
+	pla
 	sta tmp1
-	jsr map_to_tile
-	ldy #0
-	lda (tile_l),y
-	cmp #T_TURN
-	bcc .ep_out
-	cmp #T_TURN + 8
-	bcs .ep_out
-	sec
-	sbc #T_TURN
-	ldx enemy_idx
-	sta enemy_facing,x
+	jsr enemy_patrol_turn
 .ep_out
 	lda #0
 	sta probe_doors_pass

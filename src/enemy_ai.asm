@@ -581,7 +581,7 @@ enemy_chase_one
 .ec_humspd
 	lda #CHASE_SPEED
 .ec_spd
-	sta vel_ms
+	jsr enemy_speed_vel
 	ldy tmp4
 	lda costab,y
 	jsr scale_vel

@@ -41,9 +41,9 @@ BITE_T		= 60				; dog jump/bite dwell (~480ms)
 BITE_HIT_T	= 30				; apply bite when timer crosses this
 BITE_GAP	= 150				; ~1.2s chase cooldown before next bite
 BITE_RANGE	= $c0				; 8.8 P_ApproxDistance (|dx|+|dy|-min/2)
-ENEMY_SPEED	= 24				; ~¼ player wish scale (sintab units via dt)
-CHASE_SPEED	= 40				; ~1.7× walk; was 3× (too aggressive close)
-DOG_CHASE_SPEED	= 56				; > CHASE_SPEED; keep steps modest for pathing
+ENEMY_SPEED	= 36				; (const*dt_ms)>>8 → ~0.55 tile/s (Wolf SPDPATROL)
+CHASE_SPEED	= 108				; ×3 patrol (Wolf guard FirstSighting)
+DOG_CHASE_SPEED	= 108				; same as CHASE_SPEED for now
 ANIM_MS		= 180
 AIM_COL		= 20				; view-center hit column
 DOOR_LOS_MIN	= $80				; door_pos must be ≥ half open for LOS
@@ -367,6 +367,14 @@ enemies_update
 .eu_done
 	rts
 
+; A = speed const → vel_ms = (A * dt_ms) >> 8  (tiles/sec ≈ A*1000/256)
+enemy_speed_vel
+	tay
+	lda dt_ms
+	jsr mul_8x8				; X=lo A=hi
+	sta vel_ms
+	rts
+
 ; X = enemy index — step along facing, honor turn tiles
 enemy_patrol_one
 	stx enemy_idx
@@ -391,7 +399,7 @@ enemy_patrol_one
 	lda enemy_face_ang,y
 	sta tmp4				; angle (scale_vel clobbers Y)
 	lda #ENEMY_SPEED
-	sta vel_ms
+	jsr enemy_speed_vel
 	; forward: +cos x, -sin y (same as player)
 	ldy tmp4
 	lda costab,y

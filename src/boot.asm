@@ -2,15 +2,6 @@
 ; ENEMY first → $8000, copy to $C000 ($01=$34), then remaining SA=1 loads.
 ; Per file: SETNAM / SETLFS / LOAD / CLOSE only.
 ; File-table index in .xi (KERNAL LOAD clobbers ZP — do not keep ptr in $ae/$af).
-;
-; Border (kept on fail):
-;   7 yellow ENEMY (staged)
-;   1 white  LOCODE
-;   3 cyan   TEX
-;   4 purple WPN
-;   5 green  PAINT
-;   6 blue   SFX
-;   9 brown  TAB
 !cpu 6502
 !to "boot.prg", cbm
 
@@ -29,8 +20,6 @@ boot_start
 	cli
 
 	; ENEMY → $8000 (SA=0), copy under I/O → $C000
-	lda #7
-	sta $d020
 	lda #5
 	ldx #<name_enemy
 	ldy #>name_enemy
@@ -52,9 +41,6 @@ boot_start
 .next
 	lda file_tab,x
 	beq .done
-	sta $d020
-	inx
-	lda file_tab,x
 	sta .len
 	inx
 	stx .xi
@@ -97,36 +83,29 @@ load_sa1
 	plp
 	rts
 
-; ENEMY_SIZE bytes $8000 → $C000, I/O out
+; ENEMY_SIZE → $C000 (I/O out). SMC abs,x; round up to whole pages
+; (map not loaded yet — overcopy into $EFxx is fine).
+ENEMY_COPY_PAGES = (ENEMY_SIZE + 255) / 256
+
 copy_enemy
 	sei
 	lda #$34
 	sta $01
-	lda #0
-	sta $bb
-	sta $fd
 	lda #>ENEMY_STAGING
-	sta $bc
+	sta .s + 2
 	lda #>ENEMY_BASE
-	sta $fe
-	ldx #>(ENEMY_SIZE)
-	ldy #0
+	sta .d + 2
+	ldx #0
+	ldy #ENEMY_COPY_PAGES
 .pg
-	lda ($bb),y
-	sta ($fd),y
-	iny
+.s	lda ENEMY_STAGING,x
+.d	sta ENEMY_BASE,x
+	inx
 	bne .pg
-	inc $bc
-	inc $fe
-	dex
+	inc .s + 2
+	inc .d + 2
+	dey
 	bne .pg
-	ldx #<(ENEMY_SIZE)
-.tail
-	lda ($bb),y
-	sta ($fd),y
-	iny
-	dex
-	bne .tail
 	lda #$36
 	sta $01
 	cli
@@ -136,17 +115,19 @@ copy_enemy
 .xi	!byte 0
 
 file_tab
-	!byte 1, 6
+	!byte 6
 	!text "LOCODE"
-	!byte 3, 3
+	!byte 3
 	!text "TEX"
-	!byte 4, 3
+	!byte 3
 	!text "WPN"
-	!byte 5, 5
+	!byte 3
+	!text "SQT"
+	!byte 5
 	!text "PAINT"
-	!byte 6, 3
+	!byte 3
 	!text "SFX"
-	!byte 9, 3
+	!byte 3
 	!text "TAB"
 	!byte 0
 

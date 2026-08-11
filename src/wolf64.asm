@@ -17,7 +17,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $4000  VIC screen A / B ($4400)
 ; $4800  textures (disk: tex)
 ; $5000  weapon sprites; $54C0–$57FF reserved for two more weapons (disk: wpn)
-; $5800  Judd SQTAB (runtime)
+; $5800  Judd SQTAB (disk: sqt)
 ; $6000  bitmap (8K, runtime fill)
 ; $8000  wall painters only (disk: paint)
 ; $B8F2  PC SFX (disk: sfx)
@@ -68,7 +68,7 @@ game_start
 	lda #0
 	sta $dc03
 
-	; KERNAL LOAD clobbered ZP — Judd tabs after all disk loads
+	; KERNAL LOAD clobbered ZP — Judd table hi ptrs (tables LOADed by boot)
 	jsr init_sqtabs
 	jsr init_vic
 	jsr prof_init

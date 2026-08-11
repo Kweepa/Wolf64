@@ -48,7 +48,9 @@ enemy_los_rr
 	jsr prof_los_end
 	plp
 }
-	bcc .elr_adv			; not spotted
+	bcs +
+	jmp .elr_adv			; not spotted
++
 	; start reaction delay: 1 + rnd/4 (Wolf temp2)
 	jsr rnd8
 	lsr
@@ -88,7 +90,7 @@ enemy_los_rr
 	sta enemy_state,x
 	jmp .elr_next
 .elr_fire
-	; aim done — fire on this LOS slot, enter recover
+	; aim done — fire on this LOS slot; burst or recover
 	stx los_rr
 !if PROFILE = 1 {
 	jsr prof_los_begin
@@ -98,11 +100,26 @@ enemy_los_rr
 	jsr prof_los_end
 }
 	ldx enemy_idx
+	lda enemy_burst,x
+	beq .elr_burst1			; safety: treat as last shot
+	sec
+	sbc #1
+	sta enemy_burst,x
+	beq .elr_last
+	; more shots left — short gap, keep aiming pose
+	lda #BURST_GAP
+	sta enemy_state_t,x
+	jmp .elr_adv
+.elr_burst1
+	lda #0
+	sta enemy_burst,x
+.elr_last
 	lda enemy_flags,x
 	ora #EF_SHOT_DONE
 	sta enemy_flags,x
 	lda #SHOOT_T
 	sta enemy_state_t,x
+	jmp .elr_adv
 .elr_adv
 	ldx los_rr
 	inx
@@ -111,6 +128,13 @@ enemy_los_rr
 
 ; Chase LOS slot: shoot chance or dodge face (enemy_idx + ai_dist set)
 enemy_rr_chase
+	ldx enemy_idx
+	lda enemy_type,x
+	cmp #ET_DOG
+	bne .erc_gun
+	; dogs never shoot — slot used, keep chasing (bite from update)
+	rts
+.erc_gun
 !if PROFILE = 1 {
 	jsr prof_los_begin
 }
@@ -162,12 +186,15 @@ enemy_rr_chase
 	jsr rnd8
 	cmp tmp3
 	bcs .erc_dodge			; rnd >= chance → dodge face
-	; enter shoot
+	; enter shoot with type burst count
 	ldx enemy_idx
 	lda #ES_SHOOT
 	sta enemy_state,x
 	lda #SHOOT_T
 	sta enemy_state_t,x
+	ldy enemy_type,x
+	lda enemy_burst_tab,y
+	sta enemy_burst,x
 	lda enemy_flags,x
 	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK)
 	sta enemy_flags,x			; clear SHOT_DONE/MOVING/DODGE
@@ -183,12 +210,15 @@ enemy_rr_chase
 
 ; X = enemy. C=1 if spots player (facing + LOS)
 check_sight
+!if DBG_NO_DETECT = 1 {
+	clc					; wander / patrol preview
+	rts
+}
 	stx enemy_idx
 	jsr enemy_tile_dist		; tmp1 = Chebyshev dist
 	lda tmp1
 	cmp #2
 	bcc .cs_los			; ≤1 tiles: auto (MINSIGHT stand-in)
-	; facing toward player?
 	ldx enemy_idx
 	lda playerx_h
 	sec
@@ -199,38 +229,42 @@ check_sight
 	sbc enemy_yh,x
 	sta tmp3				; dy
 	lda enemy_facing,x
-	beq .cs_n
-	cmp #1
-	beq .cs_e
-	cmp #2
-	beq .cs_s
-	; west: need dx < 0
+	tay
+	; need_dx/need_dy: 0=any, 1=positive, $ff=negative
+	lda .cs_need_dx,y
+	beq .cs_cky
+	bmi .cs_dxn
 	lda tmp2
-	bmi .cs_los
-	clc
-	rts
-.cs_n	; north: need dy < 0 (north decreases y)
+	beq .cs_fail
+	bmi .cs_fail
+	bpl .cs_cky
+.cs_dxn
+	lda tmp2
+	bpl .cs_fail
+.cs_cky
+	lda .cs_need_dy,y
+	beq .cs_los
+	bmi .cs_dyn
 	lda tmp3
-	bmi .cs_los
-	clc
-	rts
-.cs_e	; east: need dx > 0
-	lda tmp2
 	beq .cs_fail
 	bpl .cs_los
 .cs_fail
 	clc
 	rts
-.cs_s	; south: need dy > 0
+.cs_dyn
 	lda tmp3
-	beq .cs_fail
-	bpl .cs_los
+	bmi .cs_los
 	clc
 	rts
 .cs_los
 	ldx enemy_idx
 	jsr has_los_to_player
 	rts
+; N NE E SE S SW W NW
+.cs_need_dx
+	!byte 0, 1, 1, 1, 0, $ff, $ff, $ff
+.cs_need_dy
+	!byte $ff, $ff, 0, 1, 1, 1, 0, $ff
 
 ; X = enemy. C=1 if clear LOS. Prefer last-frame col_enemy, else check_line.
 has_los_to_player
@@ -493,11 +527,17 @@ first_sighting
 	sta enemy_state,x
 	lda #0
 	sta enemy_state_t,x
+	lda enemy_type,x
+	cmp #ET_DOG
+	bne .fs_halt
+	lda #SOUND_DOGBARK
+	jmp play_sound
+.fs_halt
 	lda #SOUND_HALT
 	jmp play_sound
 
 ; ---------------------------------------------------------------------------
-; Chase: path + 3× speed move (shoot / dodge face via enemy_los_rr)
+; Chase: path + CHASE_SPEED move (shoot / dodge face via enemy_los_rr)
 ; ---------------------------------------------------------------------------
 enemy_chase_one
 	stx enemy_idx
@@ -533,7 +573,14 @@ enemy_chase_one
 	tay
 	lda enemy_face_ang,y
 	sta tmp4
+	lda enemy_type,x
+	cmp #ET_DOG
+	bne .ec_humspd
+	lda #DOG_CHASE_SPEED
+	bne .ec_spd
+.ec_humspd
 	lda #CHASE_SPEED
+.ec_spd
 	sta vel_ms
 	ldy tmp4
 	lda costab,y
@@ -620,28 +667,16 @@ enemy_chase_one
 ; Try walk into neighbor tile for facing A. Z=1 if ok.
 enemy_try_face
 	sta tmp5
+	tay
 	ldx enemy_idx
+	clc
 	lda enemy_xh,x
+	adc .etf_dx,y
 	sta mapx
+	clc
 	lda enemy_yh,x
+	adc .etf_dy,y
 	sta mapy
-	lda tmp5
-	beq .etf_n
-	cmp #1
-	beq .etf_e
-	cmp #2
-	beq .etf_s
-	dec mapx				; W
-	jmp .etf_p
-.etf_n
-	dec mapy
-	jmp .etf_p
-.etf_e
-	inc mapx
-	jmp .etf_p
-.etf_s
-	inc mapy
-.etf_p
 	lda #1
 	sta probe_doors_pass
 	jsr probe_solid
@@ -650,6 +685,11 @@ enemy_try_face
 	sta probe_doors_pass
 	plp
 	rts
+; N NE E SE S SW W NW (signed tile deltas)
+.etf_dx
+	!byte 0, 1, 1, 1, 0, $ff, $ff, $ff
+.etf_dy
+	!byte $ff, $ff, 0, 1, 1, 1, 0, $ff
 
 ; Wolf SelectDodgeDir — cardinal zigzag toward player
 select_dodge_dir
@@ -682,15 +722,15 @@ select_dodge_dir
 	lda tmp2
 	beq .sdd_nox
 	bmi .sdd_wx
-	lda #1					; E
+	lda #2					; E
 	sta ai_dirtry
-	lda #3					; W
+	lda #6					; W
 	sta ai_dirtry+2
 	jmp .sdd_y
 .sdd_wx
-	lda #3
+	lda #6
 	sta ai_dirtry
-	lda #1
+	lda #2
 	sta ai_dirtry+2
 	jmp .sdd_y
 .sdd_nox
@@ -701,7 +741,7 @@ select_dodge_dir
 	lda tmp3
 	beq .sdd_noy
 	bmi .sdd_ny
-	lda #2					; S
+	lda #4					; S
 	sta ai_dirtry+1
 	lda #0					; N
 	sta ai_dirtry+3
@@ -709,7 +749,7 @@ select_dodge_dir
 .sdd_ny
 	lda #0
 	sta ai_dirtry+1
-	lda #2
+	lda #4
 	sta ai_dirtry+3
 	jmp .sdd_abs
 .sdd_noy
@@ -817,21 +857,21 @@ select_chase_dir
 	lda tmp2
 	beq +
 	bmi .scd_w
-	lda #1
+	lda #2					; E
 	sta ai_dirtry
 	jmp +
 .scd_w
-	lda #3
+	lda #6					; W
 	sta ai_dirtry
 +
 	lda tmp3
 	beq +
 	bmi .scd_n
-	lda #2
+	lda #4					; S
 	sta ai_dirtry+1
 	jmp +
 .scd_n
-	lda #0
+	lda #0					; N
 	sta ai_dirtry+1
 +
 	; if |dy| > |dx| swap
@@ -902,7 +942,7 @@ select_chase_dir
 .scd_sweep
 	jsr rnd8
 	bmi .scd_fw
-	lda #3
+	lda #6					; W → … → N (cardinals)
 	sta tmp4
 .scd_bwl
 	lda tmp4
@@ -915,9 +955,12 @@ select_chase_dir
 	sta enemy_facing,x
 	rts
 +
-	dec tmp4
-	bpl .scd_bwl
-	rts
+	lda tmp4
+	sec
+	sbc #2
+	sta tmp4
+	bcs .scd_bwl
+	jmp .scd_rev
 .scd_fw
 	lda #0
 	sta tmp4
@@ -932,10 +975,21 @@ select_chase_dir
 	sta enemy_facing,x
 	rts
 +
-	inc tmp4
 	lda tmp4
-	cmp #4
+	clc
+	adc #2
+	sta tmp4
+	cmp #8
 	bcc .scd_fwl
+.scd_rev
+	; last resort: turnaround (same as SelectDodgeDir)
+	lda ai_turn
+	jsr enemy_try_face
+	bne .scd_rts
+	ldx enemy_idx
+	lda tmp5
+	sta enemy_facing,x
+.scd_rts
 	rts
 
 ; X set via enemy_idx — Wolf T_Shoot → take_damage

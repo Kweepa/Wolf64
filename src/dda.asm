@@ -58,11 +58,8 @@ render_frame
 }
 }
 	jsr set_view_rows
-	; Painters/SMC under $A000 need BASIC out (see hacks.md).
-	; SEI while $01=$34: CIA key IRQ must not run in that bank window.
-	sei
-	lda #$34
-	sta $01
+	; Painters under $A000 are plain RAM at the $01=$34 gameplay default
+	; (see TechNotes.md). IRQ banks I/O in itself; no paint flip needed.
 	lda #COL_FIRST
 	sta col
 .paint_loop
@@ -72,17 +69,10 @@ render_frame
 	cmp #COL_LIMIT
 	bne .paint_loop
 !if PROFILE = 1 {
-	lda #$35				; CIA sample needs I/O in
-	sta $01
 	ldy #PROF_PAINT
 	jsr prof_add_bucket
-	lda #$34
-	sta $01
 }
 	jsr enemies_draw
-	lda #$35
-	sta $01
-	cli
 !if PROFILE = 1 {
 	ldy #PROF_OBJDRAW
 	jsr prof_add_bucket

@@ -36,6 +36,8 @@ sfx_voice3_adsr
 
 ; ------------------------------------------------------------------
 ; play_sound — A = sound index; higher-or-equal priority preempts
+; Queue-only: no SID access (safe at $01=$34); the Timer A IRQ
+; (update_sfx) does all SID writes, starting on the next tick.
 ; Preserves X,Y and caller's I flag; A clobbered
 ; ------------------------------------------------------------------
 play_sound
@@ -66,9 +68,6 @@ play_sound
 	sta sound_count
 
 	stx sound_index
-	jsr sfx_voice3_adsr
-	lda #SFX_VOL
-	sta $d418
 .ps_skip
 	ldx ps_save_x
 	ldy ps_save_y

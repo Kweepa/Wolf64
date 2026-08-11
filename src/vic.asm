@@ -187,18 +187,24 @@ set_view_rows
 
 ; Show the matrix just painted; flip view_back for next frame
 swap_view
+	lda #$35
+	sta $01					; $d018 needs I/O in
 	lda view_back
 	beq .show_a
 	lda #D018_SCR_B
 	sta $d018
 	lda #0
 	sta view_back
+	lda #$34
+	sta $01
 	rts
 .show_a
 	lda #D018_SCR_A
 	sta $d018
 	lda #1
 	sta view_back
+	lda #$34
+	sta $01
 	rts
 
 ; Front matrix hi after swap (opposite of next back)

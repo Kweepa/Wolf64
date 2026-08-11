@@ -51,10 +51,16 @@ input_irq_init
 	sta $dc0e
 	rts
 
-; Ack CIA2 NMI (RESTORE) with KERNAL banked out
+; Ack CIA2 NMI (RESTORE) with KERNAL banked out; banks I/O in for the ack
 nmi_stub
 	pha
+	lda $01
+	pha
+	lda #$35
+	sta $01
 	lda $dd0d
+	pla
+	sta $01
 	pla
 	rti
 
@@ -64,6 +70,10 @@ input_irq
 	pha
 	tya
 	pha
+	lda $01					; bank I/O in for CIA/SID; restore at exit
+	pha
+	lda #$35
+	sta $01
 	lda $dc0d				; ack
 	and #$01
 	bne .irq_run
@@ -154,6 +164,8 @@ input_irq
 .irq_nospc
 
 .irq_rti
+	pla
+	sta $01					; restore caller's banking
 	pla
 	tay
 	pla

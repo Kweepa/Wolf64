@@ -1,42 +1,69 @@
-; Guard enemies — SoA pool, patrol/stand/chase/shoot, depth-sorted masked billboards
+; Enemies — SoA pool, patrol/chase/shoot/bite, depth-sorted masked billboards
 !zone enemy
 
 MAX_ENEMIES	= 32
 T_GUARD		= 52				; +0..3 NESW patrol
 T_AMBUSH	= 56				; +0..3 NESW ambush
+T_SS_PATROL	= 60				; +0..3 NESW
+T_SS_AMBUSH	= 64				; +0..3 NESW
+T_DOG		= 68				; +0..3 NESW
+T_BOSS		= 72				; Hans = 72 (other boss subtypes ignored)
 T_FLOOR		= 17
-T_TURN		= 112				; +0..3 force facing
+T_TURN		= 112				; +0..7 N,NE,E,SE,S,SW,W,NW
+ET_GUARD	= 0
+ET_SS		= 1
+ET_DOG		= 2
+ET_HANS		= 3
 EF_ACTIVE	= $01
 EF_AMBUSH	= $02
 EF_PHASE_B	= $04				; walk A/B toggle (frame bases in enemy_gfx.asm)
 EF_MOVING	= $08				; moved this frame → walk anim
 EF_FIRSTATTACK	= $10				; allow 180° on first chase dir pick
-EF_SHOT_DONE	= $20				; fired during current ES_SHOOT
+EF_SHOT_DONE	= $20				; shoot recover / bite already applied
 EF_DODGE_FACE	= $40				; RR dodge: keep facing for next chase move
 ES_ALIVE	= 0
 ES_CHASE	= 1
 ES_SHOOT	= 2
-ES_PAIN		= 3
-ES_DYING	= 4
-ES_DEAD		= 5
-GUARD_HP	= 25				; Wolf starthitpoints[all][guard]
+ES_BITE		= 3				; dog melee
+ES_PAIN		= 4
+ES_DYING	= 5
+ES_DEAD		= 6
+GUARD_HP	= 6				; Wolf 25 / 4
+SS_HP		= 25				; Wolf 100 / 4
+DOG_HP		= 1				; Wolf 1 (min 1 after /4)
+HANS_HP		= 255				; byte max (Wolf boss >> 4)
 PLAYER_HP0	= 100
 PAIN_T		= 42				; flinch in 8ms units (~336ms)
 DIE_T		= 84				; die1 dwell in 8ms units (~672ms)
 SHOOT_T		= 50				; ~400ms per aim/recover phase (8ms units)
+BURST_GAP	= 12				; ~96ms between SS/Hans shots
+BITE_T		= 60				; dog jump/bite dwell (~480ms)
+BITE_HIT_T	= 30				; apply bite when timer crosses this
+BITE_GAP	= 150				; ~1.2s chase cooldown before next bite
+BITE_RANGE	= $c0				; 8.8 P_ApproxDistance (|dx|+|dy|-min/2)
 ENEMY_SPEED	= 24				; ~¼ player wish scale (sintab units via dt)
-CHASE_SPEED	= 72				; ENEMY_SPEED*3 (Wolf FirstSighting)
+CHASE_SPEED	= 40				; ~1.7× walk; was 3× (too aggressive close)
+DOG_CHASE_SPEED	= 56				; > CHASE_SPEED; keep steps modest for pathing
 ANIM_MS		= 180
 AIM_COL		= 20				; view-center hit column
 DOOR_LOS_MIN	= $80				; door_pos must be ≥ half open for LOS
 THINK_DIST	= 12				; Chebyshev tiles: no AI (move/LOS/shoot) beyond this
 
-; Facing NESW → playera-compatible angle
+; Facing 0..7 N,NE,E,SE,S,SW,W,NW → playera-compatible angle
 enemy_face_ang
-	!byte 64, 0, 192, 128			; N E S W
-; opposite facing
+	!byte 64, 32, 0, 224, 192, 160, 128, 96
+; opposite facing (+4 mod 8)
 enemy_opp_face
-	!byte 2, 3, 0, 1				; S W N E
+	!byte 4, 5, 6, 7, 0, 1, 2, 3
+; ET_* → HP
+enemy_hp_tab
+	!byte GUARD_HP, SS_HP, DOG_HP, HANS_HP
+; ET_* → shots per volley (dogs unused)
+enemy_burst_tab
+	!byte 1, 4, 1, 6
+; ET_* → gfx base for guard-layout sheets (dog/Hans unused here)
+enemy_gfx_base
+	!byte 0, 35, 0, 0			; EG_GUARD, EG_SS
 
 ; ---------------------------------------------------------------------------
 ; Deathchase / SquareDoom GetRandom8 — new = 9 * old + 193; A = next rnd
@@ -69,6 +96,8 @@ enemies_init
 	sta enemy_state,x
 	sta enemy_state_t,x
 	sta enemy_hp,x
+	sta enemy_type,x
+	sta enemy_burst,x
 	inx
 	cpx #MAX_ENEMIES
 	bne .ei_clr
@@ -83,45 +112,15 @@ enemies_init
 .ei_loop
 	ldy #0
 	lda (tmp0),y
+	sta tmp4				; tile id
 	cmp #T_GUARD
 	bcc .ei_next
-	cmp #T_AMBUSH + 4
+	cmp #T_BOSS + 1			; 52..72 (Hans only among bosses)
 	bcs .ei_next
 	ldx enemy_count
 	cpx #MAX_ENEMIES
 	bcs .ei_next
-	; spawn
-	sta tmp4				; tile id
-	and #3
-	sta enemy_facing,x
-	lda tmp4
-	cmp #T_AMBUSH
-	bcc .ei_pat
-	lda #EF_ACTIVE | EF_AMBUSH
-	bne .ei_fl
-.ei_pat
-	lda #EF_ACTIVE
-.ei_fl
-	sta enemy_flags,x
-	lda tmp2
-	sta enemy_xh,x
-	lda tmp3
-	sta enemy_yh,x
-	lda #$80
-	sta enemy_xl,x
-	sta enemy_yl,x
-	lda #0
-	sta enemy_anim_t,x
-	sta enemy_view,x
-	sta enemy_state,x			; ES_ALIVE
-	sta enemy_state_t,x
-	lda #GUARD_HP
-	sta enemy_hp,x
-	; clear spawn tile → floor
-	lda #T_FLOOR
-	sta (tmp0),y
-	inx
-	stx enemy_count
+	jsr enemy_spawn_one
 .ei_next
 	inc tmp0
 	bne +
@@ -158,14 +157,18 @@ enemies_update
 	bne .eu_active
 	jmp .eu_next
 .eu_active
-	; pain / dying / dead always tick — not "think"
+	; pain / dying / dead always tick; bite too (melee must finish)
 	lda enemy_state,x
+	cmp #ES_BITE
+	beq .eu_bite_far
 	cmp #ES_PAIN
-	bcc .eu_may_think
+	bcc .eu_may_think		; ALIVE / CHASE / SHOOT
 	beq .eu_pain
 	cmp #ES_DYING
 	beq .eu_dying
 	jmp .eu_next			; ES_DEAD — corpse stays
+.eu_bite_far
+	jmp .eu_bite
 .eu_may_think
 	; ALIVE / CHASE / SHOOT: no AI beyond THINK_DIST
 	jsr enemy_tile_dist
@@ -181,8 +184,7 @@ enemies_update
 	beq .eu_alive			; ES_ALIVE
 	cmp #ES_CHASE
 	beq .eu_chase
-	; ES_SHOOT
-	jmp .eu_shoot
+	jmp .eu_shoot			; ES_SHOOT
 .eu_pain
 	lda enemy_state_t,x
 	sec
@@ -212,6 +214,16 @@ enemies_update
 	sta enemy_state,x
 	jmp .eu_next
 .eu_alive
+!if DBG_NO_DETECT = 0 {
+	; Hans should not be ALIVE (spawns chasing); belt-and-suspenders
+	lda enemy_type,x
+	cmp #ET_HANS
+	bne +
+	lda #ES_CHASE
+	sta enemy_state,x
+	jmp .eu_chase
++
+}
 	; reaction countdown after sight (Wolf SightPlayer temp2)
 	lda enemy_state_t,x
 	beq .eu_idle_ai
@@ -239,8 +251,64 @@ enemies_update
 	sta enemy_flags,x
 	jmp .eu_next
 .eu_chase
+	; dogs: bite by approx dist (no LOS); honor post-bite gap
+	lda enemy_type,x
+	cmp #ET_DOG
+	bne .eu_chase_go
+	lda enemy_state_t,x
+	beq .eu_dog_rng
+	sec
+	sbc dt8
+	bcs +
+	lda #0
++
+	sta enemy_state_t,x
+	jmp .eu_chase_go
+.eu_dog_rng
+	jsr dog_in_bite_range
+	bcs .eu_chase_go			; too far
+	lda #ES_BITE
+	sta enemy_state,x
+	lda #BITE_T
+	sta enemy_state_t,x
+	lda enemy_flags,x
+	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK)
+	sta enemy_flags,x			; clear SHOT_DONE for bite hit
+	jmp .eu_next
+.eu_chase_go
 	jsr enemy_chase_one
 	jmp .eu_anim
+.eu_bite
+	stx enemy_idx
+	lda enemy_state_t,x
+	sec
+	sbc dt8
+	bcs +
+	lda #0
++
+	sta enemy_state_t,x
+	beq .eu_bite_done
+	; apply bite once when timer crosses BITE_HIT_T
+	cmp #BITE_HIT_T
+	bcs .eu_next_j
+	lda enemy_flags,x
+	and #EF_SHOT_DONE
+	bne .eu_next_j
+	lda enemy_flags,x
+	ora #EF_SHOT_DONE
+	sta enemy_flags,x
+	jsr enemy_bite
+.eu_next_j
+	jmp .eu_next
+.eu_bite_done
+	lda enemy_flags,x
+	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK)
+	sta enemy_flags,x
+	lda #ES_CHASE
+	sta enemy_state,x
+	lda #BITE_GAP
+	sta enemy_state_t,x			; cooldown before next jump
+	jmp .eu_next
 .eu_shoot
 	stx enemy_idx
 	lda enemy_state_t,x
@@ -264,6 +332,8 @@ enemies_update
 	lda enemy_flags,x
 	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK)
 	sta enemy_flags,x
+	lda #0
+	sta enemy_burst,x
 	lda #ES_CHASE
 	sta enemy_state,x
 	jmp .eu_next
@@ -411,7 +481,7 @@ enemy_patrol_one
 	lda (tile_l),y
 	cmp #T_TURN
 	bcc .ep_out
-	cmp #T_TURN + 4
+	cmp #T_TURN + 8
 	bcs .ep_out
 	sec
 	sbc #T_TURN
@@ -916,108 +986,7 @@ enemy_draw_one
 	sta enemy_view,x
 	sta e_view
 
-	; combat frames override stand/walk
-	lda enemy_state,x
-	cmp #ES_SHOOT
-	beq .edo_shoot
-	cmp #ES_PAIN
-	beq .edo_pain
-	cmp #ES_DYING
-	beq .edo_dying
-	cmp #ES_DEAD
-	beq .edo_dead
-	lda #1
-	sta e_hitscan			; alive/chase: write hit buffer
-	bne .edo_livefrm
-.edo_shoot
-	lda #1
-	sta e_hitscan
-	lda enemy_flags,x
-	and #EF_SHOT_DONE
-	bne .edo_sh3
-	lda #EF_SHOOT2
-	bne .edo_shf
-.edo_sh3
-	lda #EF_SHOOT3
-.edo_shf
-	sta e_frm
-	lda #0
-	sta e_flip
-	jmp .edo_side
-.edo_pain
-	lda #1				; pain still shootable
-	sta e_hitscan
-	lda #EF_PAIN
-	sta e_frm
-	lda #0
-	sta e_flip
-	jmp .edo_side
-.edo_dying
-	lda #0
-	sta e_hitscan
-	lda #EF_DIE
-	sta e_frm
-	lda #0
-	sta e_flip
-	jmp .edo_side
-.edo_dead
-	lda #0
-	sta e_hitscan
-	lda #EF_DEAD
-	sta e_frm
-	lda #0
-	sta e_flip
-	jmp .edo_side
-
-.edo_livefrm
-	; frame set: ambush/idle → stand; moving → walk A/B
-	lda enemy_flags,x
-	and #EF_AMBUSH
-	bne .edo_stand
-	lda enemy_state,x
-	cmp #ES_CHASE
-	beq .edo_walkchk
-	lda enemy_flags,x
-	and #EF_MOVING
-	beq .edo_stand
-.edo_walkchk
-	lda enemy_flags,x
-	and #EF_MOVING
-	beq .edo_stand
-	lda enemy_flags,x
-	and #EF_PHASE_B
-	bne .edo_wb
-	lda #EF_WALKA
-	bne .edo_base
-.edo_wb
-	lda #EF_WALKB
-	bne .edo_base
-.edo_stand
-	lda #EF_STAND
-.edo_base
-	sta e_frm_base
-
-	; map view → source index 0..4 + flip
-	lda e_view
-	cmp #5
-	bcc .edo_noflip
-	sec
-	sbc #5
-	tay
-	lda .flip_src,y
-	sta e_src_i
-	lda #1
-	sta e_flip
-	bne .edo_idx
-.edo_noflip
-	sta e_src_i
-	lda #0
-	sta e_flip
-.edo_idx
-	clc
-	lda e_frm_base
-	adc e_src_i
-	sta e_frm
+	jsr enemy_pick_frm
 
 .edo_side
 	; screen center from side transform
@@ -1750,6 +1719,13 @@ gun_attack
 	jsr rnd8
 	jsr .div6
 .ga_dmg
+	; A = damage — Wolf÷4 so HP/4 stays in one byte; floor 1 if any damage
+	beq .ga_miss
+	lsr
+	lsr
+	bne +
+	lda #1
++
 	; A = damage, X = enemy
 	jmp damage_actor
 .ga_miss
@@ -1789,7 +1765,7 @@ gun_attack
 	lda tmp3
 	rts
 
-; X = enemy index, A = raw damage (Wolf DamageActor)
+; X = enemy index, A = raw damage (Wolf DamageActor; already ÷4 from gun)
 damage_actor
 	sta tmp2
 	stx enemy_idx
@@ -1826,6 +1802,12 @@ damage_actor
 	sta enemy_flags,x
 	lda #0
 	sta enemy_anim_t,x
+	lda enemy_type,x
+	cmp #ET_DOG
+	bne .da_scream
+	lda #SOUND_DOGDEATH
+	jmp play_sound
+.da_scream
 	jsr rnd8
 	and #3
 	cmp #3
@@ -1838,3 +1820,48 @@ damage_actor
 
 .da_screams
 	!byte SOUND_DEATHSCREAM1, SOUND_DEATHSCREAM2, SOUND_DEATHSCREAM3
+
+; Dog melee — Wolf T_Bite (no LOS); damage = rnd>>4
+enemy_bite
+	ldx enemy_idx
+	jsr dog_in_bite_range
+	bcs .eb_rts				; hopped away
+	jsr rnd8
+	lsr
+	lsr
+	lsr
+	lsr
+	beq .eb_rts				; 0 damage — miss
+	jmp take_damage
+.eb_rts
+	ldx enemy_idx
+	rts
+
+; C=0 if approx dist to player < BITE_RANGE (Doom P_ApproxDistance)
+dog_in_bite_range
+	ldx enemy_idx
+	sec
+	lda enemy_xl,x
+	sbc playerx_l
+	sta e_dx_l
+	lda enemy_xh,x
+	sbc playerx_h
+	sta e_dx_h
+	sec
+	lda enemy_yl,x
+	sbc playery_l
+	sta e_dy_l
+	lda enemy_yh,x
+	sbc playery_h
+	sta e_dy_h
+	jsr enemy_approx_dist		; → tmp0/tmp1
+	lda tmp1
+	bne .dbr_far
+	lda tmp0
+	cmp #BITE_RANGE
+	bcs .dbr_far
+	clc
+	rts
+.dbr_far
+	sec
+	rts

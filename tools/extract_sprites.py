@@ -15,9 +15,11 @@ Per-frame PNGs are not written (C64 pipeline uses sheets only).
 
   items_sheet.png                     8×6 atlas (64px cells, 1:1, WL order)
 
+--dogs / --ss / --hans: enemy sheets into textures/{dogs,ss,hans}/ (1:1, 8-col).
+
 Per-frame PNGs are not written (sheet only).
 
-Sprite indices follow WL_DEF.H (SPR_DEMO, SPR_DEATHCAM, STAT_0..47, then guards).
+Sprite indices follow WL_DEF.H (SPR_DEMO, SPR_DEATHCAM, STAT_0..47, then actors).
 """
 
 from __future__ import annotations
@@ -99,7 +101,7 @@ ITEM_SPRITES: list[tuple[str, int]] = [
     (name, SPR_STAT_0 + i) for i, name in enumerate(ITEM_NAMES)
 ]
 
-# WL_DEF.H guard block (49 shapes), names match id Software enums (lowercase).
+# WL_DEF.H actor blocks; names match id Software enums (lowercase).
 GUARD_SPRITES: list[tuple[str, int]] = []
 _i = SPR_GRD_S_1
 for ang in range(1, 9):
@@ -121,6 +123,77 @@ for name in (
     "guard_shoot_3",
 ):
     GUARD_SPRITES.append((name, _i))
+    _i += 1
+
+# Dogs: no stand; walk ×4 ×8 dirs, then die/jump (39 shapes) → SPR 99–137.
+DOG_SPRITES: list[tuple[str, int]] = []
+_i = SPR_GRD_S_1 + len(GUARD_SPRITES)  # 99
+for walk in range(1, 5):
+    for ang in range(1, 9):
+        DOG_SPRITES.append((f"dog_w{walk}_{ang}", _i))
+        _i += 1
+for name in (
+    "dog_die_1",
+    "dog_die_2",
+    "dog_die_3",
+    "dog_dead",
+    "dog_jump_1",
+    "dog_jump_2",
+    "dog_jump_3",
+):
+    DOG_SPRITES.append((name, _i))
+    _i += 1
+
+# SS ("sergeant"): same 49-frame layout as guards → SPR 138–186.
+SS_SPRITES: list[tuple[str, int]] = []
+_i = SPR_GRD_S_1 + len(GUARD_SPRITES) + len(DOG_SPRITES)  # 138
+for ang in range(1, 9):
+    SS_SPRITES.append((f"ss_s_{ang}", _i))
+    _i += 1
+for walk in range(1, 5):
+    for ang in range(1, 9):
+        SS_SPRITES.append((f"ss_w{walk}_{ang}", _i))
+        _i += 1
+for name in (
+    "ss_pain_1",
+    "ss_die_1",
+    "ss_die_2",
+    "ss_die_3",
+    "ss_pain_2",
+    "ss_dead",
+    "ss_shoot_1",
+    "ss_shoot_2",
+    "ss_shoot_3",
+):
+    SS_SPRITES.append((name, _i))
+    _i += 1
+
+# Mutants (51) then officers (50, includes DIE_4) then Pac-Man ghosts (8)
+# are empty in shareware WL1. Episode 1 boss Hans: 11 frames → SPR 296–306.
+SPR_BOSS_W1 = (
+    SPR_GRD_S_1
+    + len(GUARD_SPRITES)
+    + len(DOG_SPRITES)
+    + len(SS_SPRITES)
+    + 51  # mutants
+    + 50  # officers
+    + 8  # pac-man ghosts
+)  # 296
+HANS_SPRITES: list[tuple[str, int]] = []
+_i = SPR_BOSS_W1
+for walk in range(1, 5):
+    HANS_SPRITES.append((f"hans_w{walk}", _i))
+    _i += 1
+for name in (
+    "hans_shoot_1",
+    "hans_shoot_2",
+    "hans_shoot_3",
+    "hans_dead",
+    "hans_die_1",
+    "hans_die_2",
+    "hans_die_3",
+):
+    HANS_SPRITES.append((name, _i))
     _i += 1
 
 
@@ -268,6 +341,24 @@ def extract_props(shareware: Path, out_dir: Path) -> int:
     return len(extract_named(shareware, out_dir, jobs))
 
 
+def extract_dogs(shareware: Path, out_dir: Path, *, scale: int = 1) -> int:
+    images = extract_named(shareware, out_dir, DOG_SPRITES, write_individuals=False)
+    write_sheet(images, out_dir / "dogs_sheet.png", cols=8, scale=scale)
+    return len(images)
+
+
+def extract_ss(shareware: Path, out_dir: Path, *, scale: int = 1) -> int:
+    images = extract_named(shareware, out_dir, SS_SPRITES, write_individuals=False)
+    write_sheet(images, out_dir / "ss_sheet.png", cols=8, scale=scale)
+    return len(images)
+
+
+def extract_hans(shareware: Path, out_dir: Path, *, scale: int = 1) -> int:
+    images = extract_named(shareware, out_dir, HANS_SPRITES, write_individuals=False)
+    write_sheet(images, out_dir / "hans_sheet.png", cols=8, scale=scale)
+    return len(images)
+
+
 def main(argv: list[str]) -> int:
     root = Path(__file__).resolve().parents[1]
     ap = argparse.ArgumentParser(description=__doc__)
@@ -276,7 +367,7 @@ def main(argv: list[str]) -> int:
         "--out",
         type=Path,
         default=None,
-        help="output directory (default: textures/guards, textures/items, or textures)",
+        help="output directory (default: textures/<set>)",
     )
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument(
@@ -288,6 +379,21 @@ def main(argv: list[str]) -> int:
         "--props",
         action="store_true",
         help="extract ceiling light + dog food instead of guards",
+    )
+    mode.add_argument(
+        "--dogs",
+        action="store_true",
+        help="extract dog frames as dogs_sheet.png (39 sprites, 8×5)",
+    )
+    mode.add_argument(
+        "--ss",
+        action="store_true",
+        help="extract SS/sergeant frames as ss_sheet.png (49 sprites, 8×7)",
+    )
+    mode.add_argument(
+        "--hans",
+        action="store_true",
+        help="extract episode 1 boss (Hans) as hans_sheet.png (11 sprites, 8×2)",
     )
     ap.add_argument(
         "--scale",
@@ -304,6 +410,15 @@ def main(argv: list[str]) -> int:
     elif args.props:
         out = args.out or (root / "textures")
         n = extract_props(args.shareware, out)
+    elif args.dogs:
+        out = args.out or (root / "textures" / "dogs")
+        n = extract_dogs(args.shareware, out, scale=args.scale)
+    elif args.ss:
+        out = args.out or (root / "textures" / "ss")
+        n = extract_ss(args.shareware, out, scale=args.scale)
+    elif args.hans:
+        out = args.out or (root / "textures" / "hans")
+        n = extract_hans(args.shareware, out, scale=args.scale)
     else:
         out = args.out or (root / "textures" / "guards")
         n = extract_guards(args.shareware, out, scale=args.scale)

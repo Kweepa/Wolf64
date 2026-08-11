@@ -81,6 +81,10 @@ calc_frame_dt
 	rts
 
 prof_read_casc
+	lda $01
+	pha
+	lda #$35
+	sta $01
 .prc_retry
 	lda CIA2_TB_HI
 	sta casc_now + 3
@@ -96,6 +100,8 @@ prof_read_casc
 	lda CIA2_TB_LO
 	cmp casc_now + 2
 	bne .prc_retry
+	pla
+	sta $01
 	rts
 
 prof_store_t0
@@ -242,6 +248,8 @@ prof_los_end
 ; PROF_SPLIT=0: F C P U O L
 ; PROF_SPLIT=1: F R D P U O L
 prof_print
+	lda #$35
+	sta $01					; .pp_digit writes colour RAM at $d800
 	jsr set_scr_front
 !if DBG_FPS = 1 {
 	ldx #0
@@ -298,6 +306,8 @@ prof_print
 	jsr .pp_ms3
 }
 }
+	lda #$34
+	sta $01
 	rts
 
 ; A:Y = hi:mid (cycles>>8) → ≈ ms → 3 digits at bitmap columns X,X+1,X+2

@@ -59,15 +59,17 @@ T_SS_PATROL = 60
 T_SS_AMBUSH = 64
 T_DOG = 68
 T_BOSS = 72
-T_TURN = 112  # +0..3 NESW
+T_TURN = 112  # +0..7 N,NE,E,SE,S,SW,W,NW (Wolf ICONARROWS)
 T_EXIT = 144
 T_PUSH_TRAJ = 145  # +0..3 NESW
 
 # Wolf dir 0..3 = E,N,W,S  ->  our 0..3 = N,E,S,W
 WOLF_DIR_TO_NESW = (1, 0, 3, 2)
 
-# Wolf ICONARROWS 0..7 (E,NE,N,NW,W,SW,S,SE) -> NESW index
-ARROW_TO_NESW = (1, 0, 0, 3, 3, 2, 2, 1)
+# Wolf ICONARROWS 0..7 (E,NE,N,NW,W,SW,S,SE) -> our 8-dir
+ARROW_TO_8 = (2, 1, 0, 7, 6, 5, 4, 3)
+# Vertical flip: N↔S, NE↔SE, NW↔SW (E/W unchanged)
+_TURN_FLIP_8 = (4, 3, 2, 1, 0, 7, 6, 5)
 
 DIR_DELTA = (
     (0, -1),  # N
@@ -462,7 +464,7 @@ def convert_level(walls: list[int], objs: list[int]) -> bytes:
             if o == EXITTILE:
                 tile = T_EXIT
             elif ICONARROWS <= o <= ICONARROWS + 7:
-                tile = T_TURN + ARROW_TO_NESW[o - ICONARROWS]
+                tile = T_TURN + ARROW_TO_8[o - ICONARROWS]
             elif 19 <= o <= 22:
                 tile = T_PLAYER + (o - 19)  # already NESW
             elif 23 <= o <= 74:
@@ -499,13 +501,14 @@ _FACING_BASES = (
     T_SS_AMBUSH,
     T_DOG,
     T_BOSS,
-    T_TURN,
     T_PUSH_TRAJ,
 )
 
 
 def _flip_facing_tile(t: int) -> int:
     """N↔S on directed tiles; E/W and undirected tiles unchanged."""
+    if T_TURN <= t <= T_TURN + 7:
+        return T_TURN + _TURN_FLIP_8[t - T_TURN]
     for base in _FACING_BASES:
         if base <= t <= base + 3:
             d = t - base

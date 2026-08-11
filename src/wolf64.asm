@@ -7,20 +7,24 @@
 PROFILE		= 1				; stage buckets on bitmap row 0
 PROF_SPLIT	= 0				; 1 = per-col R/D (~80 CIA samples; +~20ms)
 DBG_FPS		= 1				; F ≈ frame ms (cols 0–2)
+DBG_NO_DETECT	= 1				; 1 = enemies never spot player (patrol preview)
 MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 
 ; --- memory map -----------------------------------------------------------
+; Default $01=$34 (I/O out): $A000-$FFFF all RAM. Warmstart/IRQ and brief
+; main-loop windows use $35 for VIC/SID/CIA/colour RAM (see TechNotes.md).
 ; $0801  BASIC stub + code + small BSS
 ; $4000  VIC screen A (bank 1)
 ; $4400  VIC screen B (double-buffer)
 ; $4800  textures (2K)
 ; $5000  weapon sprites (pistol / chaingun / muzzle)
 ; $6000  bitmap (8K, shared)
-; $8000  compiled height painters
-; ~$B900  enemy SoA + packed guard frames
-; $C000  map (4K) — PRG must not extend into $D000 I/O
-; $E000  Judd SQTAB (2K, filled at runtime; KERNAL out)
-; $E800  PC SFX payloads + pcsfreq (copied from $6000 load image at start)
+; $8000  compiled height painters (extend under the BASIC window)
+; ~$B900  enemy SoA (frame pixels live with SFX)
+; $C000  map (4K)
+; $D000  4K under-I/O RAM — free for gameplay data (opaque during $35 windows)
+; $E000  Judd SQTAB (2K, filled at runtime; under-KERNAL RAM)
+; $E800  PC SFX + enemy frame pixels (copied from $6000 load image at start)
 
 SCREEN		= $4000
 SCREEN_B	= $4400
@@ -48,7 +52,7 @@ SFX_BASE	= $E800			; pcsounds + pcsfreq (after SQTAB)
 start
 	sei
 	lda #$35
-	sta $01					; stay here: VIC/CIA. $34 only inside render_frame
+	sta $01					; warmstart: I/O in for VIC/SID/CIA init ($34 after init)
 
 	lda #$ff
 	sta $dc02
@@ -69,6 +73,8 @@ start
 	jsr find_spawn
 	jsr enemies_init
 	jsr init_weapon
+	lda #$34
+	sta $01					; default: I/O out, $D000-$DFFF is RAM (IRQ banks in itself)
 	cli					; CIA1 Timer A key sampling + SFX
 
 main_loop
@@ -87,7 +93,11 @@ main_loop
 	jsr prof_snap			; doors not folded into C/R
 }
 	jsr render_frame
+	lda #$35
+	sta $01					; sprite registers need I/O in
 	jsr update_weapon
+	lda #$34
+	sta $01
 	jsr prof_frame_sample
 	jsr prof_print
 	jmp main_loop
@@ -315,21 +325,27 @@ end_ai_tables = *
 	!error "AI/tables overlap BITMAP at $6000; end=$", end_ai_tables
 }
 
-; SFX load image in bitmap slot; sfx_reloc copies to SFX_BASE before init_vic
+; SFX + enemy gfx load image in bitmap slot; sfx_reloc → SFX_BASE before init_vic
 *= BITMAP
 !pseudopc SFX_BASE {
 	!source "pcsounds.asm"
 	!source "pcsfreq.asm"
+enemy_gfx_data
+	!binary "../textures/enemies.bin"
+end_enemy_gfx = *
 }
 sfx_load_end = *
 !if sfx_load_end > PAINTERS {
-	!error "SFX load image overlaps PAINTERS; end=$", sfx_load_end
+	!error "SFX/enemy-gfx load image overlaps PAINTERS; end=$", sfx_load_end
+}
+!if end_enemy_gfx > $10000 {
+	!error "Enemy gfx overflows 64K; end=$", end_enemy_gfx
 }
 
 *= PAINTERS
 !binary "painters.bin"
 
-; Enemy SoA + vis order + frame pixels — before map at $C000
+; Enemy SoA + vis order — before map at $C000
 enemy_xh
 !fill 32, 0
 enemy_xl
@@ -360,15 +376,17 @@ enemy_state
 !fill 32, 0
 enemy_state_t
 !fill 32, 0
+enemy_type
+!fill 32, 0
+enemy_burst
+!fill 32, 0
 vis_slot
 !fill 32, 0
-
-ENEMY_GFX = *
-enemy_gfx_data
-!binary "../textures/enemies.bin"
-end_enemy_gfx = *
-!if end_enemy_gfx > MAP {
-	!error "Enemy gfx overlaps MAP at $C000; end=$", end_enemy_gfx
+end_enemy_soa = *
+!source "enemy_hi.asm"
+end_enemy_hi = *
+!if end_enemy_hi > MAP {
+	!error "Enemy hi-code overlaps MAP at $C000; end=$", end_enemy_hi
 }
 
 *= MAP

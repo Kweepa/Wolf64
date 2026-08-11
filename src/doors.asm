@@ -21,6 +21,17 @@ DO_MIDY		= 1				; plane at mid-Y; hit on .adv_y
 
 ; --- lookup / helpers -------------------------------------------------------
 
+; Clear all door anim slots (level restart / fresh map)
+doors_clear
+	ldy #0
+	lda #DS_FREE
+.dc_lp
+	sta door_state,y
+	iny
+	cpy #NUM_DOOR_SLOTS
+	bcc .dc_lp
+	rts
+
 ; A = open amount for (mapx,mapy); 0 if not in a slot (closed default)
 ; Clobbers: Y (not X)
 door_pos_at

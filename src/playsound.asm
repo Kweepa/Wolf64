@@ -115,46 +115,4 @@ update_sfx
 .sfx_idle
 	rts
 
-; ------------------------------------------------------------------
-; sfx_reloc — copy load image at BITMAP → SFX_BASE (before fill_bitmap)
-; ------------------------------------------------------------------
-sfx_reloc
-	lda #<BITMAP
-	sta tmp0
-	lda #>BITMAP
-	sta tmp1
-	lda #<SFX_BASE
-	sta tmp2
-	lda #>SFX_BASE
-	sta tmp3
-	lda #<(sfx_load_end - BITMAP)
-	sta tmp4
-	lda #>(sfx_load_end - BITMAP)
-	sta tmp5
-	ldy #0
-.sr_lp
-	lda tmp4
-	ora tmp5
-	beq .sr_done
-	lda (tmp0),y
-	sta (tmp2),y
-	iny
-	bne .sr_dec
-	inc tmp1
-	inc tmp3
-.sr_dec
-	lda tmp4
-	bne .sr_lo
-	dec tmp5
-.sr_lo
-	dec tmp4
-	jmp .sr_lp
-.sr_done
-	rts
-
-; BSS (kept with player code; IRQ-safe scrap)
-sound_priority	!byte 0
-sound_count	!byte 0
-sound_max	!byte 0
-ps_save_x	!byte 0
-ps_save_y	!byte 0
+; sound_* / ps_save_* live in BSS overlay (bss.asm)

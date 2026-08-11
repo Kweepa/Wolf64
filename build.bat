@@ -14,6 +14,8 @@ python tools\gensounds.py
 if errorlevel 1 exit /b 1
 python tools\gentables.py
 if errorlevel 1 exit /b 1
+python tools\gen_bss.py
+if errorlevel 1 exit /b 1
 python tools\gen_painters.py
 if errorlevel 1 exit /b 1
 python tools\pack_enemies.py
@@ -38,9 +40,20 @@ if errorlevel 1 (
   popd
   exit /b 1
 )
+"%ACME%" -v3 boot.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
 popd
 
-if exist src\wolf64.prg move /y src\wolf64.prg wolf64.prg >nul
+if exist src\game_image.prg move /y src\game_image.prg game_image.prg >nul
+if exist src\boot.prg move /y src\boot.prg boot.prg >nul
 if exist src\painters.bin move /y src\painters.bin painters.bin >nul
-echo Built wolf64.prg
-dir wolf64.prg
+
+python tools\mkdisk.py --all-maps
+if errorlevel 1 exit /b 1
+
+echo Built wolf64.d64
+dir wolf64.d64
+dir boot.prg game_image.prg 2>nul

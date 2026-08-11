@@ -1,7 +1,7 @@
-; Wolf64 — C64 textured ray walker (map 0)
+; Wolf64 — fat memory image (split into disk PRGs by tools/mkdisk.py)
 ; DDA: The Keep · multiply: Judd a²−b² · view: TechDesignDoc nibbles
 !cpu 6502
-!to "wolf64.prg", cbm
+!to "game_image.prg", cbm
 
 ; --- build flags (SquareDoom-style) ---------------------------------------
 PROFILE		= 1				; stage buckets on bitmap row 0
@@ -11,56 +11,65 @@ DBG_NO_DETECT	= 1				; 1 = enemies never spot player (patrol preview)
 MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 
 ; --- memory map -----------------------------------------------------------
-; Default $01=$34 (I/O out): $A000-$FFFF all RAM. Warmstart/IRQ and brief
-; main-loop windows use $35 for VIC/SID/CIA/colour RAM (see TechNotes.md).
-; $0801  BASIC stub + code + small BSS
-; $4000  VIC screen A (bank 1)
-; $4400  VIC screen B (double-buffer)
-; $4800  textures (2K)
-; $5000  weapon sprites (pistol / chaingun / muzzle)
-; $6000  bitmap (8K, shared)
-; $8000  compiled height painters (extend under the BASIC window)
-; ~$B900  enemy SoA (frame pixels live with SFX)
-; $C000  map (4K)
-; $D000  4K under-I/O RAM — free for gameplay data (opaque during $35 windows)
-; $E000  Judd SQTAB (2K, filled at runtime; under-KERNAL RAM)
-; $E800  PC SFX + enemy frame pixels (copied from $6000 load image at start)
+; $0400  tables.asm (disk: tab)
+; $0801  disposable boot → low BSS overlay (col_* / LoadPrg scrap)
+; $0900  locode — game code, no enemy modules (disk: locode)
+; $4000  VIC screen A / B ($4400)
+; $4800  textures (disk: tex)
+; $5000  weapon sprites; $54C0–$57FF reserved for two more weapons (disk: wpn)
+; $5800  Judd SQTAB (runtime)
+; $6000  bitmap (8K, runtime fill)
+; $8000  wall painters only (disk: paint)
+; $B8F2  PC SFX (disk: sfx)
+; $C000  enemy block — code, AI, hi, pixels, SoA (disk: enemy)
+; $EF00  map (disk: e1m1… via LoadLevel)
 
-SCREEN		= $4000
-SCREEN_B	= $4400
-BITMAP		= $6000
-TEXTURES	= $4800
-PISTOL_SPRITES		= $5000			; 6×64
-MINIGUN_B_SPRITES	= $5180			; 3×64 chaingun frame B
-MINIGUN_SPRITES		= $5240			; 6×64 chaingun A/shared
-MUZZLE_FLASH_SPRITES	= $53C0			; 4×64 shared flash A/B
-PAINTERS	= $8000
-MAP		= $C000
-SQTAB1		= $E000			; runtime only — never *= into the PRG
-SQTAB2		= SQTAB1 + $200
-SQTAB3		= SQTAB1 + $400
-SQTAB4		= SQTAB1 + $600
-SFX_BASE	= $E800			; pcsounds + pcsfreq (after SQTAB)
-; Spawn: map tiles 48..51 = player N,E,S,W (see find_spawn)
-
+!source "mem.asm"
 !source "zp.asm"
+!source "bss.asm"
 
-*= $0801
-!byte $0b,$08,$0a,$00,$9e,$32,$30,$36,$31,$00,$00,$00
+; =========================================================================
+; tab — render tables @ $0400 (fat image starts here)
+; =========================================================================
+*= TABLES
+!source "tables.asm"
+end_tab = *
+!if end_tab > LOADER_BASE {
+	!error "Tables overlap boot/BSS; end=$", end_tab
+}
 
-*= $080d
-start
+; =========================================================================
+; locode — resident low code (no enemy modules)
+; =========================================================================
+*= LOCODE_BASE
+
+; Boot jumps here after LOADing locode + assets (map still on disk)
+locode_entry
+	lda #0
+	sta episode
+	lda #1
+	sta level_num
+	jsr LoadLevel
+	bcs .le_fail
+	jmp game_start
+.le_fail
+	lda #$35				; keep $d020 = failed load color
+	sta $01
+.le_hang
+	jmp .le_hang
+
+game_start
 	sei
 	lda #$35
-	sta $01					; warmstart: I/O in for VIC/SID/CIA init ($34 after init)
+	sta $01					; I/O in for VIC/SID/CIA init
 
 	lda #$ff
 	sta $dc02
 	lda #0
 	sta $dc03
 
+	; KERNAL LOAD clobbered ZP — Judd tabs after all disk loads
 	jsr init_sqtabs
-	jsr sfx_reloc				; bitmap load image → $E800 before VIC wipe
 	jsr init_vic
 	jsr prof_init
 	jsr input_irq_init
@@ -70,12 +79,14 @@ start
 	sta smc_last_page
 	sta smc_last_h
 
+	jsr init_weapon			; needs VIC sprites ($d0xx) while I/O in
+	lda #$34
+	sta $01					; I/O out — enemy block spans $D000–$DFFF
+	jsr doors_clear
 	jsr find_spawn
 	jsr enemies_init
-	jsr init_weapon
-	lda #$34
-	sta $01					; default: I/O out, $D000-$DFFF is RAM (IRQ banks in itself)
-	cli					; CIA1 Timer A key sampling + SFX
+	cli
+	jmp main_loop
 
 main_loop
 	jsr calc_frame_dt
@@ -90,11 +101,11 @@ main_loop
 }
 	jsr doors_update
 !if PROFILE = 1 {
-	jsr prof_snap			; doors not folded into C/R
+	jsr prof_snap
 }
 	jsr render_frame
 	lda #$35
-	sta $01					; sprite registers need I/O in
+	sta $01
 	jsr update_weapon
 	lda #$34
 	sta $01
@@ -107,33 +118,17 @@ main_loop
 !source "profil.asm"
 !source "input.asm"
 !source "playsound.asm"
+!source "loader.asm"
 !source "dda.asm"
 !source "doors.asm"
 !source "render.asm"
 !source "player.asm"
 !source "weapon.asm"
-!source "enemy.asm"
-!source "enemy_gfx.asm"
-!source "enemy_painters.asm"
 !source "painter_tables.asm"
 
-col_texid
-!fill 40, 0
-col_half_h
-!fill 40, 0
-col_texx
-!fill 40, 0
-col_wallz_l
-!fill 40, 0
-col_wallz_h
-!fill 40, 0
-col_enemy
-!fill 40, $ff				; enemy index per column; $ff = empty
-
-; --- enemy SoA (MAX_ENEMIES = 32) arrays live after painters (see below) ---
+; --- BSS after code (col_* overlays boot; see bss.asm) --------------------
 enemy_count
 !byte 0
-
 los_rr
 !byte 0
 player_hp
@@ -168,16 +163,14 @@ ai_old
 !byte 0
 ai_dirtry
 !fill 5, 0
-
 vis_count
 !byte 0
 vis_i
 !byte 0
-
 enemy_idx
 !byte 0
 probe_doors_pass
-!byte 0					; 1 = unlocked doors non-solid (enemy patrol)
+!byte 0
 e_dx_l
 !byte 0
 e_dx_h
@@ -248,8 +241,6 @@ e_row
 !byte 0
 e_pix
 !fill 16, 0
-
-; Door anim slots (NUM_DOOR_SLOTS = 8)
 door_x
 !fill 8, 0
 door_y
@@ -272,13 +263,10 @@ door_savetl
 !byte 0
 door_saveth
 !byte 0
-
 turn_acc_l
 !byte 0
 turn_acc_h
 !byte 0
-
-; Profiler BSS (SquareDoom PROF_BSS layout, trimmed)
 frame_t0
 !fill 4, 0
 frame_cy
@@ -292,60 +280,68 @@ prof_dt
 !fill 4, 0
 los_t0
 !fill 4, 0
-prof_cy						; NBUCKET × 4-byte cycle totals
-!fill PROF_NBUCKET * 4, 0
+prof_cy
+!fill 6 * 4, 0
 }
 
-end_code = *
-!if end_code > SCREEN {
-	!error "Code overlaps SCREEN at $4000; end=$", end_code
+end_locode = *
+!if end_locode > SCREEN {
+	!error "Locode overlaps SCREEN at $4000; end=$", end_locode
 }
 
+; =========================================================================
+; tex — walls @ $4800
+; =========================================================================
 *= TEXTURES
 !binary "../textures/walls.bin", 2048
+end_tex = *
 
-; Weapon HUD sprites (VIC bank 1) — after textures, before bitmap
+; =========================================================================
+; wpn — current weapon sprites only ($54C0–$57FF reserved for two more)
+; =========================================================================
 *= PISTOL_SPRITES
 !source "weapons/pistol_sprites.asm"
 *= MINIGUN_B_SPRITES
 !source "weapons/minigun_weapon.asm"
 *= MUZZLE_FLASH_SPRITES
 !source "weapons/muzzle_flash.asm"
-end_wpn_spr = *
-!if end_wpn_spr > BITMAP {
-	!error "Weapon sprites overlap BITMAP at $6000; end=$", end_wpn_spr
+end_wpn = *
+!if end_wpn > WPN_SPRITE_RESERVE {
+	!error "Weapon sprites enter reserve at $54C0; end=$", end_wpn
 }
 
-; Tables + enemy AI in VIC bank gap before bitmap ($54C0..$5FFF)
-*= end_wpn_spr
-!source "tables.asm"
-!source "enemy_ai.asm"
-end_ai_tables = *
-!if end_ai_tables > BITMAP {
-	!error "AI/tables overlap BITMAP at $6000; end=$", end_ai_tables
-}
-
-; SFX + enemy gfx load image in bitmap slot; sfx_reloc → SFX_BASE before init_vic
-*= BITMAP
-!pseudopc SFX_BASE {
-	!source "pcsounds.asm"
-	!source "pcsfreq.asm"
-enemy_gfx_data
-	!binary "../textures/enemies.bin"
-end_enemy_gfx = *
-}
-sfx_load_end = *
-!if sfx_load_end > PAINTERS {
-	!error "SFX/enemy-gfx load image overlaps PAINTERS; end=$", sfx_load_end
-}
-!if end_enemy_gfx > $10000 {
-	!error "Enemy gfx overflows 64K; end=$", end_enemy_gfx
-}
-
+; =========================================================================
+; paint — wall height painters only
+; =========================================================================
 *= PAINTERS
-!binary "painters.bin"
+!binary "painters.bin", PAINTERS_SIZE
+end_paint = *
+!if end_paint != SFX_BASE {
+	!error "painters.bin size drift; end=$", end_paint, " expected SFX_BASE=$", SFX_BASE
+}
 
-; Enemy SoA + vis order — before map at $C000
+; =========================================================================
+; sfx — PC sounds @ $B8F2 (after painters)
+; =========================================================================
+*= SFX_BASE
+!source "pcsounds.asm"
+!source "pcsfreq.asm"
+end_sfx = *
+!if end_sfx > ENEMY_BASE {
+	!error "SFX overlaps ENEMY_BASE; end=$", end_sfx
+}
+
+; =========================================================================
+; enemy — contiguous block @ $C000 (code, gfx, AI/helpers, painters, pixels, SoA)
+; =========================================================================
+*= ENEMY_BASE
+!source "enemy.asm"
+!source "enemy_gfx.asm"
+!source "enemy_ai.asm"
+!source "enemy_painters.asm"
+enemy_gfx_data
+!binary "../textures/enemies.bin"
+; Enemy SoA + vis order
 enemy_xh
 !fill 32, 0
 enemy_xl
@@ -382,16 +378,10 @@ enemy_burst
 !fill 32, 0
 vis_slot
 !fill 32, 0
-end_enemy_soa = *
-!source "enemy_hi.asm"
-end_enemy_hi = *
-!if end_enemy_hi > MAP {
-	!error "Enemy hi-code overlaps MAP at $C000; end=$", end_enemy_hi
+end_enemy = *
+!if end_enemy > MAP {
+	!error "Enemy block overlaps MAP; end=$", end_enemy
 }
-
-*= MAP
-!binary "../maps/00_Wolf1_Map1.bin", 4096
-end_map = *
-!if end_map > $d000 {
-	!error "Map extends into I/O at $D000; end=$", end_map
+!if (end_enemy - ENEMY_BASE) != ENEMY_SIZE {
+	!error "ENEMY_SIZE mismatch; update mem.asm (got $", end_enemy - ENEMY_BASE, ")"
 }

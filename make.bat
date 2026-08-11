@@ -10,8 +10,8 @@ if defined VICE_BIN if exist "%VICE_BIN%\x64sc.exe" (
   set VICE=%VICE_BIN%\x64sc.exe
   goto launch
 )
-echo VICE not found — wolf64.prg is built; run it manually.
+echo VICE not found — wolf64.d64 is built; run it manually.
 exit /b 0
 
 :launch
-start "" "%VICE%" -silent wolf64.prg
+start "" "%VICE%" -silent -autostart "%~dp0wolf64.d64"

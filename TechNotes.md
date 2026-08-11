@@ -38,28 +38,53 @@ I/O is banked in (`$01 = $35`) only when chips must be touched:
 `play_sound` is **queue-only** (RAM); the Timer A IRQ's `update_sfx` does all
 SID writes, so gameplay callers never need a `$35` window for audio.
 
-`$36` is reserved for future KERNAL disk loads — see below.
+`$36` is used for KERNAL disk loads — see below.
+
+### Disk loading
+
+Boot PRG (`wolf64` on `wolf64.d64`) lives at `$0801`, blanks DEN, and loads
+**all assets except the map** with plain KERNAL SETNAM/SETLFS/LOAD (clear `$90`/ST
+between files; no per-file IOINIT/CIA), then jumps to `LOCODE_BASE` (`$0900`):
+
+| DOS | Load | Contents |
+|-----|------|----------|
+| `locode` | `$0900` | game code (no enemy modules) |
+| `tex` | `$4800` | wall textures |
+| `wpn` | `$5000` | weapon HUD sprites (`$54C0–$57FF` reserved for two more) |
+| `paint` | `$8000` | wall height painters |
+| `sfx` | `$B8F2` | PC sounds + freq |
+| `enemy` | `$C000` | enemy code, AI, helpers, pixels, SoA |
+| `tab` | `$0400` | `tables.asm` (DEN blank — not visible) |
+
+Locode’s `LoadLevel` pulls `e1m1` into **`$EF00`**. Judd SQTAB is filled after
+loads at `$5800–$5FFF`. After handoff, **low BSS overlays the boot footprint**
+(`$0801`…`$08FF`).
+
+`LoadPrg` / `LoadLevel` stay resident in locode for **restart** (`restart_level`)
+without reloading code or assets. Future overflow code may ship as `hicode`.
+
+To load from disk with the KERNAL:
+
+1. Set `$01 = $36` — KERNAL + I/O in, **BASIC stays out** so painters remain
+   readable during the load.
+2. With KERNAL in, hardware IRQs route through ROM to the soft vector: point
+   `$0314/$0315` at a stub (ack CIA1, `rti`) or disable the CIA1 Timer A IRQ
+   for the duration. `LoadPrg` RESTOR/IOINIT then re-inits game IRQs on exit.
+3. KERNAL uses ZP `$90–$FF` heavily — `LoadPrg` clears `$90–$98`; in-play loads
+   must save any survivors in that range (weapon/input ZP today).
+4. Writes go through ROM to RAM, so loading into `$E000+` works even with
+   KERNAL banked in. **Never load directly into `$D000–$DFFF`** while I/O is
+   in — stage elsewhere and copy under `$34`.
+5. Restore `$01 = $34` (gameplay default) after init; `LoadPrg` leaves `$35`
+   briefly for VIC/CIA restore then callers continue.
+
+Map is disk-only at `$EF00` (not part of the locode image).
 
 ### Under-I/O RAM (`$D000–$DFFF`)
 
 4K free for gameplay data under the default `$34` map. Opaque during the brief
 `$35` windows above (and during the IRQ). Prefer cold / staging data over
 hot per-frame tables that an IRQ might need.
-
-### Future disk loading (provision)
-
-To load from disk with the KERNAL later:
-
-1. Set `$01 = $36` — KERNAL + I/O in, **BASIC stays out** so painters remain
-   readable during the load.
-2. With KERNAL in, hardware IRQs route through ROM to the soft vector: point
-   `$0314/$0315` at a stub (ack CIA1, `rti`) or disable the CIA1 Timer A IRQ
-   for the duration.
-3. KERNAL uses ZP `$90–$FF` heavily — save/restore any game ZP that overlaps.
-4. Writes go through ROM to RAM, so loading into `$E000+` works even with
-   KERNAL banked in. **Never load directly into `$D000–$DFFF`** while I/O is
-   in — stage elsewhere and copy under `$34`.
-5. Restore `$01 = $34` and the game IRQ afterwards.
 
 ## Screen double-buffer (`$4000` / `$4400`)
 

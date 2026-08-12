@@ -48,6 +48,7 @@ end_tab = *
 locode_entry
 	lda #0
 	sta episode
+	sta load_in_play
 	lda #1
 	sta level_num
 	jsr LoadLevel

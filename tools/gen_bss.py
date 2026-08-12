@@ -21,6 +21,7 @@ low = [
 	("load_jiffy0", 1),
 	("episode", 1),
 	("level_num", 1),
+	("load_in_play", 1),
 ]
 
 lines = [

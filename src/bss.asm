@@ -21,7 +21,8 @@ load_do_pad	= load_name_h + 1
 load_jiffy0	= load_do_pad + 1
 episode	= load_jiffy0 + 1
 level_num	= episode + 1
-end_bss	= level_num + 1
+load_in_play	= level_num + 1
+end_bss	= load_in_play + 1
 !if end_bss > LOCODE_BASE {
 	!error "BSS overlaps LOCODE_BASE; end_bss=$", end_bss
 }

@@ -75,13 +75,6 @@ in_fwd		= $3c
 in_back		= $3f
 in_turn_l	= $42
 in_turn_r	= $43
-in_strafel	= $97			; A held (strafe left)
-in_strafer	= $98			; D held (strafe right)
-random8		= $99			; GetRandom8 state (Deathchase LCG)
-e_hitscan	= $9a			; 1 = write col_enemy while painting
-dt8		= $9b			; dt_ms/8 for enemy state timers
-item_perp_l	= $91			; item draw: true forward perp (wallz units)
-item_perp_h	= $a3
 vel_ms		= $4e
 dt_ms		= $4f				; last frame ≈ binary-ms (1..255)
 ; turn_acc_l/h in BSS (wolf64.asm) — fractional angle remainder
@@ -131,7 +124,7 @@ e_col_h		= $81
 e_abs2_l	= $82
 e_abs2_h	= $83
 
-; Weapons (HUD sprites)
+; Weapons (HUD sprites) — keep below $90 (KERNAL disk I/O band)
 key_fire		= $84		; 1 = SPACE held
 spr_en			= $85		; mirror of $d015 (write-only)
 fire_rpt_l		= $86
@@ -144,18 +137,31 @@ cur_weapon		= $8c		; 0=knife 1=pistol 2=mg 3=chaingun
 owned_weapons		= $8d		; bit0 knife .. bit3 chaingun
 wpn_visible		= $8e
 mg_frame		= $8f		; chaingun flash A/B
-wpn_pose		= $90		; 0 idle 1 fire 2 recoil
-in_fire			= $92		; IRQ OR-latch
-in_wpn_knife		= $93
-in_wpn_pistol		= $94
-in_wpn_mg		= $95
-in_wpn_chaingun		= $96
-key_wpn_knife		= $9f
-key_wpn_pistol		= $a0
-key_wpn_mg		= $a1
-key_wpn_chaingun	= $a2
 
-; PC-speaker SFX (IRQ update_sfx / play_sound)
-sound_index		= $9c			; $ff = idle
-sound_ptr_l		= $9d
-sound_ptr_h		= $9e
+; $90–$A4 reserved for KERNAL LOAD / IEC (STATUS, STPFLG, MSGFLG,
+; DFLTN/DFLTO, serial bit counters, …). Do not allocate game ZP here —
+; in-play LOAD then needs no sticky-flag restores.
+
+; Game ZP above the KERNAL disk band. LOAD clobbers some of these;
+; restart_level re-inits via input_irq_init / play_sound_init / frame code.
+; Skip $AE–$AF (EAL) and $B7–$BC (FNLEN/LA/SA/FA/FNADR).
+wpn_pose		= $a5		; 0 idle 1 fire 2 recoil
+in_fire			= $a6		; IRQ OR-latch
+in_wpn_knife		= $a7
+in_wpn_pistol		= $a8
+in_wpn_mg		= $a9
+in_wpn_chaingun		= $aa
+in_strafel		= $ab		; A held (strafe left)
+in_strafer		= $ac		; D held (strafe right)
+random8			= $ad		; GetRandom8 state (Deathchase LCG)
+e_hitscan		= $b0		; 1 = write col_enemy while painting
+dt8			= $b1		; dt_ms/8 for enemy state timers
+sound_index		= $b2		; $ff = idle
+sound_ptr_l		= $b3
+sound_ptr_h		= $b4
+key_wpn_knife		= $b5
+key_wpn_pistol		= $b6
+key_wpn_mg		= $bd
+key_wpn_chaingun	= $be
+item_perp_l		= $bf		; item draw: true forward perp (wallz units)
+item_perp_h		= $c0

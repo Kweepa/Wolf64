@@ -300,7 +300,7 @@ player_death_tick
 	sta death_ms_h
 .pdt_go
 	lda player_lives
-	beq .pdt_rts
+	beq .pdt_newgame
 	dec player_lives
 	lda #UI_DIRTY_LIVES
 	ora ui_dirty
@@ -308,6 +308,10 @@ player_death_tick
 	lda #1				; restart
 	sta level_want
 .pdt_rts
+	rts
+.pdt_newgame
+	lda #3				; out of lives — fresh game
+	sta level_want
 	rts
 
 ; Walk-on exit tile 144
@@ -326,23 +330,58 @@ player_check_exit
 .pce_rts
 	rts
 
-; level_want: 1=restart 2=next — disk reload + re-init
+; level_want: 1=restart 2=next 3=new game — disk reload + re-init
+; Player init after successful load so a failed LoadLevel can restore VIC.
 handle_level_want
 	lda level_want
+	pha					; 1=restart 2=next 3=new game
 	cmp #2
-	bne .hlw_restart
-	jsr advance_level
+	bne .hlw_chknew
+	jsr advance_level			; needs new level_num before FormatDosName
 	jmp .hlw_load
-.hlw_restart
-	jsr player_init_level
+.hlw_chknew
+	cmp #3
+	bne .hlw_load
+	lda #1					; out of lives — back to level 1
+	sta level_num
 .hlw_load
 	lda #0
 	sta level_want
 	jsr restart_level
 	bcc .hlw_ok
-.hlw_hang
-	jmp .hlw_hang
+	; Load failed — restore VIC and keep playing
+	pla
+	cmp #1
+	bne .hlw_fail_vis
+	inc player_lives			; refund death_tick decrement
+	lda #UI_DIRTY_LIVES
+	ora ui_dirty
+	sta ui_dirty
+.hlw_fail_vis
+	sei
+	lda #$35
+	sta $01
+	jsr init_vic
+	lda #$02				; red border = load error
+	sta $d020
+	lda #$34
+	sta $01
+	cli
+	rts
 .hlw_ok
+	pla
+	cmp #2
+	beq .hlw_done				; advance_level already ran
+	cmp #3
+	bne .hlw_restart
+	jsr player_init_game			; fresh game — lives/score/ammo/weapons
+	jsr init_weapon				; ownership reset — back to pistol
+	jmp .hlw_done
+.hlw_restart
+	jsr player_init_level
+.hlw_done
+	lda #0					; successful restart: restore black border
+	sta $d020
 	lda #$34
 	sta $01
 	cli

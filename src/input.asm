@@ -41,6 +41,8 @@ input_irq_init
 	sta $fffe
 	lda #>input_irq
 	sta $ffff
+	; Use the same balanced ack-and-RTI handler both as the raw vector
+	; (KERNAL out) and through KERNAL's FE43 JMP ($0318) trampoline.
 	lda #<nmi_stub
 	sta $fffa
 	sta $0318

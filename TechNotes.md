@@ -82,6 +82,22 @@ To load from disk with the KERNAL:
 
 Map is disk-only at `$EF00` (not part of the locode image).
 
+### Under-stack BSS (`$0100–$01BF`)
+
+Hardware stack grows down from `$01FF`. Reserve **`$01C0–$01FF`** (`STACK_GUARD`) for
+IRQ + nested `jsr`; put cold/runtime tables in `$0100..STACK_GUARD`:
+
+| Symbol | Size | Role |
+|--------|------|------|
+| `vis_slot` | 48 | per-frame depth draw list |
+| `enemy_burst` | 32 | shots left in volley (dogs: repath countdown) |
+| `enemy_state_t` | 32 | state timers |
+| `enemy_anim_t` | 32 | walk-phase ms |
+| `enemy_view` | 32 | billboard octant |
+
+Ends at `$01B0` today (`end_stack_bss`). Not part of any disk PRG. Do not let `SP`
+drop below `$C0`.
+
 ### Under-I/O RAM (`$D000–$DFFF`)
 
 4K free for gameplay data under the default `$34` map. Opaque during the brief

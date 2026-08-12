@@ -46,6 +46,7 @@ BITE_RANGE	= $c0				; 8.8 P_ApproxDistance (|dx|+|dy|-min/2)
 ENEMY_SPEED	= 36				; (const*dt_ms)>>8 → ~0.55 tile/s (Wolf SPDPATROL)
 CHASE_SPEED	= 108				; ×3 patrol (Wolf guard FirstSighting)
 DOG_CHASE_SPEED	= 108				; same as CHASE_SPEED for now
+DOG_REPATH	= 125				; ~1s between dodge-dir picks (8ms units)
 ANIM_MS		= 180
 AIM_COL		= 20				; view-center hit column
 DOOR_LOS_MIN	= $80				; door_pos must be ≥ half open for LOS

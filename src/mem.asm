@@ -23,8 +23,11 @@ PAINTERS	= $8000
 PAINTERS_SIZE	= $38F2			; painters.bin length (must match build)
 SFX_BASE	= PAINTERS + PAINTERS_SIZE	; $B8F2 — pcsounds + pcsfreq_hi
 ; Item SoA lives in RAM after end_sfx (see wolf64.asm); must end ≤ ENEMY_BASE
-ENEMY_BASE	= $C000			; contiguous enemy code+gfx+SoA
+ENEMY_BASE	= $C000			; contiguous enemy code+gfx+hot SoA
 MAP		= $EF00			; 4K level (under-KERNAL; LoadLevel)
+; Page-1 BSS under the hardware stack. SP must stay ≥ STACK_GUARD ($01C0).
+STACK_BSS	= $0100
+STACK_GUARD	= $01C0			; ~64 bytes for IRQ + nested jsr
 
 ; Pickup / HUD constants
 AMMO_MAX	= 99

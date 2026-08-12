@@ -550,15 +550,55 @@ enemy_chase_one
 	sta enemy_flags,x
 	jmp .ec_domove
 .ec_was
-	; still walking last frame → keep facing (skip SelectChaseDir probes)
+	lda enemy_type,x
+	cmp #ET_DOG
+	beq .ec_dog_was
+	; humans: still walking → keep facing
 	lda enemy_flags,x
 	and #EF_MOVING
 	bne .ec_domove
+	jmp .ec_pick
+.ec_dog_was
+	; blocked last frame → repath now; else countdown ~1s (enemy_burst)
+	lda enemy_flags,x
+	and #EF_MOVING
+	beq .ec_pick
+	lda enemy_burst,x
+	beq .ec_pick
+	sec
+	sbc dt8
+	bcs +
+	lda #0
++
+	sta enemy_burst,x
+	bne .ec_domove
 .ec_pick
 	jsr select_chase_dir
+	ldx enemy_idx
+	lda enemy_type,x
+	cmp #ET_DOG
+	bne .ec_domove
+	lda #DOG_REPATH
+	sta enemy_burst,x
 .ec_domove
 	ldx enemy_idx
-	; move like patrol at chase speed
+	; stand when close enough — dogs: melee; humans: Wolf MINACTORDIST box
+	lda enemy_type,x
+	cmp #ET_DOG
+	bne .ec_humstop
+	jsr dog_in_bite_range
+	bcs .ec_go				; too far — chase
+.ec_do_stand
+	lda enemy_flags,x
+	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK | EF_SHOT_DONE)
+	sta enemy_flags,x			; clear MOVING
+	lda #0
+	sta enemy_burst,x			; dog: repath when chase resumes
+	jmp .ec_out
+.ec_humstop
+	jsr enemy_inside_minactor
+	bcs .ec_do_stand
+.ec_go
 	lda #1
 	sta probe_doors_pass
 	lda enemy_flags,x
@@ -664,6 +704,33 @@ enemy_chase_one
 	ldx enemy_idx
 	rts
 
+; C=1 if |dx|<1.0 and |dy|<1.0 (Wolf MINACTORDIST — 8.8 hi in {0,$FF})
+enemy_inside_minactor
+	ldx enemy_idx
+	sec
+	lda enemy_xl,x
+	sbc playerx_l
+	lda enemy_xh,x
+	sbc playerx_h
+	beq +
+	cmp #$ff
+	bne .eim_far
++
+	sec
+	lda enemy_yl,x
+	sbc playery_l
+	lda enemy_yh,x
+	sbc playery_h
+	beq .eim_in
+	cmp #$ff
+	bne .eim_far
+.eim_in
+	sec
+	rts
+.eim_far
+	clc
+	rts
+
 ; Try walk into neighbor tile for facing A. Z=1 if ok.
 enemy_try_face
 	sta tmp5
@@ -691,12 +758,18 @@ enemy_try_face
 .etf_dy
 	!byte $ff, $ff, 0, 1, 1, 1, 0, $ff
 
-; Wolf SelectDodgeDir — cardinal zigzag toward player
+; Wolf SelectDodgeDir — diagonal toward player, then cardinals (never nodir on an axis)
 select_dodge_dir
 	ldx enemy_idx
+	; Wolf: turnaround = opposite[dir]; T_DogChase / blocked pick have dir==nodir
+	lda enemy_type,x
+	cmp #ET_DOG
+	beq .sdd_nodir
 	lda enemy_flags,x
-	and #EF_FIRSTATTACK
-	beq .sdd_turn
+	and #(EF_FIRSTATTACK | EF_MOVING)
+	cmp #EF_MOVING
+	beq .sdd_turn			; walking guard dodge: don't 180
+.sdd_nodir
 	lda #$ff				; nodir turnaround
 	sta ai_turn
 	lda enemy_flags,x
@@ -718,44 +791,50 @@ select_dodge_dir
 	sec
 	sbc enemy_yh,x
 	sta tmp3				; dy
-	; dirtry: [0]=towardx [1]=towardy [2]=awayx [3]=awayy
+	; dirtry: [0]=towardx [1]=towardy [2]=awayx [3]=awayy [4]=diagonal
+	; Wolf: deltax>0 → E else W (dx==0 still gets a side step)
 	lda tmp2
-	beq .sdd_nox
 	bmi .sdd_wx
-	lda #2					; E
-	sta ai_dirtry
-	lda #6					; W
-	sta ai_dirtry+2
-	jmp .sdd_y
+	bne .sdd_ex
 .sdd_wx
-	lda #6
+	lda #6					; W
 	sta ai_dirtry
-	lda #2
+	lda #2					; E
 	sta ai_dirtry+2
-	jmp .sdd_y
-.sdd_nox
-	lda #$ff
+	bne .sdd_y
+.sdd_ex
+	lda #2
 	sta ai_dirtry
+	lda #6
 	sta ai_dirtry+2
 .sdd_y
 	lda tmp3
-	beq .sdd_noy
 	bmi .sdd_ny
-	lda #4					; S
-	sta ai_dirtry+1
-	lda #0					; N
-	sta ai_dirtry+3
-	jmp .sdd_abs
+	bne .sdd_sy
 .sdd_ny
-	lda #0
+	lda #0					; N
 	sta ai_dirtry+1
+	lda #4					; S
+	sta ai_dirtry+3
+	bne .sdd_diag
+.sdd_sy
 	lda #4
-	sta ai_dirtry+3
-	jmp .sdd_abs
-.sdd_noy
-	lda #$ff
 	sta ai_dirtry+1
+	lda #0
 	sta ai_dirtry+3
+.sdd_diag
+	; NE/SE/NW/SW from toward x,y (same diagonal after later axis swaps)
+	lda ai_dirtry				; E=2 W=6
+	and #4
+	lsr					; 0 or 2
+	sta tmp0
+	lda ai_dirtry+1				; N=0 S=4
+	lsr
+	lsr					; 0 or 1
+	ora tmp0
+	tay
+	lda .sdd_diag4,y
+	sta ai_dirtry+4
 .sdd_abs
 	; abs dx/dy
 	lda tmp2
@@ -802,7 +881,7 @@ select_dodge_dir
 	lda tmp4
 	sta ai_dirtry+3
 .sdd_try
-	lda #0
+	lda #4					; diagonal first, then [0..3]
 	sta tmp4
 .sdd_lp
 	ldx tmp4
@@ -821,8 +900,13 @@ select_dodge_dir
 .sdd_n
 	inc tmp4
 	lda tmp4
+	cmp #5
+	bne +
+	lda #0
+	sta tmp4
++
 	cmp #4
-	bcc .sdd_lp
+	bne .sdd_lp
 	; last resort: turnaround
 	lda ai_turn
 	cmp #$ff
@@ -834,14 +918,21 @@ select_dodge_dir
 	sta enemy_facing,x
 .sdd_rts
 	rts
+; index = (towardx==W)*2 + (towardy==S) → NE, SE, NW, SW
+.sdd_diag4
+	!byte 1, 3, 7, 5
 
-; Wolf SelectChaseDir
+; Wolf SelectChaseDir (guards/SS/Hans). Dogs use SelectDodgeDir.
 select_chase_dir
 	ldx enemy_idx
-	lda enemy_facing,x
+	lda enemy_type,x
+	cmp #ET_DOG
+	bne .scd_human
+	jmp select_dodge_dir
+.scd_human
+	; called only when !EF_MOVING (Wolf dir==nodir) — don't forbid reverse
+	lda #$ff
 	sta ai_old
-	tay
-	lda enemy_opp_face,y
 	sta ai_turn
 	lda playerx_h
 	sec

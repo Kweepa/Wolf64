@@ -61,6 +61,8 @@ boot_start
 	jmp .next
 
 .done
+	ldx #$ff
+	txs					; discard KERNAL/BASIC stack junk
 	jmp LOCODE_BASE
 
 .fail

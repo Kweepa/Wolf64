@@ -6,7 +6,7 @@
 ; --- build flags (SquareDoom-style) ---------------------------------------
 PROFILE		= 0				; stage buckets on bitmap row 0
 PROF_SPLIT	= 0				; 1 = per-col R/D (~80 CIA samples; +~20ms)
-DBG_FPS		= 1				; F ≈ frame ms (cols 0–2)
+DBG_FPS		= 0				; F ≈ frame ms (cols 0–2)
 DBG_NO_DETECT	= 0				; 1 = enemies never spot player (patrol preview)
 MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 
@@ -22,7 +22,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $6000  bitmap (8K, disk: bmp)
 ; $8000  wall painters only (disk: paint)
 ; $B8F2  PC SFX (disk: sfx); item SoA in RAM after end_sfx → <$C000
-; $C000  enemy block — code, AI, hi, pixels, SoA (disk: enemy)
+; $C000  enemy block — code, AI, gfx, hot SoA (disk: enemy); cold SoA @ $0100
 ; $EF00  map (disk: e1m1… via LoadLevel)
 
 !source "mem.asm"
@@ -431,8 +431,19 @@ end_item_soa	= item_depth_h + MAX_ITEMS
 	!error "Item SoA overlaps ENEMY_BASE; end=$", end_item_soa
 }
 
+; Cold/runtime enemy tables under the stack ($0100..<$01C0) — not on enemy PRG
+vis_slot	= STACK_BSS			; MAX_VIS = 48
+enemy_burst	= vis_slot + 48
+enemy_state_t	= enemy_burst + 32
+enemy_anim_t	= enemy_state_t + 32
+enemy_view	= enemy_anim_t + 32
+end_stack_bss	= enemy_view + 32		; $01B0
+!if end_stack_bss > STACK_GUARD {
+	!error "Stack BSS hits STACK_GUARD; end=$", end_stack_bss
+}
+
 ; =========================================================================
-; enemy — contiguous block @ $C000 (code, gfx, AI/helpers, painters, pixels, SoA)
+; enemy — @ $C000 (code, gfx, AI/helpers, painters, pixels, hot SoA)
 ; =========================================================================
 *= ENEMY_BASE
 !source "enemy.asm"
@@ -441,7 +452,7 @@ end_item_soa	= item_depth_h + MAX_ITEMS
 !source "enemy_painters.asm"
 enemy_gfx_data
 !binary "../textures/enemies.bin"
-; Enemy SoA + vis order
+; Enemy SoA (hot fields; cold tables live under stack — see STACK_BSS)
 enemy_xh
 !fill 32, 0
 enemy_xl
@@ -453,10 +464,6 @@ enemy_yl
 enemy_facing
 !fill 32, 0
 enemy_flags
-!fill 32, 0
-enemy_anim_t
-!fill 32, 0
-enemy_view
 !fill 32, 0
 enemy_depth_l
 !fill 32, 0
@@ -470,14 +477,8 @@ enemy_hp
 !fill 32, 0
 enemy_state
 !fill 32, 0
-enemy_state_t
-!fill 32, 0
 enemy_type
 !fill 32, 0
-enemy_burst
-!fill 32, 0
-vis_slot
-!fill MAX_VIS, 0
 end_enemy = *
 !if end_enemy > MAP {
 	!error "Enemy block overlaps MAP; end=$", end_enemy

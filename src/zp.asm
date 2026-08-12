@@ -80,6 +80,8 @@ in_strafer	= $98			; D held (strafe right)
 random8		= $99			; GetRandom8 state (Deathchase LCG)
 e_hitscan	= $9a			; 1 = write col_enemy while painting
 dt8		= $9b			; dt_ms/8 for enemy state timers
+item_perp_l	= $91			; item draw: true forward perp (wallz units)
+item_perp_h	= $a3
 vel_ms		= $4e
 dt_ms		= $4f				; last frame ≈ binary-ms (1..255)
 ; turn_acc_l/h in BSS (wolf64.asm) — fractional angle remainder

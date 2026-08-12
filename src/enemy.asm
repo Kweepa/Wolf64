@@ -2,6 +2,7 @@
 !zone enemy
 
 MAX_ENEMIES	= 32
+MAX_VIS		= 48				; enemies + items in one depth sort
 T_GUARD		= 52				; +0..3 NESW patrol
 T_AMBUSH	= 56				; +0..3 NESW ambush
 T_SS_PATROL	= 60				; +0..3 NESW
@@ -533,9 +534,10 @@ enemy_push_walls
 	rts
 
 ; ---------------------------------------------------------------------------
-; Draw: cull → depth → sort far→near → project → Z-test columns → mask blit
+; Draw: cull enemies + items → depth → sort far→near → project → mask blit
 enemies_draw
 	lda enemy_count
+	ora item_count
 	bne +
 	rts
 +
@@ -550,6 +552,8 @@ enemies_draw
 	lda #0
 	sta vis_count
 	tax					; slot
+	lda enemy_count
+	beq .ed_culldone
 .ed_cull
 	cpx enemy_count
 	bcs .ed_culldone
@@ -579,16 +583,17 @@ enemies_draw
 	bcs .ed_cn
 	; visible
 	ldy vis_count
+	cpy #MAX_VIS
+	bcs .ed_culldone
 	txa
 	sta vis_slot,y
 	iny
 	sty vis_count
-	cpy #MAX_ENEMIES
-	bcs .ed_culldone
 .ed_cn
 	inx
 	bne .ed_cull
 .ed_culldone
+	jsr items_cull_near
 	lda vis_count
 	bne +
 	rts
@@ -598,8 +603,15 @@ enemies_draw
 .ed_dep
 	sty vis_i
 	lda vis_slot,y
+	bmi .ed_dep_item
 	tax
 	jsr enemy_calc_depth
+	jmp .ed_dep_n
+.ed_dep_item
+	and #$7f
+	tax
+	jsr item_calc_depth
+.ed_dep_n
 	ldy vis_i
 	iny
 	cpy vis_count
@@ -615,8 +627,15 @@ enemies_draw
 	cpy vis_count
 	bcs .ed_done
 	lda vis_slot,y
+	bmi .ed_draw_item
 	tax
 	jsr enemy_draw_one
+	jmp .ed_draw_n
+.ed_draw_item
+	and #$7f
+	tax
+	jsr item_draw_one
+.ed_draw_n
 	inc vis_i
 	bne .ed_draw
 .ed_done
@@ -819,6 +838,7 @@ neg_aux
 	rts
 
 ; Insertion sort vis_slot by depth descending (far first)
+; vis_slot: 0..31 enemy, $80+item = item index
 enemy_sort_depth
 	ldx #1
 .es_outer
@@ -834,18 +854,19 @@ enemy_sort_depth
 	bmi .es_at0
 	sty tmp4
 	lda vis_slot,y
-	tax
-	lda enemy_depth_h,x
-	sta tmp1
-	lda enemy_depth_l,x
-	sta tmp2
-	ldx tmp0
-	lda enemy_depth_h,x
-	cmp tmp1
+	jsr .es_depth			; → tmp1=h tmp2=l for [y]
+	lda tmp1
+	sta tmp3				; save [y] hi
+	lda tmp2
+	sta e_acc_l				; save [y] lo (reuse)
+	lda tmp0
+	jsr .es_depth			; → tmp1/tmp2 for new
+	lda tmp1
+	cmp tmp3
 	bcc .es_place			; new nearer than [y]
 	bne .es_shift
-	lda enemy_depth_l,x
-	cmp tmp2
+	lda tmp2
+	cmp e_acc_l
 	bcc .es_place
 	beq .es_place
 .es_shift
@@ -868,6 +889,24 @@ enemy_sort_depth
 	cpx vis_count
 	bcc .es_outer
 .es_done
+	rts
+
+; A = vis_slot entry → tmp1=depth_h tmp2=depth_l
+.es_depth
+	tax
+	bpl .es_den
+	and #$7f
+	tax
+	lda item_depth_h,x
+	sta tmp1
+	lda item_depth_l,x
+	sta tmp2
+	rts
+.es_den
+	lda enemy_depth_h,x
+	sta tmp1
+	lda enemy_depth_l,x
+	sta tmp2
 	rts
 
 ; wallz → e_spr_h = $2400/wallz (≡ 3/2 · $1800/wallz), 1..ENEMY_MAX_H

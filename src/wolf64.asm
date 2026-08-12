@@ -18,7 +18,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $4000  VIC screen A / B ($4400)
 ; $4800  textures (disk: tex)
 ; $5000  weapon HUD sprites (disk: wpn; ends at ITEM_SPRITES)
-; $5880  item HUD sprites (reserved; to bitmap $6000)
+; $5880  world item gfx (disk: itm; to bitmap $6000)
 ; $6000  bitmap (8K, runtime fill)
 ; $8000  wall painters only (disk: paint)
 ; $B8F2  PC SFX (disk: sfx)
@@ -86,6 +86,7 @@ game_start
 	jsr doors_clear
 	jsr find_spawn
 	jsr enemies_init
+	jsr items_init
 	cli
 	jmp main_loop
 
@@ -125,11 +126,28 @@ main_loop
 !source "render.asm"
 !source "player.asm"
 !source "weapon.asm"
+!source "items.asm"
 !source "painter_tables.asm"
 
 ; --- BSS after code (col_* overlays boot; see bss.asm) --------------------
 enemy_count
 !byte 0
+item_count
+!byte 0
+item_considered
+!byte 0
+item_x
+!fill MAX_ITEMS, 0
+item_y
+!fill MAX_ITEMS, 0
+item_frm
+!fill MAX_ITEMS, 0
+item_flags
+!fill MAX_ITEMS, 0
+item_depth_l
+!fill MAX_ITEMS, 0
+item_depth_h
+!fill MAX_ITEMS, 0
 los_rr
 !byte 0
 player_hp
@@ -308,6 +326,19 @@ end_wpn = *
 }
 
 ; =========================================================================
+; itm — world props/pickups (4bpp + LUTs) @ $5880
+; =========================================================================
+*= ITEM_SPRITES
+!source "items/item_gfx.asm"
+item_gfx_data
+!binary "../textures/items.bin"
+!source "items_draw.asm"
+end_itm = *
+!if end_itm > BITMAP {
+	!error "Item gfx overlap BITMAP; end=$", end_itm
+}
+
+; =========================================================================
 ; paint — wall height painters only
 ; =========================================================================
 *= PAINTERS
@@ -374,7 +405,7 @@ enemy_type
 enemy_burst
 !fill 32, 0
 vis_slot
-!fill 32, 0
+!fill MAX_VIS, 0
 end_enemy = *
 !if end_enemy > MAP {
 	!error "Enemy block overlaps MAP; end=$", end_enemy

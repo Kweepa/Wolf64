@@ -73,6 +73,7 @@ restart_level
 	jsr doors_clear
 	jsr find_spawn
 	jsr enemies_init
+	jsr items_init
 	jsr init_weapon
 	clc
 .rl_fail

@@ -1,7 +1,8 @@
 ; CIA2 cascade frame timer + optional buckets (SquareDoom-style)
 ; DBG_FPS=1: F ≈ ms.
-; PROFILE=1, PROF_SPLIT=0: C P U O L — L = one LOS grant (nested)
-; PROFILE=1, PROF_SPLIT=1: R D P U O L — R/D timed per column (~80 samples)
+; PROFILE=1, PROF_SPLIT=0: C P U O L I — I = items near-culled into vis
+; PROFILE=1, PROF_SPLIT=1: R D P U O L I — R/D timed per column (~80 samples)
+; L = one LOS grant (nested)
 !zone profil
 
 ; CIA2 — timers only; do not touch $dd00 (VIC bank)
@@ -245,8 +246,8 @@ prof_los_end
 }
 
 ; Bitmap row 0 ms digits (≈ (cy>>8)>>2)
-; PROF_SPLIT=0: F C P U O L
-; PROF_SPLIT=1: F R D P U O L
+; PROF_SPLIT=0: F C P U O L I  (I = items in vis after near-cull)
+; PROF_SPLIT=1: F R D P U O L I
 prof_print
 	lda #$35
 	sta $01					; .pp_digit writes colour RAM at $d800
@@ -283,6 +284,9 @@ prof_print
 	lda prof_cy + PROF_LOS * 4 + 2
 	ldy prof_cy + PROF_LOS * 4 + 1
 	jsr .pp_ms3
+	ldx #28
+	lda item_considered
+	jsr .pp_u8_3
 } else {
 	ldx #4
 	lda prof_cy + PROF_CAST * 4 + 2
@@ -304,11 +308,21 @@ prof_print
 	lda prof_cy + PROF_LOS * 4 + 2
 	ldy prof_cy + PROF_LOS * 4 + 1
 	jsr .pp_ms3
+	ldx #24
+	lda item_considered
+	jsr .pp_u8_3
 }
 }
 	lda #$34
 	sta $01
 	rts
+
+; A = 0..255 → 3 decimal digits at columns X..X+2
+.pp_u8_3
+	sta pp_tmp_l
+	lda #0
+	sta pp_tmp_h
+	jmp .pp_dec3
 
 ; A:Y = hi:mid (cycles>>8) → ≈ ms → 3 digits at bitmap columns X,X+1,X+2
 .pp_ms3

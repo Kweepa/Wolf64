@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build wolf64.d64 from game_image.prg (+ boot.prg) via c1541.
 
-Splits the fat ACME image (load @ TABLES) into tab/locode/tex/wpn/paint/sfx/enemy
+Splits the fat ACME image (load @ TABLES) into tab/locode/tex/wpn/itm/paint/sfx/enemy
 using symbols from wolf64.lbl, adds prebuilt sqtab.prg, stages maps at MAP ($EF00).
 """
 
@@ -27,6 +27,7 @@ SEGMENTS = [
 	("locode", "LOCODE_BASE", "end_locode"),
 	("tex", "TEXTURES", "end_tex"),
 	("wpn", "WPN_SPRITES", "end_wpn"),
+	("itm", "ITEM_SPRITES", "end_itm"),
 	("paint", "PAINTERS", "end_paint"),
 	("sfx", "SFX_BASE", "end_sfx"),
 	("enemy", "ENEMY_BASE", "end_enemy"),
@@ -135,6 +136,8 @@ def main() -> None:
 		"end_tex",
 		"WPN_SPRITES",
 		"end_wpn",
+		"ITEM_SPRITES",
+		"end_itm",
 		"PAINTERS",
 		"end_paint",
 		"SFX_BASE",

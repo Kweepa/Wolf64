@@ -51,6 +51,7 @@ between files; no per-file IOINIT/CIA), then jumps to `LOCODE_BASE` (`$0900`):
 | `locode` | `$0900` | game code (no enemy modules) |
 | `tex` | `$4800` | wall textures |
 | `wpn` | `$5000` | weapon HUD sprites (all 4 + flashes, ends `$5880`) |
+| `itm` | `$5880` | world item gfx (4bpp frames + LUTs, to `$6000`) |
 | `sqt` | `$3800` | Judd square tables (2K, locode–screen gap) |
 | `paint` | `$8000` | wall height painters |
 | `sfx` | `$B8F2` | PC sounds + freq |
@@ -58,7 +59,7 @@ between files; no per-file IOINIT/CIA), then jumps to `LOCODE_BASE` (`$0900`):
 | `tab` | `$0400` | `tables.asm` (DEN blank — not visible) |
 
 Locode’s `LoadLevel` pulls `e1m1` into **`$EF00`**. Judd SQTAB is filled after
-loads at `$3800–$3FFF`. `$5880–$5FFF` is reserved for item HUD sprites.
+loads at `$3800–$3FFF`. `$5880–$5FFF` holds world item gfx (`itm`).
 After handoff, **low BSS overlays the boot footprint** (`$0801`…`$08FF`).
 
 `LoadPrg` / `LoadLevel` stay resident in locode for **restart** (`restart_level`)

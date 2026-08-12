@@ -122,6 +122,8 @@ file_tab
 	!byte 3
 	!text "WPN"
 	!byte 3
+	!text "ITM"
+	!byte 3
 	!text "SQT"
 	!byte 5
 	!text "PAINT"

@@ -362,7 +362,7 @@ def main() -> int:
     nspr = len(all_layers)
     nbytes = nspr * 64
     print(f"total {nspr} sprites ({nbytes} bytes, ${nbytes:04X})")
-    # $5000–$5880 (ITEM_SPRITES); do not grow into the item reservation.
+    # $5000–$5880 (ITEM_SPRITES); do not grow into world item gfx.
     if nbytes > 0x880:
         raise SystemExit(f"weapon sprites ${nbytes:04X} exceed $5000–$587F")
 

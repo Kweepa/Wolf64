@@ -76,7 +76,8 @@ init_weapon
 	sta cur_weapon
 	ldx #WPN_PISTOL
 	jsr switch_weapon
-	; fall through
+	rts				; stay hidden until first swap_view
+
 show_weapon
 	lda #$ff
 	sta wpn_visible
@@ -85,6 +86,7 @@ show_weapon
 	rts
 
 ; After level reload — keep ownership; re-apply sprite setup
+; Leave hidden; main_loop shows after the next frame flips.
 refresh_weapon
 	lda #0
 	sta muzzle_ms_l
@@ -101,7 +103,7 @@ refresh_weapon
 	lda #$ff
 	sta cur_weapon			; force switch_weapon to re-apply
 	jsr switch_weapon
-	jmp show_weapon
+	jmp hide_weapon
 
 hide_weapon
 	lda #0

@@ -25,6 +25,12 @@ SOUND_AHHHG	= 17
 SOUND_NAZIFIRE	= 18
 SOUND_SSFIRE	= 19
 SOUND_ATKKNIFE	= 20
+SOUND_GETKEY	= 21
+SOUND_GETMACHINE	= 22
+SOUND_GETAMMO	= 23
+SOUND_HEALTH1	= 24
+SOUND_HEALTH2	= 25
+SOUND_LEVELDONE	= 26
 
 pc_hitwall
 	!byte 3, 131, 142, 134
@@ -82,11 +88,28 @@ pc_ssfire
 	!byte 0, 0, 0, 49, 49, 38, 72
 pc_atkknife
 	!byte 14, 84, 17, 62, 71, 75, 90, 104, 121, 106, 149, 130, 138, 156, 154
+pc_getkey
+	!byte 30, 36, 36, 36, 36, 36, 36, 36, 36, 0, 0, 55, 55, 55, 55, 0
+	!byte 55, 55, 55, 0, 0, 55, 55, 55, 0, 0, 25, 25, 25, 25, 25
+pc_getmachine
+	!byte 31, 58, 55, 53, 52, 52, 53, 59, 70, 83, 111, 0, 0, 0, 53, 53
+	!byte 53, 53, 54, 0, 0, 54, 54, 54, 54, 0, 0, 28, 28, 28, 28, 28
+pc_getammo
+	!byte 21, 34, 34, 34, 34, 34, 34, 0, 0, 0, 20, 20, 20, 0, 0, 20
+	!byte 20, 20, 0, 20, 20, 20
+pc_health1
+	!byte 23, 58, 0, 0, 0, 51, 0, 0, 0, 38, 0, 0, 22, 22, 0, 0
+	!byte 0, 22, 22, 0, 0, 0, 21, 21
+pc_health2
+	!byte 30, 92, 92, 0, 81, 81, 72, 72, 0, 0, 59, 0, 0, 0, 47, 47
+	!byte 0, 0, 29, 29, 0, 0, 0, 25, 25, 25, 0, 0, 19, 19, 19
+pc_leveldone
+	!byte 14, 146, 146, 146, 145, 144, 141, 138, 135, 131, 0, 0, 0, 0, 23
 
-; unique sound payload 375 bytes
+; unique sound payload 530 bytes
 sound_priorities
 	!byte 1, 99, 50, 50, 90, 20, 20, 50, 50, 50, 50, 50, 50, 50, 20, 50
-	!byte 50, 50, 50, 50, 49
+	!byte 50, 50, 50, 50, 49, 90, 80, 80, 85, 85, 99
 
 sound_table
 	!word pc_hitwall
@@ -110,3 +133,9 @@ sound_table
 	!word pc_nazifire
 	!word pc_ssfire
 	!word pc_atkknife
+	!word pc_getkey
+	!word pc_getmachine
+	!word pc_getammo
+	!word pc_health1
+	!word pc_health2
+	!word pc_leveldone

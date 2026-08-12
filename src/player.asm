@@ -347,6 +347,8 @@ player_check_exit
 	lda (tile_l),y
 	cmp #T_EXIT
 	bne .pce_rts
+	lda #SOUND_LEVELDONE
+	jsr play_sound
 	lda #2				; next level
 	sta level_want
 .pce_rts

@@ -10,11 +10,22 @@ Outputs (textures/ui/):
   uilayout_c64_preview.png
 
 Glyph bank (rows 3–4), rearranged from PNG:
-  cols 0–9   digits 0–9 (8×16)
-  cols 10–25 faces 0–7 (16×16 each), shared MCM palette
-  cols 26–39 empty bitmap; attr strip:
+  cols 0–9    digits 0–9 (8×16)
+  face pack (4 faces × 16×24, shared MCM palette):
+    row3 cols 10–17 = face tops  (f at 10+f*2)
+    row3 cols 18–25 = face mids  (f at 18+f*2)
+    row4 cols 10–17 = face bots  (f at 10+f*2)
+  attr strip:
     row3 cols 30–39 = digit 0–9 screen / colour
     row4 col 26     = shared face screen / colour
+    row4 col 27     = gold key ON screen / colour (live cell starts hidden)
+    row4 col 28     = silver key ON screen / colour
+
+PNG source: digits at rows 3–4 cols 0–9; faces at rows 0–2 cols 32–39
+(plus a face0 placeholder at cols 19–20 cleared from chrome).
+Keys flank the face at row 2 cols 18 (gold) and 21 (silver) — bitmap stays;
+visibility is toggled via colour attrs at runtime.
+Live face dest is rows 0–2 col UI_COL_FACE (19).
 """
 
 from __future__ import annotations
@@ -33,15 +44,27 @@ UI_DIR = ROOT / "textures" / "ui"
 SRC_PNG = UI_DIR / "uilayout.png"
 
 SRC_DIGIT_COL0 = 0
-SRC_FACE_COL0 = 10
-N_FACES = 8
+SRC_FACE_COL0 = 32
+SRC_FACE_DEST_COL = 19  # placeholder cleared from chrome
+N_FACES = 4
+FACE_W_CELLS = 2
+FACE_H_CELLS = 3
 
 DST_DIGIT_COL0 = 0
-DST_FACE_COL0 = 10
+DST_FACE_TOP0 = 10
+DST_FACE_MID0 = 18
+DST_FACE_BOT0 = 10  # row 4
 ATTR_DIGIT_ROW = 3
 ATTR_DIGIT_COL0 = 30
 ATTR_FACE_ROW = 4
 ATTR_FACE_COL = 26
+ATTR_KEY_GOLD_COL = 27
+ATTR_KEY_SILVER_COL = 28
+
+# Live key cells in chrome (row 2, either side of face cols 19–20)
+KEY_GOLD_COL = 18
+KEY_SILVER_COL = 21
+KEY_ROW = 2
 
 
 def pack_cell_mapped(
@@ -107,6 +130,12 @@ def read_bitmap_cell(bitmap: bytes | bytearray, cx: int, cy: int) -> bytes:
     return bytes(bitmap[off : off + 8])
 
 
+def clear_cell(bitmap: bytearray, screen: bytearray, colorram: bytearray, cx: int, cy: int) -> None:
+    write_bitmap_cell(bitmap, cx, cy, bytes(8))
+    screen[cy * 40 + cx] = 0
+    colorram[cy * 40 + cx] = 0
+
+
 def main() -> None:
     if not SRC_PNG.is_file():
         print(f"missing {SRC_PNG}", file=sys.stderr)
@@ -128,6 +157,27 @@ def main() -> None:
             screen[cy * 40 + cx] = scr
             colorram[cy * 40 + cx] = col
 
+    # Strip face bank + dest placeholder out of chrome (runtime blits live face).
+    for cy in range(FACE_H_CELLS):
+        for dx in range(N_FACES * FACE_W_CELLS):
+            clear_cell(bitmap, screen, colorram, SRC_FACE_COL0 + dx, cy)
+        for dx in range(FACE_W_CELLS):
+            clear_cell(bitmap, screen, colorram, SRC_FACE_DEST_COL + dx, cy)
+
+    # Keys: keep bitmap, stash ON attrs, hide in live chrome (attrs=0).
+    key_gold_scr = screen[KEY_ROW * 40 + KEY_GOLD_COL]
+    key_gold_col = colorram[KEY_ROW * 40 + KEY_GOLD_COL]
+    key_sil_scr = screen[KEY_ROW * 40 + KEY_SILVER_COL]
+    key_sil_col = colorram[KEY_ROW * 40 + KEY_SILVER_COL]
+    screen[KEY_ROW * 40 + KEY_GOLD_COL] = 0
+    colorram[KEY_ROW * 40 + KEY_GOLD_COL] = 0
+    screen[KEY_ROW * 40 + KEY_SILVER_COL] = 0
+    colorram[KEY_ROW * 40 + KEY_SILVER_COL] = 0
+    print(
+        f"keys: gold col{KEY_GOLD_COL} scr=${key_gold_scr:02x} col=${key_gold_col:x}; "
+        f"silver col{KEY_SILVER_COL} scr=${key_sil_scr:02x} col=${key_sil_col:x} (start hidden)"
+    )
+
     digit_bmp: list[tuple[bytes, bytes]] = []
     digit_attr: list[tuple[int, int]] = []
     for d in range(10):
@@ -141,9 +191,9 @@ def main() -> None:
     all_face_px: list[int] = []
     for f in range(N_FACES):
         cells = []
-        for dy in range(2):
-            for dx in range(2):
-                cols = cell_mcm_colors(src, SRC_FACE_COL0 + f * 2 + dx, 3 + dy)
+        for dy in range(FACE_H_CELLS):
+            for dx in range(FACE_W_CELLS):
+                cols = cell_mcm_colors(src, SRC_FACE_COL0 + f * FACE_W_CELLS + dx, dy)
                 cells.append(cols)
                 all_face_px.extend(cols)
         face_colors.append(cells)
@@ -162,9 +212,7 @@ def main() -> None:
 
     for cy in range(3, 5):
         for cx in range(40):
-            write_bitmap_cell(bitmap, cx, cy, bytes(8))
-            screen[cy * 40 + cx] = 0
-            colorram[cy * 40 + cx] = 0
+            clear_cell(bitmap, screen, colorram, cx, cy)
 
     for d in range(10):
         cx = DST_DIGIT_COL0 + d
@@ -173,12 +221,16 @@ def main() -> None:
         write_bitmap_cell(bitmap, cx, 4, bot)
 
     for f in range(N_FACES):
+        # cells order: dy0 dx0, dy0 dx1, dy1 dx0, dy1 dx1, dy2 dx0, dy2 dx1
         for i, cols in enumerate(face_colors[f]):
-            dy, dx = i // 2, i % 2
+            dy, dx = i // FACE_W_CELLS, i % FACE_W_CELLS
             data = pack_cell_mapped(cols, face_c01, face_c10, face_c11)
-            write_bitmap_cell(
-                bitmap, DST_FACE_COL0 + f * 2 + dx, 3 + dy, data
-            )
+            if dy == 0:
+                write_bitmap_cell(bitmap, DST_FACE_TOP0 + f * 2 + dx, 3, data)
+            elif dy == 1:
+                write_bitmap_cell(bitmap, DST_FACE_MID0 + f * 2 + dx, 3, data)
+            else:
+                write_bitmap_cell(bitmap, DST_FACE_BOT0 + f * 2 + dx, 4, data)
 
     for d in range(10):
         scr, col = digit_attr[d]
@@ -187,6 +239,10 @@ def main() -> None:
 
     screen[ATTR_FACE_ROW * 40 + ATTR_FACE_COL] = face_scr
     colorram[ATTR_FACE_ROW * 40 + ATTR_FACE_COL] = face_col
+    screen[ATTR_FACE_ROW * 40 + ATTR_KEY_GOLD_COL] = key_gold_scr
+    colorram[ATTR_FACE_ROW * 40 + ATTR_KEY_GOLD_COL] = key_gold_col
+    screen[ATTR_FACE_ROW * 40 + ATTR_KEY_SILVER_COL] = key_sil_scr
+    colorram[ATTR_FACE_ROW * 40 + ATTR_KEY_SILVER_COL] = key_sil_col
 
     for cy in range(5, 25):
         for cx in range(40):
@@ -214,13 +270,18 @@ def main() -> None:
             data = read_bitmap_cell(bitmap, cx, cy)
             scr = screen[cy * 40 + cx]
             col = colorram[cy * 40 + cx]
-            # Glyph cols use strip attrs for preview
             if cy >= 3 and cx < 10:
                 scr = screen[ATTR_DIGIT_ROW * 40 + ATTR_DIGIT_COL0 + cx]
                 col = colorram[ATTR_DIGIT_ROW * 40 + ATTR_DIGIT_COL0 + cx]
-            elif cy >= 3 and 10 <= cx < 26:
-                scr = face_scr
-                col = face_col
+            elif cy == 3 and 10 <= cx < 26:
+                scr, col = face_scr, face_col
+            elif cy == 4 and 10 <= cx < 18:
+                scr, col = face_scr, face_col
+            # Preview keys as ON (live chrome starts hidden).
+            elif cy == KEY_ROW and cx == KEY_GOLD_COL:
+                scr, col = key_gold_scr, key_gold_col
+            elif cy == KEY_ROW and cx == KEY_SILVER_COL:
+                scr, col = key_sil_scr, key_sil_col
             pal = [
                 C64_PALETTE[0],
                 C64_PALETTE[(scr >> 4) & 15],
@@ -241,6 +302,11 @@ def main() -> None:
     print(
         f"Wrote bitmap.bin ({len(bitmap)}), screen.bin ({len(screen_both)}), "
         f"colorram.bin ({len(colorram)})"
+    )
+    print(
+        f"faces: {N_FACES}×{FACE_W_CELLS*8}x{FACE_H_CELLS*8} from PNG "
+        f"cols {SRC_FACE_COL0}–{SRC_FACE_COL0 + N_FACES * FACE_W_CELLS - 1}; "
+        f"bank tops@{DST_FACE_TOP0} mids@{DST_FACE_MID0} bots@{DST_FACE_BOT0}"
     )
 
 

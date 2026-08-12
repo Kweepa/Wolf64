@@ -123,6 +123,10 @@ main_loop
 	jsr render_frame
 	lda #$35
 	sta $01
+	lda wpn_visible			; deferred until first frame flipped
+	bne .ml_wpn
+	jsr show_weapon
+.ml_wpn
 	lda player_dead
 	bne .ml_nower
 	jsr update_weapon

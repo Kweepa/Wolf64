@@ -1094,9 +1094,9 @@ enemy_pick_frm
 	bne +
 	jmp .epf_dying
 +
-	cmp #ES_DEAD
-	bne +
-	jmp .epf_dead
+	cmp #ES_DEAD_UNLOOTED
+	bcc +				; not a corpse state
+	jmp .epf_dead			; UNLOOTED or DEAD
 +
 	lda #1
 	sta e_hitscan

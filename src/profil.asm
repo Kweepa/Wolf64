@@ -477,12 +477,17 @@ ui_update
 	beq +
 	jsr .ui_face
 +
+	lda ui_dirty
+	and #UI_DIRTY_KEYS
+	beq +
+	jsr .ui_keys
++
 	lda #0
 	sta ui_dirty
 	rts
 
 ; A=value X=col Y=#digits (2/3)
-; tmp0-3 are clobbered by .ui_dig/.ui_cpcell — keep counters in pp_*.
+; tmp0-3 are clobbered by .ui_dig/.ui_blitcell — keep counters in pp_*.
 .ui_num
 	sta pp_tmp_l
 	stx pp_tmp_h
@@ -516,9 +521,11 @@ ui_update
 	sta tmp4
 	stx tmp5
 	lda #0
-	jsr .ui_cpcell
+	ldy #1
+	jsr .ui_blitcell
 	lda #1
-	jsr .ui_cpcell
+	ldy #2
+	jsr .ui_blitcell
 	ldx tmp4
 	lda UI_ATTR_DIGIT,x
 	ldy tmp5
@@ -532,10 +539,12 @@ ui_update
 	ldx tmp5
 	rts
 
-; A=0 top (r3->r1), A=1 bot (r4->r2); tmp4=src col tmp5=dst col
+; tmp4=src col, tmp5=dst col, A=src row ofs (0=r3,1=r4), Y=dst row (0..2)
 ; Clobbers tmp0-tmp3.
-.ui_cpcell
+.ui_blitcell
 	sta tmp3
+	tya
+	pha
 	lda tmp4
 	asl
 	asl
@@ -565,10 +574,13 @@ ui_update
 	asl
 	asl
 	sta tmp2
-	lda #<UI_BMP_ROW1
-	ldx #>UI_BMP_ROW1
-	ldy tmp3
-	beq +
+	pla					; dst row
+	tay
+	lda #<UI_BMP_ROW0
+	ldx #>UI_BMP_ROW0
+	cpy #0
+	beq .ub_dst
+-
 	clc
 	adc #<$140
 	pha
@@ -576,7 +588,9 @@ ui_update
 	adc #>$140
 	tax
 	pla
-+
+	dey
+	bne -
+.ub_dst
 	clc
 	adc tmp2
 	sta tmp2
@@ -592,55 +606,91 @@ ui_update
 	bpl -
 	rts
 
+; HP → face 0..2 by thirds; face 3 when dead. 16×24 (2×3 cells).
 .ui_face
 	lda player_hp
-	lsr
-	lsr
-	lsr
-	lsr
-	sta tmp0
-	lda #6
-	sec
-	sbc tmp0
-	bcs +
+	bne .uf_live
+	lda #3
+	bne .uf_got
+.uf_live
+	cmp #34
+	bcc .uf_f2
+	cmp #67
+	bcc .uf_f1
 	lda #0
-+
-	cmp #8
-	bcc +
-	lda #7
-+
+	beq .uf_got
+.uf_f1
+	lda #1
+	bne .uf_got
+.uf_f2
+	lda #2
+.uf_got
 	asl
-	adc #UI_FACE_SRC0
-	sta pp_dig_h				; src left col
-	lda #0
-	sta pp_dig_t				; cell 0..3
-.uf_c
-	lda pp_dig_t
-	and #1
 	clc
-	adc pp_dig_h
-	sta tmp4
+	adc #UI_FACE_TOP0
+	sta pp_dig_h				; top/bot src left
+	lda #0
+	sta pp_dig_t				; 0..5 = dy*2+dx
+.uf_c
 	lda pp_dig_t
 	and #1
 	clc
 	adc #UI_COL_FACE
 	sta tmp5
 	lda pp_dig_t
-	lsr
-	jsr .ui_cpcell
-	lda tmp5
-	tax
+	lsr					; dy
+	cmp #1
+	beq .uf_mid
+	; dy0: src r3 @ top; dy2: src r4 @ top
+	tax					; save dy
+	lda pp_dig_t
+	and #1
+	clc
+	adc pp_dig_h
+	sta tmp4
+	lda #0					; src ofs 0 = row3
+	cpx #0
+	bne +
+	ldy #0
+	beq .uf_do
++
+	lda #1					; src ofs 1 = row4
+	ldy #2
+	bne .uf_do
+.uf_mid
+	lda pp_dig_h
+	clc
+	adc #UI_FACE_MID0 - UI_FACE_TOP0
+	sta tmp4
+	lda pp_dig_t
+	and #1
+	clc
+	adc tmp4
+	sta tmp4
+	lda #0
+	ldy #1
+.uf_do
+	jsr .ui_blitcell
+	ldx tmp5
 	lda pp_dig_t
 	lsr
-	bne .uf_a2
+	tay					; dy
 	lda UI_ATTR_FACE
+	cpy #1
+	beq .uf_a1
+	bcs .uf_a2
+	sta SCREEN,x
+	sta SCREEN_B,x
+	lda UI_COLR_FACE
+	sta $d800,x
+	jmp .uf_n
+.uf_a1
 	sta SCREEN+40,x
 	sta SCREEN_B+40,x
 	lda UI_COLR_FACE
 	sta $d800+40,x
 	jmp .uf_n
 .uf_a2
-	lda UI_ATTR_FACE
 	sta SCREEN+80,x
 	sta SCREEN_B+80,x
 	lda UI_COLR_FACE
@@ -648,6 +698,46 @@ ui_update
 .uf_n
 	inc pp_dig_t
 	lda pp_dig_t
-	cmp #4
-	bcc .uf_c
+	cmp #6
+	bcs +
+	jmp .uf_c
++
 	rts
+
+; Gold/silver keys: bitmap always present at row2 cols 18/21; show via attrs.
+.ui_keys
+	lda player_keys
+	and #KEY_GOLD
+	beq .uk_goff
+	lda UI_ATTR_KEY_GOLD
+	ldy #UI_COL_KEY_GOLD
+	sta SCREEN+80,y
+	sta SCREEN_B+80,y
+	lda UI_COLR_KEY_GOLD
+	sta $d800+80,y
+	jmp .uk_sil
+.uk_goff
+	lda #0
+	ldy #UI_COL_KEY_GOLD
+	sta SCREEN+80,y
+	sta SCREEN_B+80,y
+	sta $d800+80,y
+.uk_sil
+	lda player_keys
+	and #KEY_SILVER
+	beq .uk_soff
+	lda UI_ATTR_KEY_SILVER
+	ldy #UI_COL_KEY_SILVER
+	sta SCREEN+80,y
+	sta SCREEN_B+80,y
+	lda UI_COLR_KEY_SILVER
+	sta $d800+80,y
+	rts
+.uk_soff
+	lda #0
+	ldy #UI_COL_KEY_SILVER
+	sta SCREEN+80,y
+	sta SCREEN_B+80,y
+	sta $d800+80,y
+	rts
+

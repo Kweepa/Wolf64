@@ -28,7 +28,8 @@ ES_SHOOT	= 2
 ES_BITE		= 3				; dog melee
 ES_PAIN		= 4
 ES_DYING	= 5
-ES_DEAD		= 6
+ES_DEAD_UNLOOTED = 6			; guard/SS corpse — still checks walk-over loot
+ES_DEAD		= 7
 GUARD_HP	= 6				; Wolf 25 / 4
 SS_HP		= 25				; Wolf 100 / 4
 DOG_HP		= 1				; Wolf 1 (min 1 after /4)
@@ -88,6 +89,13 @@ enemies_init
 	lda #0
 	sta enemy_count
 	sta los_rr
+	; hit buffer overlays boot — must be $FF before first enemies_update
+	ldx #39
+	lda #$ff
+-
+	sta col_enemy,x
+	dex
+	bpl -
 	ldx #0
 .ei_clr
 	lda #0
@@ -165,7 +173,11 @@ enemies_update
 	beq .eu_pain
 	cmp #ES_DYING
 	beq .eu_dying
-	jmp .eu_next			; ES_DEAD — corpse stays
+	cmp #ES_DEAD_UNLOOTED
+	bne +
+	jmp .eu_dead_unlooted
++
+	jmp .eu_next			; ES_DEAD — idle corpse
 .eu_bite_far
 	jmp .eu_bite
 .eu_may_think
@@ -180,9 +192,13 @@ enemies_update
 	jmp .eu_next
 .eu_think
 	lda enemy_state,x
-	beq .eu_alive			; ES_ALIVE
+	bne +
+	jmp .eu_alive			; ES_ALIVE
++
 	cmp #ES_CHASE
-	beq .eu_chase
+	bne +
+	jmp .eu_chase
++
 	jmp .eu_shoot			; ES_SHOOT
 .eu_pain
 	lda enemy_state_t,x
@@ -209,8 +225,69 @@ enemies_update
 	beq +
 	jmp .eu_next
 +
+	lda enemy_type,x
+	cmp #ET_DOG
+	bcs .eu_die_idle			; dog/Hans — no corpse loot
+	lda #ES_DEAD_UNLOOTED
+	sta enemy_state,x
+	jmp .eu_next
+.eu_die_idle
 	lda #ES_DEAD
 	sta enemy_state,x
+	jmp .eu_next
+.eu_dead_unlooted
+	lda enemy_xh,x
+	cmp playerx_h
+	bne .eu_du_rts
+	lda enemy_yh,x
+	cmp playery_h
+	bne .eu_du_rts
+	; ammo full: only SS can still grant MG
+	lda player_ammo
+	cmp #AMMO_MAX
+	bcc .eu_du_ammo
+	lda enemy_type,x
+	cmp #ET_SS
+	bne .eu_du_rts			; guard, full — leave
+	lda owned_weapons
+	and #$04
+	bne .eu_du_rts			; already have MG
+	lda owned_weapons
+	ora #$04
+	sta owned_weapons
+	lda #SOUND_GETMACHINE
+	jsr play_sound
+	jmp .eu_du_mark
+.eu_du_ammo
+	clc
+	adc #AMMO_CLIP_AMT
+	bcs .eu_du_sat
+	cmp #AMMO_MAX + 1
+	bcc .eu_du_ok
+.eu_du_sat
+	lda #AMMO_MAX
+.eu_du_ok
+	sta player_ammo
+	lda #UI_DIRTY_AMMO
+	ora ui_dirty
+	sta ui_dirty
+	; SS → machine gun
+	lda enemy_type,x
+	cmp #ET_SS
+	bne .eu_du_ammo_snd
+	lda owned_weapons
+	ora #$04
+	sta owned_weapons
+	lda #SOUND_GETMACHINE
+	jsr play_sound
+	jmp .eu_du_mark
+.eu_du_ammo_snd
+	lda #SOUND_GETAMMO
+	jsr play_sound
+.eu_du_mark
+	lda #ES_DEAD
+	sta enemy_state,x
+.eu_du_rts
 	jmp .eu_next
 .eu_alive
 !if DBG_NO_DETECT = 0 {

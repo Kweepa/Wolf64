@@ -207,6 +207,11 @@ item_apply
 	lda player_keys
 	ora #KEY_GOLD
 	sta player_keys
+	lda #UI_DIRTY_KEYS
+	ora ui_dirty
+	sta ui_dirty
+	lda #SOUND_GETKEY
+	jsr play_sound
 	sec
 	rts
 .ia_sil
@@ -215,22 +220,45 @@ item_apply
 	lda player_keys
 	ora #KEY_SILVER
 	sta player_keys
+	lda #UI_DIRTY_KEYS
+	ora ui_dirty
+	sta ui_dirty
+	lda #SOUND_GETKEY
+	jsr play_sound
 	sec
 	rts
 .ia_food
 	cmp #IF_FOOD
 	bne .ia_aid
+	lda player_hp
+	cmp #HP_MAX
+	bcc +
+	jmp .ia_no				; full — leave food
++
+	lda #SOUND_HEALTH1
+	jsr play_sound
 	lda #FOOD_HP_AMT
 	jmp item_add_hp
 .ia_aid
 	cmp #IF_FIRSTAID
 	bne .ia_ammo
+	lda player_hp
+	cmp #HP_MAX
+	bcc +
+	jmp .ia_no				; full — leave kit
++
+	lda #SOUND_HEALTH2
+	jsr play_sound
 	lda #FIRSTAID_HP_AMT
 	jmp item_add_hp
 .ia_ammo
 	cmp #IF_AMMO_CLIP
 	bne .ia_mg
 	lda player_ammo
+	cmp #AMMO_MAX
+	bcc +
+	jmp .ia_no				; full — leave clip
++
 	clc
 	adc #AMMO_CLIP_AMT
 	bcs .ia_ammo_sat
@@ -243,15 +271,28 @@ item_apply
 	lda #UI_DIRTY_AMMO
 	ora ui_dirty
 	sta ui_dirty
+	lda #SOUND_GETAMMO
+	jsr play_sound
 	sec
 	rts
 .ia_mg
 	cmp #IF_MACHINEGUN
 	bne .ia_no
+	; already own MG and full ammo → leave
+	lda owned_weapons
+	and #$04
+	beq .ia_mg_take
+	lda player_ammo
+	cmp #AMMO_MAX
+	bcc .ia_mg_take
+	jmp .ia_no
+.ia_mg_take
 	lda owned_weapons
 	ora #$04
 	sta owned_weapons
 	lda player_ammo
+	cmp #AMMO_MAX
+	bcs .ia_mg_wep			; weapon only; ammo already max
 	clc
 	adc #AMMO_CLIP_AMT
 	bcs .ia_mg_sat
@@ -264,13 +305,16 @@ item_apply
 	lda #UI_DIRTY_AMMO
 	ora ui_dirty
 	sta ui_dirty
+.ia_mg_wep
+	lda #SOUND_GETMACHINE
+	jsr play_sound
 	sec
 	rts
 .ia_no
 	clc
 	rts
 
-; A = heal amount. Always collect.
+; A = heal amount. Caller already checked HP < HP_MAX.
 item_add_hp
 	clc
 	adc player_hp

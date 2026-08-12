@@ -1,6 +1,7 @@
-; Sound effects — Wolf PC-speaker envelopes on SID noise (pcsfreq_*).
+; Sound effects — Wolf PC-speaker envelopes on SID noise (pcsfreq_hi).
 ; Data: pcsounds.asm + pcsfreq.asm (tools/gensounds.py from AUDIOT.WL1).
 ; Decimated 3x; stepped once per CIA1 Timer A IRQ (~50 Hz).
+; SID Fn lo fixed at $80 (hi LUT only — saves 256 bytes).
 
 !zone playsound
 
@@ -90,7 +91,7 @@ update_sfx
 	beq .sfx_silent
 	tax
 	jsr sfx_voice3_adsr
-	lda pcsfreq_lo,x
+	lda #$80
 	sta $d40e
 	lda pcsfreq_hi,x
 	sta $d40f

@@ -115,3 +115,15 @@ Default **`PROF_SPLIT=0`**: stage-boundary buckets only.
 **L** times the single `enemy_los_rr` grant (`check_sight` / chase LOS / `enemy_shoot`) via nested CIA sample — also counted inside **U**.
 
 HUD screen nibbles go to the **front** matrix (`set_scr_front` after `swap_view`). CIA2 reads and `$d800` colour writes go through `$35` windows (`prof_read_casc` / `prof_print`). Does not touch `$dd00` (VIC bank).
+
+## VICE snapshot dump (`tools/vsf_dump.py`)
+
+When the emulator hangs or crashes, save a VICE snapshot (`.vsf`) and dump it against the labels from **that same build**:
+
+```
+python tools\vsf_dump.py vice-snapshot-YYYYMMDDHHMMSS.vsf wolf64.lbl painters.lbl
+```
+
+Prints module list, `PC` / `A` / `X` / `Y` / `SP` / `P` with the nearest ACME label, `$01`, bytes around `PC`, stack words that look like `jsr` returns (also label-resolved), and ZP `$00–$7F`.
+
+The hang is often still “running” (IRQs alive, code bytes match the image). Use `PC` + the return chain to see which `jsr` never came back; SoA / BSS dumps from the extracted RAM are a follow-up, not part of this script. `MAINC64CPU` is x64sc; older VICE used `MAINCPU`.

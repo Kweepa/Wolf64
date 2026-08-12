@@ -330,6 +330,7 @@ eu_state_hi
 	sta enemy_state_t,x
 	jmp .eu_chase_go
 .eu_dog_rng
+	stx enemy_idx			; dog_in_bite_range reloads X from enemy_idx
 	jsr dog_in_bite_range
 	bcs .eu_chase_go			; too far
 	lda #ES_BITE

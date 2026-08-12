@@ -217,6 +217,8 @@ probe_solid
 
 ; A = damage — subtract from player_hp, floor at 0 (Wolf TakeDamage lite)
 take_damage
+	ldx player_dead
+	bne .td_rts
 	sta tmp0
 	lda player_hp
 	sec
@@ -225,10 +227,138 @@ take_damage
 	lda #0
 +
 	sta player_hp
-	cmp #0
+	lda #UI_DIRTY_HP
+	ora ui_dirty
+	sta ui_dirty
+	lda player_hp
 	bne .td_hurt
+	lda #1
+	sta player_dead
+	lda #<1500
+	sta death_ms_l
+	lda #>1500
+	sta death_ms_h
 	lda #SOUND_PLAYERDEATH
 	jmp play_sound
 .td_hurt
 	lda #SOUND_TAKEDAMAGE
 	jmp play_sound
+.td_rts
+	rts
+
+; Once per game — lives/score/ammo/keys/weapons
+player_init_game
+	lda #START_LIVES
+	sta player_lives
+	lda #0
+	sta player_score_l
+	sta player_score_h
+	sta player_keys
+	sta player_dead
+	sta death_ms_l
+	sta death_ms_h
+	sta level_want
+	lda #START_AMMO
+	sta player_ammo
+	lda #HP_MAX
+	sta player_hp
+	lda #$03				; knife + pistol
+	sta owned_weapons
+	lda #UI_DIRTY_ALL
+	sta ui_dirty
+	rts
+
+; After death restart — full HP, clear keys; keep ammo/weapons/score/lives
+player_init_level
+	lda #0
+	sta player_dead
+	sta death_ms_l
+	sta death_ms_h
+	sta player_keys
+	sta level_want
+	lda #HP_MAX
+	sta player_hp
+	lda #UI_DIRTY_ALL
+	sta ui_dirty
+	rts
+
+; Countdown while dead; then lives-- and request restart
+player_death_tick
+	lda death_ms_l
+	ora death_ms_h
+	beq .pdt_go
+	sec
+	lda death_ms_l
+	sbc dt_ms
+	sta death_ms_l
+	lda death_ms_h
+	sbc #0
+	sta death_ms_h
+	bcs .pdt_rts
+	lda #0
+	sta death_ms_l
+	sta death_ms_h
+.pdt_go
+	lda player_lives
+	beq .pdt_rts
+	dec player_lives
+	lda #1				; restart
+	sta level_want
+.pdt_rts
+	rts
+
+; Walk-on exit tile 144
+player_check_exit
+	lda playerx_h
+	sta tmp0
+	lda playery_h
+	sta tmp1
+	jsr map_to_tile
+	ldy #0
+	lda (tile_l),y
+	cmp #T_EXIT
+	bne .pce_rts
+	lda #2				; next level
+	sta level_want
+.pce_rts
+	rts
+
+; level_want: 1=restart 2=next — disk reload + re-init
+handle_level_want
+	lda level_want
+	cmp #2
+	bne .hlw_restart
+	jsr advance_level
+	jmp .hlw_load
+.hlw_restart
+	jsr player_init_level
+.hlw_load
+	lda #0
+	sta level_want
+	jsr restart_level
+	bcc .hlw_ok
+.hlw_hang
+	jmp .hlw_hang
+.hlw_ok
+	lda #$34
+	sta $01
+	cli
+	rts
+
+; Bump episode map index; clear keys; keep HP/ammo/weapons
+advance_level
+	ldx level_num
+	inx
+	cpx #LEVEL_MAX + 1
+	bcc .al_set
+	ldx #1
+.al_set
+	stx level_num
+	lda #0
+	sta player_keys
+	sta player_dead
+	sta death_ms_l
+	sta death_ms_h
+	lda #UI_DIRTY_ALL
+	sta ui_dirty
+	rts

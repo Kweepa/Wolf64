@@ -1,4 +1,4 @@
-; World items — init / X-sorted cull (SoA x,y,frm,flags live in locode BSS)
+; World items — init / X-sorted cull / pickup (SoA in SFX→enemy RAM gap)
 !zone items
 
 ; MAX_ITEMS in mem.asm
@@ -154,6 +154,143 @@ items_init
 	cpx item_count
 	bcc .is_outer
 .is_done
+	rts
+
+; ---------------------------------------------------------------------------
+; Walk-over collectibles at player tile (props ignored)
+items_try_pickup
+	lda item_count
+	bne +
+	rts
++
+	lda playerx_h
+	sta tmp4
+	lda playery_h
+	sta tmp5
+	; skip while item_x < player x
+	ldx #0
+.itp_skip
+	cpx item_count
+	bcs .itp_rts
+	lda item_x,x
+	cmp tmp4
+	bcs .itp_band
+	inx
+	bne .itp_skip
+.itp_band
+	cpx item_count
+	bcs .itp_rts
+	lda item_x,x
+	cmp tmp4
+	bne .itp_rts
+	lda item_flags,x
+	and #IF_ACTIVE
+	beq .itp_n
+	lda item_y,x
+	cmp tmp5
+	bne .itp_n
+	lda item_frm,x
+	jsr item_apply
+	bcc .itp_n
+	lda #0
+	sta item_flags,x
+.itp_n
+	inx
+	bne .itp_band
+.itp_rts
+	rts
+
+; A = frame id. C=1 if collected (deactivate), C=0 leave active
+item_apply
+	cmp #IF_KEY_GOLD
+	bne .ia_sil
+	lda player_keys
+	ora #KEY_GOLD
+	sta player_keys
+	lda #UI_DIRTY_KEYS
+	ora ui_dirty
+	sta ui_dirty
+	sec
+	rts
+.ia_sil
+	cmp #IF_KEY_SILVER
+	bne .ia_food
+	lda player_keys
+	ora #KEY_SILVER
+	sta player_keys
+	lda #UI_DIRTY_KEYS
+	ora ui_dirty
+	sta ui_dirty
+	sec
+	rts
+.ia_food
+	cmp #IF_FOOD
+	bne .ia_aid
+	lda #FOOD_HP_AMT
+	jmp item_add_hp
+.ia_aid
+	cmp #IF_FIRSTAID
+	bne .ia_ammo
+	lda #FIRSTAID_HP_AMT
+	jmp item_add_hp
+.ia_ammo
+	cmp #IF_AMMO_CLIP
+	bne .ia_mg
+	lda player_ammo
+	clc
+	adc #AMMO_CLIP_AMT
+	bcs .ia_ammo_sat
+	cmp #AMMO_MAX + 1
+	bcc .ia_ammo_ok
+.ia_ammo_sat
+	lda #AMMO_MAX
+.ia_ammo_ok
+	sta player_ammo
+	lda #UI_DIRTY_AMMO
+	ora ui_dirty
+	sta ui_dirty
+	sec
+	rts
+.ia_mg
+	cmp #IF_MACHINEGUN
+	bne .ia_no
+	lda owned_weapons
+	ora #$04
+	sta owned_weapons
+	lda player_ammo
+	clc
+	adc #AMMO_CLIP_AMT
+	bcs .ia_mg_sat
+	cmp #AMMO_MAX + 1
+	bcc .ia_mg_ok
+.ia_mg_sat
+	lda #AMMO_MAX
+.ia_mg_ok
+	sta player_ammo
+	lda #UI_DIRTY_AMMO
+	ora ui_dirty
+	sta ui_dirty
+	sec
+	rts
+.ia_no
+	clc
+	rts
+
+; A = heal amount. Always collect.
+item_add_hp
+	clc
+	adc player_hp
+	bcs .iah_sat
+	cmp #HP_MAX + 1
+	bcc .iah_ok
+.iah_sat
+	lda #HP_MAX
+.iah_ok
+	sta player_hp
+	lda #UI_DIRTY_HP
+	ora ui_dirty
+	sta ui_dirty
+	sec
 	rts
 
 ; ---------------------------------------------------------------------------

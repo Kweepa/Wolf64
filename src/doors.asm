@@ -193,12 +193,24 @@ try_open_door
 	lda mapy
 	sta tmp1
 	jsr door_tile_at
+	cmp #T_ELEVATOR
+	bne .tod_door
+	lda #2				; next level
+	sta level_want
+	rts
+.tod_door
 	cmp #T_DOOR_MIN
 	bcc .tod_rts
 	cmp #T_LOCKED_DOOR
-	beq .tod_rts			; locked: no open
+	bne .tod_ulock
+	lda player_keys
+	beq .tod_rts			; need any key
+	lda #T_LOCKED_DOOR
+	jmp .tod_open
+.tod_ulock
 	cmp #T_DOOR_MAX + 1
 	bcs .tod_rts
+.tod_open
 	sta tmp3				; saved door tile id
 	; already in a slot?
 	ldy #0
@@ -232,7 +244,7 @@ try_open_door
 	iny
 	cpy #NUM_DOOR_SLOTS
 	bcc .tod_find
-	; claim free slot
+	; claim free slot — fall through to existing open path
 	ldy #0
 .tod_free
 	lda door_state,y

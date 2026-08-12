@@ -21,7 +21,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $5880  world item gfx (disk: itm; to bitmap $6000)
 ; $6000  bitmap (8K, runtime fill)
 ; $8000  wall painters only (disk: paint)
-; $B8F2  PC SFX (disk: sfx)
+; $B8F2  PC SFX (disk: sfx); item SoA in RAM after end_sfx → <$C000
 ; $C000  enemy block — code, AI, hi, pixels, SoA (disk: enemy)
 ; $EF00  map (disk: e1m1… via LoadLevel)
 
@@ -75,6 +75,7 @@ game_start
 	jsr prof_init
 	jsr input_irq_init
 	jsr play_sound_init
+	jsr player_init_game
 
 	lda #$ff
 	sta smc_last_page
@@ -92,7 +93,19 @@ game_start
 
 main_loop
 	jsr calc_frame_dt
+	lda level_want
+	beq .ml_alive
+	jsr handle_level_want
+	jmp .ml_render
+.ml_alive
+	lda player_dead
+	beq .ml_play
+	jsr player_death_tick
+	jmp .ml_render
+.ml_play
 	jsr player_move
+	jsr items_try_pickup
+	jsr player_check_exit
 !if PROFILE = 1 {
 	jsr prof_reset_frame
 }
@@ -105,10 +118,15 @@ main_loop
 !if PROFILE = 1 {
 	jsr prof_snap
 }
+.ml_render
 	jsr render_frame
 	lda #$35
 	sta $01
+	lda player_dead
+	bne .ml_nower
 	jsr update_weapon
+.ml_nower
+	jsr ui_update
 	lda #$34
 	sta $01
 	jsr prof_frame_sample
@@ -130,28 +148,37 @@ main_loop
 !source "painter_tables.asm"
 
 ; --- BSS after code (col_* overlays boot; see bss.asm) --------------------
+; item_* SoA is in RAM after end_sfx (not in locode PRG)
 enemy_count
 !byte 0
 item_count
 !byte 0
 item_considered
 !byte 0
-item_x
-!fill MAX_ITEMS, 0
-item_y
-!fill MAX_ITEMS, 0
-item_frm
-!fill MAX_ITEMS, 0
-item_flags
-!fill MAX_ITEMS, 0
-item_depth_l
-!fill MAX_ITEMS, 0
-item_depth_h
-!fill MAX_ITEMS, 0
 los_rr
 !byte 0
 player_hp
 !byte 0
+player_ammo
+!byte 0
+player_keys
+!byte 0
+player_score_l
+!byte 0
+player_score_h
+!byte 0
+player_lives
+!byte 0
+player_dead
+!byte 0
+death_ms_l
+!byte 0
+death_ms_h
+!byte 0
+ui_dirty
+!byte 0
+level_want
+!byte 0				; 0=none 1=restart 2=next
 ai_dx
 !byte 0
 ai_dy
@@ -357,6 +384,18 @@ end_paint = *
 end_sfx = *
 !if end_sfx > ENEMY_BASE {
 	!error "SFX overlaps ENEMY_BASE; end=$", end_sfx
+}
+
+; Item SoA — runtime BSS in SFX→enemy gap (not loaded from disk)
+item_x		= end_sfx
+item_y		= item_x + MAX_ITEMS
+item_frm	= item_y + MAX_ITEMS
+item_flags	= item_frm + MAX_ITEMS
+item_depth_l	= item_flags + MAX_ITEMS
+item_depth_h	= item_depth_l + MAX_ITEMS
+end_item_soa	= item_depth_h + MAX_ITEMS
+!if end_item_soa > ENEMY_BASE {
+	!error "Item SoA overlaps ENEMY_BASE; end=$", end_item_soa
 }
 
 ; =========================================================================

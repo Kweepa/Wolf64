@@ -72,8 +72,6 @@ init_weapon
 	sta fire_rpt_h
 	sta mg_frame
 	sta wpn_pose
-	lda #$0f
-	sta owned_weapons
 	lda #$ff
 	sta cur_weapon
 	ldx #WPN_PISTOL
@@ -85,6 +83,25 @@ show_weapon
 	lda spr_en
 	sta $d015
 	rts
+
+; After level reload — keep ownership; re-apply sprite setup
+refresh_weapon
+	lda #0
+	sta muzzle_ms_l
+	sta muzzle_ms_h
+	sta fire_rpt_l
+	sta fire_rpt_h
+	sta mg_frame
+	sta wpn_pose
+	ldx cur_weapon
+	cpx #$ff
+	bne .rw_setup
+	ldx #WPN_PISTOL
+.rw_setup
+	lda #$ff
+	sta cur_weapon			; force switch_weapon to re-apply
+	jsr switch_weapon
+	jmp show_weapon
 
 hide_weapon
 	lda #0
@@ -305,6 +322,12 @@ apply_pose
 	rts
 
 .fire_shot
+	ldx cur_weapon
+	beq .fs_do				; knife — no ammo
+	lda player_ammo
+	bne .fs_do
+	rts					; empty — no fire
+.fs_do
 	lda #POSE_FIRE
 	sta wpn_pose
 	lda #<MUZZLE_MS
@@ -325,6 +348,10 @@ apply_pose
 	jsr play_sound
 	lda cur_weapon
 	beq .fs_rts
+	dec player_ammo
+	lda #UI_DIRTY_AMMO
+	ora ui_dirty
+	sta ui_dirty
 	jmp gun_attack
 .fs_rts
 	rts

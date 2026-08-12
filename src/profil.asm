@@ -432,3 +432,49 @@ prof_print
 	lda #7
 	sta $d800,x
 	rts
+
+; ---------------------------------------------------------------------------
+; Status digits in UI band (bitmap row 0). Cols 30–38 leave profiler on the left.
+; Called with I/O in ($01=$35).
+ui_update
+	lda ui_dirty
+	bne +
+	rts
++
+	jsr set_scr_front
+	lda ui_dirty
+	and #UI_DIRTY_HP
+	beq .uu_ammo
+	ldx #28
+	lda player_hp
+	jsr .pp_u8_3
+.uu_ammo
+	lda ui_dirty
+	and #UI_DIRTY_AMMO
+	beq .uu_keys
+	ldx #32
+	lda player_ammo
+	jsr .pp_u8_3
+.uu_keys
+	lda ui_dirty
+	and #UI_DIRTY_KEYS
+	beq .uu_clr
+	lda #0
+	sta tmp0
+	lda player_keys
+	and #KEY_GOLD
+	beq +
+	inc tmp0
++
+	lda player_keys
+	and #KEY_SILVER
+	beq +
+	inc tmp0
++
+	ldx #37
+	lda tmp0
+	jsr .pp_digit
+.uu_clr
+	lda #0
+	sta ui_dirty
+	rts

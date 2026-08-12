@@ -20,6 +20,26 @@ SQTAB4		= SQTAB1 + $600
 PAINTERS	= $8000
 PAINTERS_SIZE	= $38F2			; painters.bin length (must match build)
 SFX_BASE	= PAINTERS + PAINTERS_SIZE	; $B8F2 — pcsounds + pcsfreq
+; Item SoA lives in RAM after end_sfx (see wolf64.asm); must end ≤ ENEMY_BASE
 ENEMY_BASE	= $C000			; contiguous enemy code+gfx+SoA
-ENEMY_SIZE	= $2E63			; boot stages via $8000; keep in sync with end_enemy
+ENEMY_SIZE	= $2E5E			; boot stages via $8000; keep in sync with end_enemy
 MAP		= $EF00			; 4K level (under-KERNAL; LoadLevel)
+
+; Pickup / HUD constants
+AMMO_MAX	= 99
+HP_MAX		= 100
+AMMO_CLIP_AMT	= 8
+FOOD_HP_AMT	= 10
+FIRSTAID_HP_AMT	= 25
+START_AMMO	= 8
+START_LIVES	= 3
+KEY_GOLD	= $01
+KEY_SILVER	= $02
+UI_DIRTY_HP	= $01
+UI_DIRTY_AMMO	= $02
+UI_DIRTY_KEYS	= $04
+UI_DIRTY_ALL	= $07
+T_ELEVATOR	= 13
+T_EXIT		= 144
+DEATH_MS	= 120			; frames≈; counted down with dt_ms sum ~2s feel
+LEVEL_MAX	= 9			; 1..8 maps, 9 = boss (e1mb)

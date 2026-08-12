@@ -88,8 +88,6 @@ enemies_init
 	lda #0
 	sta enemy_count
 	sta los_rr
-	lda #PLAYER_HP0
-	sta player_hp
 	ldx #0
 .ei_clr
 	lda #0

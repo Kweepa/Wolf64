@@ -28,6 +28,8 @@ python tools\gen_weapon_sprites.py
 if errorlevel 1 exit /b 1
 python tools\gen_enemy_painters.py
 if errorlevel 1 exit /b 1
+python tools\gen_ui_bitmap.py
+if errorlevel 1 exit /b 1
 
 pushd src
 "%ACME%" -v3 --vicelabels ..\painters.lbl painters_bin.asm

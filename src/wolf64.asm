@@ -4,10 +4,10 @@
 !to "game_image.prg", cbm
 
 ; --- build flags (SquareDoom-style) ---------------------------------------
-PROFILE		= 1				; stage buckets on bitmap row 0
+PROFILE		= 0				; stage buckets on bitmap row 0
 PROF_SPLIT	= 0				; 1 = per-col R/D (~80 CIA samples; +~20ms)
 DBG_FPS		= 1				; F ≈ frame ms (cols 0–2)
-DBG_NO_DETECT	= 1				; 1 = enemies never spot player (patrol preview)
+DBG_NO_DETECT	= 0				; 1 = enemies never spot player (patrol preview)
 MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 
 ; --- memory map -----------------------------------------------------------
@@ -15,11 +15,11 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $0801  disposable boot → low BSS overlay (col_* / LoadPrg scrap)
 ; $0900  locode — game code, no enemy modules (disk: locode)
 ; $3800  Judd SQTAB (disk: sqt; 2K in locode–screen gap)
-; $4000  VIC screen A / B ($4400)
+; $4000  VIC screen A / B ($4400) (disk: scr)
 ; $4800  textures (disk: tex)
 ; $5000  weapon HUD sprites (disk: wpn; ends at ITEM_SPRITES)
 ; $5880  world item gfx (disk: itm; to bitmap $6000)
-; $6000  bitmap (8K, runtime fill)
+; $6000  bitmap (8K, disk: bmp)
 ; $8000  wall painters only (disk: paint)
 ; $B8F2  PC SFX (disk: sfx); item SoA in RAM after end_sfx → <$C000
 ; $C000  enemy block — code, AI, hi, pixels, SoA (disk: enemy)
@@ -336,6 +336,19 @@ end_locode = *
 }
 
 ; =========================================================================
+; scr — matrix A @ $4000, 24-byte sprite-ptr pad, matrix B @ $4400
+; =========================================================================
+*= SCREEN
+!binary "../textures/ui/screen.bin", 2024
+end_scr = *
+!if end_scr != SCREEN_B + 1000 {
+	!error "SCR must end at SCREEN_B+1000 ($47E8); end=$", end_scr
+}
+!if end_scr > TEXTURES {
+	!error "Screen matrices overlap TEXTURES; end=$", end_scr
+}
+
+; =========================================================================
 ; tex — walls @ $4800
 ; =========================================================================
 *= TEXTURES
@@ -363,6 +376,18 @@ item_gfx_data
 end_itm = *
 !if end_itm > BITMAP {
 	!error "Item gfx overlap BITMAP; end=$", end_itm
+}
+
+; =========================================================================
+; bmp — full MCM bitmap @ $6000 (UI + viewport pattern)
+; =========================================================================
+*= BITMAP
+!binary "../textures/ui/bitmap.bin", 8000
+; Profiler hexfont in unused VIC bitmap tail ($7F40..)
+!source "_hexfont.inc"
+end_bmp = *
+!if end_bmp > PAINTERS {
+	!error "Bitmap+hexfont overlap PAINTERS; end=$", end_bmp
 }
 
 ; =========================================================================
@@ -448,7 +473,4 @@ vis_slot
 end_enemy = *
 !if end_enemy > MAP {
 	!error "Enemy block overlaps MAP; end=$", end_enemy
-}
-!if (end_enemy - ENEMY_BASE) != ENEMY_SIZE {
-	!error "ENEMY_SIZE mismatch; update mem.asm (got $", end_enemy - ENEMY_BASE, ")"
 }

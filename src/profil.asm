@@ -434,47 +434,220 @@ prof_print
 	rts
 
 ; ---------------------------------------------------------------------------
-; Status digits in UI band (bitmap row 0). Cols 30–38 leave profiler on the left.
-; Called with I/O in ($01=$35).
+; Status bar from glyph bank rows 3-4. I/O in ($01=$35).
 ui_update
 	lda ui_dirty
 	bne +
 	rts
 +
-	jsr set_scr_front
+	lda ui_dirty
+	and #UI_DIRTY_LEVEL
+	beq +
+	ldx #UI_COL_LEVEL
+	lda level_num
+	ldy #2
+	jsr .ui_num
++
+	lda ui_dirty
+	and #UI_DIRTY_LIVES
+	beq +
+	ldx #UI_COL_LIVES
+	lda player_lives
+	ldy #2
+	jsr .ui_num
++
 	lda ui_dirty
 	and #UI_DIRTY_HP
-	beq .uu_ammo
-	ldx #28
+	beq +
+	ldx #UI_COL_HP
 	lda player_hp
-	jsr .pp_u8_3
-.uu_ammo
+	ldy #3
+	jsr .ui_num
++
 	lda ui_dirty
 	and #UI_DIRTY_AMMO
-	beq .uu_keys
-	ldx #32
+	beq +
+	ldx #UI_COL_AMMO
 	lda player_ammo
-	jsr .pp_u8_3
-.uu_keys
+	ldy #3
+	jsr .ui_num
++
 	lda ui_dirty
-	and #UI_DIRTY_KEYS
-	beq .uu_clr
-	lda #0
-	sta tmp0
-	lda player_keys
-	and #KEY_GOLD
+	and #UI_DIRTY_FACE
 	beq +
-	inc tmp0
+	jsr .ui_face
 +
-	lda player_keys
-	and #KEY_SILVER
-	beq +
-	inc tmp0
-+
-	ldx #37
-	lda tmp0
-	jsr .pp_digit
-.uu_clr
 	lda #0
 	sta ui_dirty
+	rts
+
+; A=value X=col Y=#digits (2/3)
+; tmp0-3 are clobbered by .ui_dig/.ui_cpcell — keep counters in pp_*.
+.ui_num
+	sta pp_tmp_l
+	stx pp_tmp_h
+	sty pp_dig_t				; extract count
+	sty pp_dig_h				; draw count (must survive .ui_dig)
+.un_spl
+	ldx #0
+	lda pp_tmp_l
+.un_d
+	cmp #10
+	bcc .un_r
+	sbc #10
+	inx
+	bne .un_d
+.un_r
+	pha
+	stx pp_tmp_l
+	dec pp_dig_t
+	bne .un_spl
+	ldx pp_tmp_h
+.un_out
+	pla
+	jsr .ui_dig
+	inx
+	dec pp_dig_h
+	bne .un_out
+	rts
+
+; A=digit X=dest col (preserved)
+.ui_dig
+	sta tmp4
+	stx tmp5
+	lda #0
+	jsr .ui_cpcell
+	lda #1
+	jsr .ui_cpcell
+	ldx tmp4
+	lda UI_ATTR_DIGIT,x
+	ldy tmp5
+	sta SCREEN+40,y
+	sta SCREEN_B+40,y
+	sta SCREEN+80,y
+	sta SCREEN_B+80,y
+	lda UI_COLR_DIGIT,x
+	sta $d800+40,y
+	sta $d800+80,y
+	ldx tmp5
+	rts
+
+; A=0 top (r3->r1), A=1 bot (r4->r2); tmp4=src col tmp5=dst col
+; Clobbers tmp0-tmp3.
+.ui_cpcell
+	sta tmp3
+	lda tmp4
+	asl
+	asl
+	asl
+	sta tmp0
+	lda #<UI_BMP_ROW3
+	ldx #>UI_BMP_ROW3
+	ldy tmp3
+	beq +
+	clc
+	adc #<$140
+	pha
+	txa
+	adc #>$140
+	tax
+	pla
++
+	clc
+	adc tmp0
+	sta tmp0
+	bcc +
+	inx
++
+	stx tmp1
+	lda tmp5
+	asl
+	asl
+	asl
+	sta tmp2
+	lda #<UI_BMP_ROW1
+	ldx #>UI_BMP_ROW1
+	ldy tmp3
+	beq +
+	clc
+	adc #<$140
+	pha
+	txa
+	adc #>$140
+	tax
+	pla
++
+	clc
+	adc tmp2
+	sta tmp2
+	bcc +
+	inx
++
+	stx tmp3
+	ldy #7
+-
+	lda (tmp0),y
+	sta (tmp2),y
+	dey
+	bpl -
+	rts
+
+.ui_face
+	lda player_hp
+	lsr
+	lsr
+	lsr
+	lsr
+	sta tmp0
+	lda #6
+	sec
+	sbc tmp0
+	bcs +
+	lda #0
++
+	cmp #8
+	bcc +
+	lda #7
++
+	asl
+	adc #UI_FACE_SRC0
+	sta pp_dig_h				; src left col
+	lda #0
+	sta pp_dig_t				; cell 0..3
+.uf_c
+	lda pp_dig_t
+	and #1
+	clc
+	adc pp_dig_h
+	sta tmp4
+	lda pp_dig_t
+	and #1
+	clc
+	adc #UI_COL_FACE
+	sta tmp5
+	lda pp_dig_t
+	lsr
+	jsr .ui_cpcell
+	lda tmp5
+	tax
+	lda pp_dig_t
+	lsr
+	bne .uf_a2
+	lda UI_ATTR_FACE
+	sta SCREEN+40,x
+	sta SCREEN_B+40,x
+	lda UI_COLR_FACE
+	sta $d800+40,x
+	jmp .uf_n
+.uf_a2
+	lda UI_ATTR_FACE
+	sta SCREEN+80,x
+	sta SCREEN_B+80,x
+	lda UI_COLR_FACE
+	sta $d800+80,x
+.uf_n
+	inc pp_dig_t
+	lda pp_dig_t
+	cmp #4
+	bcc .uf_c
 	rts

@@ -227,7 +227,7 @@ take_damage
 	lda #0
 +
 	sta player_hp
-	lda #UI_DIRTY_HP
+	lda #UI_DIRTY_HP | UI_DIRTY_FACE
 	ora ui_dirty
 	sta ui_dirty
 	lda player_hp
@@ -302,6 +302,9 @@ player_death_tick
 	lda player_lives
 	beq .pdt_rts
 	dec player_lives
+	lda #UI_DIRTY_LIVES
+	ora ui_dirty
+	sta ui_dirty
 	lda #1				; restart
 	sta level_want
 .pdt_rts

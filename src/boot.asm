@@ -83,9 +83,9 @@ load_sa1
 	plp
 	rts
 
-; ENEMY_SIZE → $C000 (I/O out). SMC abs,x; round up to whole pages
+; ENEMY gap → $C000 (I/O out). SMC abs,x; round up to whole pages
 ; (map not loaded yet — overcopy into $EFxx is fine).
-ENEMY_COPY_PAGES = (ENEMY_SIZE + 255) / 256
+ENEMY_COPY_PAGES = (MAP - ENEMY_BASE + 255) / 256
 
 copy_enemy
 	sei
@@ -118,11 +118,15 @@ file_tab
 	!byte 6
 	!text "LOCODE"
 	!byte 3
+	!text "SCR"
+	!byte 3
 	!text "TEX"
 	!byte 3
 	!text "WPN"
 	!byte 3
 	!text "ITM"
+	!byte 3
+	!text "BMP"
 	!byte 3
 	!text "SQT"
 	!byte 5
@@ -131,6 +135,8 @@ file_tab
 	!text "SFX"
 	!byte 3
 	!text "TAB"
+	!byte 3
+	!text "COL"
 	!byte 0
 
 name_enemy

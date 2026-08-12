@@ -207,9 +207,6 @@ item_apply
 	lda player_keys
 	ora #KEY_GOLD
 	sta player_keys
-	lda #UI_DIRTY_KEYS
-	ora ui_dirty
-	sta ui_dirty
 	sec
 	rts
 .ia_sil
@@ -218,9 +215,6 @@ item_apply
 	lda player_keys
 	ora #KEY_SILVER
 	sta player_keys
-	lda #UI_DIRTY_KEYS
-	ora ui_dirty
-	sta ui_dirty
 	sec
 	rts
 .ia_food
@@ -287,7 +281,7 @@ item_add_hp
 	lda #HP_MAX
 .iah_ok
 	sta player_hp
-	lda #UI_DIRTY_HP
+	lda #UI_DIRTY_HP | UI_DIRTY_FACE
 	ora ui_dirty
 	sta ui_dirty
 	sec

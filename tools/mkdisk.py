@@ -25,13 +25,18 @@ MAP_SIZE = 4096
 SEGMENTS = [
 	("tab", "TABLES", "end_tab"),
 	("locode", "LOCODE_BASE", "end_locode"),
+	("scr", "SCREEN", "end_scr"),
 	("tex", "TEXTURES", "end_tex"),
 	("wpn", "WPN_SPRITES", "end_wpn"),
 	("itm", "ITEM_SPRITES", "end_itm"),
+	("bmp", "BITMAP", "end_bmp"),
 	("paint", "PAINTERS", "end_paint"),
 	("sfx", "SFX_BASE", "end_sfx"),
 	("enemy", "ENEMY_BASE", "end_enemy"),
 ]
+
+COLORRAM_LOAD = 0xD800
+COLORRAM_BIN = Path("textures/ui/colorram.bin")
 
 # maps/NN_Wolf1_*.bin → e1mN dos name (boss/secret as e1mb / e1ms)
 MAP_FILES = [
@@ -132,12 +137,16 @@ def main() -> None:
 		"end_tab",
 		"LOCODE_BASE",
 		"end_locode",
+		"SCREEN",
+		"end_scr",
 		"TEXTURES",
 		"end_tex",
 		"WPN_SPRITES",
 		"end_wpn",
 		"ITEM_SPRITES",
 		"end_itm",
+		"BITMAP",
+		"end_bmp",
 		"PAINTERS",
 		"end_paint",
 		"SFX_BASE",
@@ -191,6 +200,23 @@ def main() -> None:
 		sq_out.write_bytes(sq_raw)
 		staged.append(("sqt", sq_out))
 		print(f"  sqt: $3800-$3FFF ({len(sq_raw) - 2} bytes from {sqtab_path})")
+
+		# Colour RAM (load @ $d800; not in fat image)
+		col_path = Path(COLORRAM_BIN)
+		if not col_path.is_file():
+			print(f"missing: {col_path}", file=sys.stderr)
+			sys.exit(1)
+		col_data = col_path.read_bytes()
+		if len(col_data) != 1000:
+			print(
+				f"colorram.bin is {len(col_data)} bytes (expected 1000)",
+				file=sys.stderr,
+			)
+			sys.exit(1)
+		col_out = tmp_dir / "col"
+		col_out.write_bytes(struct.pack("<H", COLORRAM_LOAD) + col_data)
+		staged.append(("col", col_out))
+		print(f"  col: ${COLORRAM_LOAD:04X} ({len(col_data)} bytes)")
 
 		map_list = MAP_FILES if args.all_maps else [MAP_FILES[0]]
 		for dos_name, fname in map_list:

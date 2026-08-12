@@ -1,7 +1,7 @@
 ; Judd / Arndt a²−b² multiply — 2K square tables at SQTAB (disk: sqt)
 !zone mul
 
-; Tables are prebuilt (tools/gen_sqtab.py) and LOADed @ $5800.
+; Tables are prebuilt (tools/gen_sqtab.py) and LOADed @ SQTAB1.
 ; KERNAL LOAD clobbers ZP — restore hi pointers after all disk loads.
 ; From https://6502.org/source/integers/fastmult.htm (Martin Arndt / Stephen Judd)
 init_sqtabs

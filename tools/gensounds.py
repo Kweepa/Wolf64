@@ -36,6 +36,7 @@ CORE = [
     (52, "AHHHG"),
     (58, "NAZIFIRE"),
     (60, "SSFIRE"),
+    (23, "ATKKNIFE"),
 ]
 
 DECIMATE = 3

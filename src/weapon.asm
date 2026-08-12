@@ -1,74 +1,43 @@
-; Pistol + chaingun HUD (SquareDoom layers / muzzle flash)
-; Sprite banks in VIC bank 1 @ $4800 (see wolf64.asm). Pointers written to
-; both matrix sprite-pointer slots ($43f8 / $47f8) for double-buffer.
+; First-person HUD: knife / pistol / machinegun / chaingun
+; All sprites XY-expanded (2×). Flash: white + 1/2/3 red (pistol/MG/chaingun).
+; Chaingun flash A/B = distinct blobs; mg_frame selects ptr + XY slots.
+!source "weapons/wpn_tables.asm"
 !zone weapon
 
-PISTOL_SPR_PTR0 = (PISTOL_SPRITES - SCREEN) / 64
-MINIGUN_B_SPR_PTR0 = (MINIGUN_B_SPRITES - SCREEN) / 64
-MINIGUN_SPR_PTR0 = (MINIGUN_SPRITES - SCREEN) / 64
-MUZZLE_FLASH_PTR0 = (MUZZLE_FLASH_SPRITES - SCREEN) / 64
+WPN_KNIFE = 0
+WPN_PISTOL = 1
+WPN_MG = 2
+WPN_CHAINGUN = 3
 
-WPN_PISTOL = 0
-WPN_CHAINGUN = 1
+POSE_IDLE = 0
+POSE_FIRE = 1
+POSE_RECOIL = 2
 
-EIGHT_ENABLE_IDLE = $3f		; sprites 0–5 (flash 6–7 off)
-FLASH_ENABLE = $c0			; sprites 6–7
 MUZZLE_MS = 300
+RECOIL_MS = 150
 
-; Screen layout (XY expand): sprite px ×2. Bottom hand row Y=208.
-; VIC: low sprite # = front — body first, muzzle flash last.
-
-muzzle_hi_col	!byte 1
-muzzle_hi_cols
-	!byte 1, 7, 1, 10
-
-; Fire interval (ms while held) — pistol, chaingun
-wpn_fire_ms_lo
-	!byte <600, <100
-wpn_fire_ms_hi
-	!byte >600, >100
-
-wpn_setup_lo
-	!byte <setup_pistol, <setup_chaingun
-wpn_setup_hi
-	!byte >setup_pistol, >setup_chaingun
-
-; Ownership bits: bit0 pistol, bit1 chaingun
 wpn_own_bit
-	!byte $01, $02
+	!byte $01, $02, $04, $08
 
-; SMC — +1/+2 patched by switch_weapon
-wpn_setup
-	jmp setup_pistol
+wpn_fire_ms_lo
+	!byte <400, <600, <100, <100
+wpn_fire_ms_hi
+	!byte >400, >600, >100, >100
 
-pistol_spr_col
-	!byte 15, 11, 0			; gun hilight / dark grey / black
-	!byte 8, 9, 0			; hand orange / brown / black
-	!byte 1, 2				; flash white, red
-pistol_spr_x
-	!byte 160, 160, 160
-	!byte 160, 160, 160
-	!byte 166, 166
-pistol_spr_y
-	!byte 186, 186, 186
-	!byte 208, 208, 208
-	!byte 162, 162
+wpn_sound
+	!byte SOUND_ATKKNIFE, SOUND_ATKPISTOL, SOUND_ATKMACHINEGUN, SOUND_ATKGATLING
 
-chaingun_spr_col
-	!byte 15, 15			; upper / lower highlights
-	!byte 11, 11			; grey body L/R
-	!byte 0, 0				; black body L/R
-	!byte 1, 2				; flash white, red
-chaingun_spr_x
-	!byte 160, 160
-	!byte 136, 184
-	!byte 136, 184
-	!byte 160, 160
-chaingun_spr_y
-	!byte 194, 208
-	!byte 194, 194
-	!byte 208, 208
-	!byte 172, 172
+; weapon*3 + pose
+wpn_pose_dx
+	!byte 15, 0, 0
+	!byte 0, 0, 0
+	!byte 0, 0, 0
+	!byte 0, 0, 0
+wpn_pose_dy
+	!byte 15, 0, 0
+	!byte 6, 2, 0
+	!byte 6, 2, 0
+	!byte 6, 2, 0
 
 ; X = weapon id. Gated by owned_weapons.
 switch_weapon
@@ -78,10 +47,6 @@ switch_weapon
 	cpx cur_weapon
 	beq .sw_done
 	stx cur_weapon
-	lda wpn_setup_lo,x
-	sta wpn_setup + 1
-	lda wpn_setup_hi,x
-	sta wpn_setup + 2
 	lda wpn_fire_ms_lo,x
 	sta wpn_fire_ms_l
 	lda wpn_fire_ms_hi,x
@@ -91,8 +56,9 @@ switch_weapon
 	sta muzzle_ms_h
 	sta fire_rpt_l
 	sta fire_rpt_h
-	jsr wpn_setup
-	jmp .wpn_hi_bright
+	sta mg_frame
+	sta wpn_pose
+	jsr setup_weapon
 .sw_done
 	rts
 
@@ -105,36 +71,19 @@ init_weapon
 	sta fire_rpt_l
 	sta fire_rpt_h
 	sta mg_frame
-	sta muzzle_flash_var
-	sta muzzle_hi_cycle
-	lda #$03				; pistol + chaingun from the start
+	sta wpn_pose
+	lda #$0f
 	sta owned_weapons
 	lda #$ff
-	sta cur_weapon			; force setup
+	sta cur_weapon
 	ldx #WPN_PISTOL
 	jsr switch_weapon
-	; fall through — show immediately
+	; fall through
 show_weapon
 	lda #$ff
 	sta wpn_visible
 	lda spr_en
 	sta $d015
-	; fall through
-.wpn_hi_bright
-	lda muzzle_ms_l
-	ora muzzle_ms_h
-	beq .wh_idle
-	lda muzzle_hi_col
-	bne .wh_apply
-.wh_idle
-	lda #15				; light grey highlight (no sector lighting yet)
-.wh_apply
-	sta $d027
-	ldx cur_weapon
-	cpx #WPN_CHAINGUN
-	bne .wh_rts
-	sta $d028
-.wh_rts
 	rts
 
 hide_weapon
@@ -150,155 +99,271 @@ hide_weapon
 	sta $d015
 	rts
 
-; A = sprite pointer, X = sprite index — both double-buffer matrices
+; A = sprite pointer, Y = sprite index — both double-buffer matrices
 .wpn_ptr
-	sta $43f8,x
-	sta $47f8,x
+	sta $43f8,y
+	sta $47f8,y
 	rts
 
-setup_pistol
-	lda #EIGHT_ENABLE_IDLE
-	jsr .wpn_en
-	lda #$ff
-	sta $d01d
-	sta $d017
+setup_weapon
+	ldx cur_weapon
 	lda #0
 	sta $d01c
 	sta $d010
-	ldx #0
-	ldy #0
-	clc
-.sp_set
-	lda pistol_spr_col,x
-	sta $d027,x
-	cpx #6
-	bcs .sp_xy
-	txa
-	adc #PISTOL_SPR_PTR0
-	jsr .wpn_ptr
-.sp_xy
-	lda pistol_spr_x,x
-	sta $d000,y
-	lda pistol_spr_y,x
-	sta $d001,y
-	iny
-	iny
-	inx
-	cpx #8
-	bcc .sp_set
-	jmp .set_muzzle_ptrs
-
-setup_chaingun
-	lda #0
-	sta mg_frame
-	lda #EIGHT_ENABLE_IDLE
-	jsr .wpn_en
 	lda #$ff
 	sta $d01d
 	sta $d017
-	lda #0
-	sta $d01c
-	sta $d010
-	ldx #0
-	ldy #0
-	clc
-.sm_set
-	lda chaingun_spr_col,x
-	sta $d027,x
-	cpx #6
-	bcs .sm_xy
-	txa
-	adc #MINIGUN_SPR_PTR0
-	jsr .wpn_ptr
-.sm_xy
-	lda chaingun_spr_x,x
-	sta $d000,y
-	lda chaingun_spr_y,x
-	sta $d001,y
-	iny
-	iny
-	inx
-	cpx #8
-	bcc .sm_set
-	jmp .set_muzzle_ptrs
 
-.set_muzzle_ptrs
-	lda muzzle_flash_var
-	and #1
+	lda wpn_body_ptr0,x
+	sta tmp0
+	lda wpn_nbody,x
+	sta tmp1
+	ldy #0
+.su_ptr
+	tya
+	clc
+	adc tmp0
+	jsr .wpn_ptr
+	iny
+	cpy tmp1
+	bcc .su_ptr
+
+	lda cur_weapon
+	asl
+	asl
+	asl
+	sta tmp2
+	ldy #0
+.su_col
+	tya
+	clc
+	adc tmp2
+	tax
+	lda wpn_spr_col,x
+	sta $d027,y
+	iny
+	cpy tmp1
+	bcc .su_col
+
+	ldx cur_weapon
+	lda wpn_nflash,x
+	beq .su_pose
+	lda wpn_nbody,x
+	tay
+	lda #1
+	sta $d027,y
+	iny
+	lda wpn_nflash,x
+	sec
+	sbc #1
+	beq .su_fptrs
+	sta tmp0
+	lda #10
+.su_fred
+	sta $d027,y
+	iny
+	dec tmp0
+	bne .su_fred
+.su_fptrs
+	jsr .set_flash_ptrs
+.su_pose
+	jmp apply_pose
+
+.set_flash_ptrs
+	ldx cur_weapon
+	lda wpn_nflash,x
+	beq .sfp_rts
+	sta tmp1
+	lda wpn_nbody,x
+	sta tmp2
+	lda wpn_flash_ptr0,x
+	cpx #WPN_CHAINGUN
+	bne .sfp_base
+	ldy mg_frame
+	beq .sfp_base
+	lda wpn_flash_ptr1,x
+.sfp_base
+	sta tmp0
+	ldy #0
+.sfp_loop
+	tya
+	clc
+	adc tmp0
+	sty tmp3
+	ldy tmp2
+	jsr .wpn_ptr
+	inc tmp2
+	ldy tmp3
+	iny
+	cpy tmp1
+	bcc .sfp_loop
+.sfp_rts
+	rts
+
+apply_pose
+	jsr .apply_xy
+	ldx cur_weapon
+	lda wpn_pose
+	cmp #POSE_FIRE
+	bne .ap_body
+	lda wpn_nflash,x
+	beq .ap_body
+	lda wpn_en_fire,x
+	jmp .wpn_en
+.ap_body
+	lda wpn_en_body,x
+	jmp .wpn_en
+
+.apply_xy
+	lda cur_weapon
 	asl
 	clc
-	adc #MUZZLE_FLASH_PTR0
-	ldx #6
-	jsr .wpn_ptr
+	adc cur_weapon
 	clc
-	adc #1
-	ldx #7
-	jmp .wpn_ptr
+	adc wpn_pose
+	tay
+	lda wpn_pose_dx,y
+	sta tmp0
+	lda wpn_pose_dy,y
+	sta tmp1
+	ldx cur_weapon
+	lda wpn_nbody,x
+	sta tmp3
+	lda cur_weapon
+	asl
+	asl
+	asl
+	sta tmp2
+	ldy #0
+.axy_body
+	tya
+	asl
+	tax
+	sty tmp4
+	tya
+	clc
+	adc tmp2
+	tay
+	lda wpn_spr_x,y
+	clc
+	adc tmp0
+	sta $d000,x
+	lda wpn_spr_y,y
+	clc
+	adc tmp1
+	sta $d001,x
+	ldy tmp4
+	iny
+	cpy tmp3
+	bcc .axy_body
 
-; Chaingun body A/B → VIC 0 (upper), 2–3 (grey L/R). Shared 1/4/5 unchanged.
-.set_chaingun_frame_ptrs
+	ldx cur_weapon
+	lda wpn_nflash,x
+	beq .axy_rts
+	sta tmp3
+	lda wpn_nbody,x
+	sta tmp5
+	lda cur_weapon
+	asl
+	asl
+	asl
+	sta tmp2
+	cpx #WPN_CHAINGUN
+	bne .axy_flash
 	lda mg_frame
-	bne .smfp_b
-	lda #MINIGUN_SPR_PTR0
-	ldx #0
-	jsr .wpn_ptr
-	lda #MINIGUN_SPR_PTR0 + 2
-	ldx #2
-	jsr .wpn_ptr
-	lda #MINIGUN_SPR_PTR0 + 3
-	ldx #3
-	jmp .wpn_ptr
-.smfp_b
-	lda #MINIGUN_B_SPR_PTR0
-	ldx #0
-	jsr .wpn_ptr
-	lda #MINIGUN_B_SPR_PTR0 + 1
-	ldx #2
-	jsr .wpn_ptr
-	lda #MINIGUN_B_SPR_PTR0 + 2
-	ldx #3
-	jmp .wpn_ptr
+	beq .axy_flash
+	clc
+	lda tmp2
+	adc #4
+	sta tmp2
+.axy_flash
+	ldy #0
+.axy_floop
+	tya
+	clc
+	adc tmp5
+	asl
+	tax
+	sty tmp4
+	tya
+	clc
+	adc tmp2
+	tay
+	lda wpn_flash_x,y
+	clc
+	adc tmp0
+	sta $d000,x
+	lda wpn_flash_y,y
+	clc
+	adc tmp1
+	sta $d001,x
+	ldy tmp4
+	iny
+	cpy tmp3
+	bcc .axy_floop
+.axy_rts
+	rts
 
 .fire_shot
+	lda #POSE_FIRE
+	sta wpn_pose
 	lda #<MUZZLE_MS
 	sta muzzle_ms_l
 	lda #>MUZZLE_MS
 	sta muzzle_ms_h
-	jsr .set_muzzle_ptrs
-	inc muzzle_flash_var
+	jsr .set_flash_ptrs
+	jsr apply_pose
 	ldx cur_weapon
 	cpx #WPN_CHAINGUN
-	bne .fs_flash_en
+	bne .fs_snd
 	lda mg_frame
 	eor #1
 	sta mg_frame
-	jsr .set_chaingun_frame_ptrs
-.fs_flash_en
-	lda spr_en
-	ora #FLASH_ENABLE
-	jsr .wpn_en
-	inc muzzle_hi_cycle
-	lda muzzle_hi_cycle
-	and #3
-	tax
-	lda muzzle_hi_cols,x
-	sta muzzle_hi_col
-	jsr .wpn_hi_bright
-	lda cur_weapon
-	beq .fs_pistol
-	lda #SOUND_ATKMACHINEGUN
-	bne .fs_snd
-.fs_pistol
-	lda #SOUND_ATKPISTOL
 .fs_snd
+	ldx cur_weapon
+	lda wpn_sound,x
 	jsr play_sound
+	lda cur_weapon
+	beq .fs_rts
 	jmp gun_attack
+.fs_rts
+	rts
 
-; Per frame after render: muzzle timeout + fire while SPACE held + weapon keys.
+.muzzle_expired
+	lda #0
+	sta muzzle_ms_l
+	sta muzzle_ms_h
+	lda wpn_pose
+	cmp #POSE_FIRE
+	bne .me_idle
+	lda cur_weapon
+	beq .me_idle
+	lda #POSE_RECOIL
+	sta wpn_pose
+	lda #<RECOIL_MS
+	sta muzzle_ms_l
+	lda #>RECOIL_MS
+	sta muzzle_ms_h
+	jmp apply_pose
+.me_idle
+	lda #POSE_IDLE
+	sta wpn_pose
+	jmp apply_pose
+
 update_weapon
+	lda key_wpn_knife
+	beq .uw_pis
+	ldx #WPN_KNIFE
+	jsr switch_weapon
+.uw_pis
 	lda key_wpn_pistol
-	beq .uw_cg
+	beq .uw_mg
 	ldx #WPN_PISTOL
+	jsr switch_weapon
+.uw_mg
+	lda key_wpn_mg
+	beq .uw_cg
+	ldx #WPN_MG
 	jsr switch_weapon
 .uw_cg
 	lda key_wpn_chaingun
@@ -321,11 +386,7 @@ update_weapon
 	ora muzzle_ms_l
 	bne .uw_keys
 .uw_expired
-	lda #0
-	sta muzzle_ms_l
-	sta muzzle_ms_h
-	jsr wpn_setup
-	jsr .wpn_hi_bright
+	jsr .muzzle_expired
 
 .uw_keys
 	lda key_fire
@@ -353,13 +414,12 @@ update_weapon
 	lda #0
 	sta fire_rpt_l
 	sta fire_rpt_h
-	lda cur_weapon
-	cmp #WPN_CHAINGUN
+	lda wpn_pose
+	cmp #POSE_FIRE
 	bne .uw_up_rts
-	lda mg_frame
-	beq .uw_up_rts
-	lda #0
-	sta mg_frame
-	jsr .set_chaingun_frame_ptrs
+	lda muzzle_ms_l
+	ora muzzle_ms_h
+	bne .uw_up_rts
+	jmp .muzzle_expired
 .uw_up_rts
 	rts

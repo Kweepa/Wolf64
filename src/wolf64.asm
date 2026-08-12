@@ -14,10 +14,11 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $0400  tables.asm (disk: tab)
 ; $0801  disposable boot → low BSS overlay (col_* / LoadPrg scrap)
 ; $0900  locode — game code, no enemy modules (disk: locode)
+; $3800  Judd SQTAB (disk: sqt; 2K in locode–screen gap)
 ; $4000  VIC screen A / B ($4400)
 ; $4800  textures (disk: tex)
-; $5000  weapon sprites; $54C0–$57FF reserved for two more weapons (disk: wpn)
-; $5800  Judd SQTAB (disk: sqt)
+; $5000  weapon HUD sprites (disk: wpn; ends at ITEM_SPRITES)
+; $5880  item HUD sprites (reserved; to bitmap $6000)
 ; $6000  bitmap (8K, runtime fill)
 ; $8000  wall painters only (disk: paint)
 ; $B8F2  PC SFX (disk: sfx)
@@ -285,8 +286,8 @@ prof_cy
 }
 
 end_locode = *
-!if end_locode > SCREEN {
-	!error "Locode overlaps SCREEN at $4000; end=$", end_locode
+!if end_locode > SQTAB1 {
+	!error "Locode overlaps SQTAB1; end=$", end_locode
 }
 
 ; =========================================================================
@@ -297,17 +298,13 @@ end_locode = *
 end_tex = *
 
 ; =========================================================================
-; wpn — current weapon sprites only ($54C0–$57FF reserved for two more)
+; wpn — knife/pistol/MG/chaingun HUD sprites
 ; =========================================================================
-*= PISTOL_SPRITES
-!source "weapons/pistol_sprites.asm"
-*= MINIGUN_B_SPRITES
-!source "weapons/minigun_weapon.asm"
-*= MUZZLE_FLASH_SPRITES
-!source "weapons/muzzle_flash.asm"
+*= WPN_SPRITES
+!source "weapons/wpn_data.asm"
 end_wpn = *
-!if end_wpn > WPN_SPRITE_RESERVE {
-	!error "Weapon sprites enter reserve at $54C0; end=$", end_wpn
+!if end_wpn > ITEM_SPRITES {
+	!error "Weapon sprites overlap ITEM_SPRITES; end=$", end_wpn
 }
 
 ; =========================================================================

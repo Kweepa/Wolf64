@@ -26,7 +26,7 @@ SEGMENTS = [
 	("tab", "TABLES", "end_tab"),
 	("locode", "LOCODE_BASE", "end_locode"),
 	("tex", "TEXTURES", "end_tex"),
-	("wpn", "PISTOL_SPRITES", "end_wpn"),
+	("wpn", "WPN_SPRITES", "end_wpn"),
 	("paint", "PAINTERS", "end_paint"),
 	("sfx", "SFX_BASE", "end_sfx"),
 	("enemy", "ENEMY_BASE", "end_enemy"),
@@ -101,7 +101,7 @@ def main() -> None:
 	ap.add_argument("--out", default="wolf64.d64")
 	ap.add_argument("--image", default="game_image.prg", help="fat ACME CBM image")
 	ap.add_argument("--boot", default="boot.prg")
-	ap.add_argument("--sqtab", default="sqtab.prg", help="prebuilt Judd tables @ $5800")
+	ap.add_argument("--sqtab", default="sqtab.prg", help="prebuilt Judd tables @ $3800")
 	ap.add_argument("--labels", default="wolf64.lbl")
 	ap.add_argument("--maps", default="maps")
 	ap.add_argument("--all-maps", action="store_true", help="include all Wolf1 maps")
@@ -133,7 +133,7 @@ def main() -> None:
 		"end_locode",
 		"TEXTURES",
 		"end_tex",
-		"PISTOL_SPRITES",
+		"WPN_SPRITES",
 		"end_wpn",
 		"PAINTERS",
 		"end_paint",
@@ -178,16 +178,16 @@ def main() -> None:
 			print(f"sqtab too short: {sqtab_path}", file=sys.stderr)
 			sys.exit(1)
 		sq_load = struct.unpack_from("<H", sq_raw)[0]
-		if sq_load != 0x5800:
+		if sq_load != 0x3800:
 			print(
-				f"sqtab load ${sq_load:04X} != $5800 ({sqtab_path})",
+				f"sqtab load ${sq_load:04X} != $3800 ({sqtab_path})",
 				file=sys.stderr,
 			)
 			sys.exit(1)
 		sq_out = tmp_dir / "sqt"
 		sq_out.write_bytes(sq_raw)
 		staged.append(("sqt", sq_out))
-		print(f"  sqt: $5800-$5FFF ({len(sq_raw) - 2} bytes from {sqtab_path})")
+		print(f"  sqt: $3800-$3FFF ({len(sq_raw) - 2} bytes from {sqtab_path})")
 
 		map_list = MAP_FILES if args.all_maps else [MAP_FILES[0]]
 		for dos_name, fname in map_list:

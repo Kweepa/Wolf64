@@ -24,6 +24,7 @@ SOUND_SCHUTZAD	= 16
 SOUND_AHHHG	= 17
 SOUND_NAZIFIRE	= 18
 SOUND_SSFIRE	= 19
+SOUND_ATKKNIFE	= 20
 
 pc_hitwall
 	!byte 3, 131, 142, 134
@@ -79,11 +80,13 @@ pc_nazifire
 pc_ssfire
 	!byte 22, 0, 0, 51, 41, 32, 0, 52, 42, 0, 59, 54, 45, 52, 31, 0
 	!byte 0, 0, 0, 49, 49, 38, 72
+pc_atkknife
+	!byte 14, 84, 17, 62, 71, 75, 90, 104, 121, 106, 149, 130, 138, 156, 154
 
-; unique sound payload 360 bytes
+; unique sound payload 375 bytes
 sound_priorities
 	!byte 1, 99, 50, 50, 90, 20, 20, 50, 50, 50, 50, 50, 50, 50, 20, 50
-	!byte 50, 50, 50, 50
+	!byte 50, 50, 50, 50, 49
 
 sound_table
 	!word pc_hitwall
@@ -106,3 +109,4 @@ sound_table
 	!word pc_ahhhg
 	!word pc_nazifire
 	!word pc_ssfire
+	!word pc_atkknife

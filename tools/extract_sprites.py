@@ -17,6 +17,11 @@ Per-frame PNGs are not written (C64 pipeline uses sheets only).
 
 --dogs / --ss / --hans: enemy sheets into textures/{dogs,ss,hans}/ (1:1, 8-col).
 
+--weapons: first-person knife/pistol/machinegun/chaingun (20 frames) into
+  textures/weapons/:
+
+  weapons_sheet.png                   5×4 atlas (64px cells, ready+atk×4)
+
 Per-frame PNGs are not written (sheet only).
 
 Sprite indices follow WL_DEF.H (SPR_DEMO, SPR_DEATHCAM, STAT_0..47, then actors).
@@ -196,6 +201,31 @@ for name in (
     HANS_SPRITES.append((name, _i))
     _i += 1
 
+# First-person weapons: after BJ (non-Spear). Ready + 4 attack frames each.
+# Hans(11)+Schabb(14)+Fake(13)+Mecha(11)+Hitler(15)+Gift(10)+Rocket(15)
+# +Gretel(11)+Fat(12)+BJ(8) → SPR_KNIFEREADY = 416.
+SPR_KNIFEREADY = (
+    SPR_BOSS_W1
+    + 11  # hans
+    + 14  # schabbs + hypos
+    + 13  # fake hitler
+    + 11  # mecha
+    + 15  # hitler
+    + 10  # giftmacher
+    + 15  # rocket/smoke/boom
+    + 11  # gretel
+    + 12  # fat face
+    + 8  # bj
+)  # 416
+WEAPON_SPRITES: list[tuple[str, int]] = []
+_i = SPR_KNIFEREADY
+for weapon in ("knife", "pistol", "machinegun", "chaingun"):
+    WEAPON_SPRITES.append((f"{weapon}_ready", _i))
+    _i += 1
+    for atk in range(1, 5):
+        WEAPON_SPRITES.append((f"{weapon}_atk_{atk}", _i))
+        _i += 1
+
 
 def read_sprite_chunk(
     data: bytes, offsets: list[int], lengths: list[int], sprite_start: int, index: int
@@ -359,6 +389,13 @@ def extract_hans(shareware: Path, out_dir: Path, *, scale: int = 1) -> int:
     return len(images)
 
 
+def extract_weapons(shareware: Path, out_dir: Path, *, scale: int = 1) -> int:
+    """SPR_KNIFEREADY..SPR_CHAINATK4 → 5×4 weapons_sheet.png (cols = frames)."""
+    images = extract_named(shareware, out_dir, WEAPON_SPRITES, write_individuals=False)
+    write_sheet(images, out_dir / "weapons_sheet.png", cols=5, scale=scale)
+    return len(images)
+
+
 def main(argv: list[str]) -> int:
     root = Path(__file__).resolve().parents[1]
     ap = argparse.ArgumentParser(description=__doc__)
@@ -395,6 +432,11 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="extract episode 1 boss (Hans) as hans_sheet.png (11 sprites, 8×2)",
     )
+    mode.add_argument(
+        "--weapons",
+        action="store_true",
+        help="extract first-person weapons as weapons_sheet.png (20 sprites, 5×4)",
+    )
     ap.add_argument(
         "--scale",
         type=int,
@@ -419,6 +461,9 @@ def main(argv: list[str]) -> int:
     elif args.hans:
         out = args.out or (root / "textures" / "hans")
         n = extract_hans(args.shareware, out, scale=args.scale)
+    elif args.weapons:
+        out = args.out or (root / "textures" / "weapons")
+        n = extract_weapons(args.shareware, out, scale=args.scale)
     else:
         out = args.out or (root / "textures" / "guards")
         n = extract_guards(args.shareware, out, scale=args.scale)

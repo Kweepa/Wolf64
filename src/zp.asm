@@ -129,7 +129,7 @@ e_col_h		= $81
 e_abs2_l	= $82
 e_abs2_h	= $83
 
-; Weapons (SquareDoom-style HUD sprites)
+; Weapons (HUD sprites)
 key_fire		= $84		; 1 = SPACE held
 spr_en			= $85		; mirror of $d015 (write-only)
 fire_rpt_l		= $86
@@ -138,17 +138,20 @@ muzzle_ms_l		= $88
 muzzle_ms_h		= $89
 wpn_fire_ms_l		= $8a
 wpn_fire_ms_h		= $8b
-cur_weapon		= $8c		; 0=pistol 1=chaingun
-owned_weapons		= $8d		; bit0 pistol, bit1 chaingun
+cur_weapon		= $8c		; 0=knife 1=pistol 2=mg 3=chaingun
+owned_weapons		= $8d		; bit0 knife .. bit3 chaingun
 wpn_visible		= $8e
-mg_frame		= $8f		; chaingun A/B body
-muzzle_flash_var	= $90
-muzzle_hi_cycle		= $91
+mg_frame		= $8f		; chaingun flash A/B
+wpn_pose		= $90		; 0 idle 1 fire 2 recoil
 in_fire			= $92		; IRQ OR-latch
-in_wpn_pistol		= $93
-in_wpn_chaingun		= $94
-key_wpn_pistol		= $95
-key_wpn_chaingun	= $96
+in_wpn_knife		= $93
+in_wpn_pistol		= $94
+in_wpn_mg		= $95
+in_wpn_chaingun		= $96
+key_wpn_knife		= $9f
+key_wpn_pistol		= $a0
+key_wpn_mg		= $a1
+key_wpn_chaingun	= $a2
 
 ; PC-speaker SFX (IRQ update_sfx / play_sound)
 sound_index		= $9c			; $ff = idle

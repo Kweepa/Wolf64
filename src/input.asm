@@ -22,7 +22,9 @@ input_irq_init
 	sta in_strafel
 	sta in_strafer
 	sta in_fire
+	sta in_wpn_knife
 	sta in_wpn_pistol
+	sta in_wpn_mg
 	sta in_wpn_chaingun
 	sta turn_acc_l
 	sta turn_acc_h
@@ -103,7 +105,7 @@ input_irq
 	sta in_turn_r
 .irq_nol
 
-	; W / A / S / 4 on PA1 = $FD
+	; W / A / S / 3 / 4 on PA1 = $FD
 	lda #$fd
 	sta $dc00
 	lda $dc01
@@ -129,7 +131,13 @@ input_irq
 	sta in_strafel
 .irq_noa
 	txa
-	and #$08				; 4 = chaingun (1/3 reserved knife/rifle)
+	and #$01				; 3 = machinegun
+	bne .irq_no3
+	lda #1
+	sta in_wpn_mg
+.irq_no3
+	txa
+	and #$08				; 4 = chaingun
 	bne .irq_no4
 	lda #1
 	sta in_wpn_chaingun
@@ -146,11 +154,17 @@ input_irq
 	sta in_strafer
 .irq_nod
 
-	; 2 / SPACE on PA7 = $7F
+	; 1 / 2 / SPACE on PA7 = $7F
 	lda #$7f
 	sta $dc00
 	lda $dc01
 	tax
+	and #$01				; 1 = knife
+	bne .irq_no1
+	lda #1
+	sta in_wpn_knife
+.irq_no1
+	txa
 	and #$08				; 2 = pistol
 	bne .irq_no2
 	lda #1
@@ -205,8 +219,12 @@ read_input
 	pha
 	lda in_fire
 	sta key_fire
+	lda in_wpn_knife
+	sta key_wpn_knife
 	lda in_wpn_pistol
 	sta key_wpn_pistol
+	lda in_wpn_mg
+	sta key_wpn_mg
 	lda in_wpn_chaingun
 	sta key_wpn_chaingun
 	lda #0
@@ -217,7 +235,9 @@ read_input
 	sta in_strafel
 	sta in_strafer
 	sta in_fire
+	sta in_wpn_knife
 	sta in_wpn_pistol
+	sta in_wpn_mg
 	sta in_wpn_chaingun
 	cli
 

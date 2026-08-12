@@ -128,6 +128,7 @@ main_loop
 	jsr update_weapon
 .ml_nower
 	jsr ui_update
+	jsr player_border_tick		; needs I/O ($d020)
 	lda #$34
 	sta $01
 	jsr prof_frame_sample
@@ -176,6 +177,8 @@ death_ms_l
 !byte 0
 death_ms_h
 !byte 0
+hurt_flash
+!byte 0				; 1=red this frame, 2=clear next (player_border_tick)
 ui_dirty
 !byte 0
 level_want

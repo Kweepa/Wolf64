@@ -216,6 +216,7 @@ probe_solid
 	rts
 
 ; A = damage — subtract from player_hp, floor at 0 (Wolf TakeDamage lite)
+; Queues one-frame red border (applied in player_border_tick with I/O in).
 take_damage
 	ldx player_dead
 	bne .td_rts
@@ -241,43 +242,64 @@ take_damage
 	lda #SOUND_PLAYERDEATH
 	jmp play_sound
 .td_hurt
+	lda #1
+	sta hurt_flash
 	lda #SOUND_TAKEDAMAGE
 	jmp play_sound
 .td_rts
 	rts
 
-; Once per game — lives/score/ammo/keys/weapons
+; Red $d020 while dead, or for one frame after hurt. Call with $01=$35.
+; hurt_flash: 1 = paint red (→2), 2 = restore black (→0). Idle leaves border alone.
+player_border_tick
+	lda player_dead
+	bne .pbt_red
+	lda hurt_flash
+	beq .pbt_rts
+	cmp #1
+	bne .pbt_clear
+	lda #2
+	sta hurt_flash
+.pbt_red
+	lda #$02
+	sta $d020
+	rts
+.pbt_clear
+	lda #0
+	sta hurt_flash
+	sta $d020
+.pbt_rts
+	rts
+
+; Once per game — lives/score/ammo/weapons; falls into player_init_level
 player_init_game
 	lda #START_LIVES
 	sta player_lives
 	lda #0
 	sta player_score_l
 	sta player_score_h
-	sta player_keys
-	sta player_dead
-	sta death_ms_l
-	sta death_ms_h
-	sta level_want
 	lda #START_AMMO
 	sta player_ammo
-	lda #HP_MAX
-	sta player_hp
 	lda #$03				; knife + pistol
 	sta owned_weapons
-	lda #UI_DIRTY_ALL
-	sta ui_dirty
-	rts
+	; fall through — full HP, clear keys/death, dirty UI
 
 ; After death restart — full HP, clear keys; keep ammo/weapons/score/lives
 player_init_level
 	lda #0
-	sta player_dead
-	sta death_ms_l
-	sta death_ms_h
-	sta player_keys
 	sta level_want
 	lda #HP_MAX
 	sta player_hp
+	; fall through
+
+; Clear keys/death flash; mark full UI dirty (keeps HP/ammo/weapons/score)
+player_reset_status
+	lda #0
+	sta player_keys
+	sta player_dead
+	sta death_ms_l
+	sta death_ms_h
+	sta hurt_flash
 	lda #UI_DIRTY_ALL
 	sta ui_dirty
 	rts
@@ -387,7 +409,7 @@ handle_level_want
 	cli
 	rts
 
-; Bump episode map index; clear keys; keep HP/ammo/weapons
+; Bump episode map index; clear keys/death; keep HP/ammo/weapons
 advance_level
 	ldx level_num
 	inx
@@ -396,11 +418,4 @@ advance_level
 	ldx #1
 .al_set
 	stx level_num
-	lda #0
-	sta player_keys
-	sta player_dead
-	sta death_ms_l
-	sta death_ms_h
-	lda #UI_DIRTY_ALL
-	sta ui_dirty
-	rts
+	jmp player_reset_status

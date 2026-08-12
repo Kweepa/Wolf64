@@ -164,42 +164,31 @@ enemies_update
 	bne .eu_active
 	jmp .eu_next
 .eu_active
-	; pain / dying / dead always tick; bite too (melee must finish)
+	; ALIVE/CHASE/SHOOT: THINK_DIST gate; bite+/pain/dying/dead always run
 	lda enemy_state,x
 	cmp #ES_BITE
-	beq .eu_bite_far
-	cmp #ES_PAIN
-	bcc .eu_may_think		; ALIVE / CHASE / SHOOT
-	beq .eu_pain
-	cmp #ES_DYING
-	beq .eu_dying
-	cmp #ES_DEAD_UNLOOTED
-	bne +
-	jmp .eu_dead_unlooted
-+
-	jmp .eu_next			; ES_DEAD — idle corpse
-.eu_bite_far
-	jmp .eu_bite
-.eu_may_think
-	; ALIVE / CHASE / SHOOT: no AI beyond THINK_DIST
+	bcs .eu_dispatch
 	jsr enemy_tile_dist
 	lda tmp1
 	cmp #THINK_DIST
-	bcc .eu_think
+	bcc .eu_dispatch
 	lda enemy_flags,x
 	and #$ff-EF_MOVING
 	sta enemy_flags,x
 	jmp .eu_next
-.eu_think
-	lda enemy_state,x
-	bne +
-	jmp .eu_alive			; ES_ALIVE
-+
-	cmp #ES_CHASE
-	bne +
-	jmp .eu_chase
-+
-	jmp .eu_shoot			; ES_SHOOT
+.eu_dispatch
+	ldy enemy_state,x
+	lda eu_state_lo,y
+	sta .eu_j+1
+	lda eu_state_hi,y
+	sta .eu_j+2
+.eu_j	jmp $0000			; SMC → handler
+eu_state_lo
+	!byte <.eu_alive, <.eu_chase, <.eu_shoot, <.eu_bite
+	!byte <.eu_pain, <.eu_dying, <.eu_dead_unlooted, <.eu_next
+eu_state_hi
+	!byte >.eu_alive, >.eu_chase, >.eu_shoot, >.eu_bite
+	!byte >.eu_pain, >.eu_dying, >.eu_dead_unlooted, >.eu_next
 .eu_pain
 	lda enemy_state_t,x
 	sec

@@ -31,9 +31,10 @@ SOUND_GETAMMO	= 23
 SOUND_HEALTH1	= 24
 SOUND_HEALTH2	= 25
 SOUND_LEVELDONE	= 26
-SOUND_MOVEGUN2	= 27
-SOUND_MOVEGUN1	= 28
-SOUND_ESCPRESSED	= 29
+SOUND_PUSHWALL	= 27
+SOUND_MOVEGUN2	= 28
+SOUND_MOVEGUN1	= 29
+SOUND_ESCPRESSED	= 30
 
 pc_hitwall
 	!byte 3, 131, 142, 134
@@ -108,6 +109,9 @@ pc_health2
 	!byte 0, 0, 29, 29, 0, 0, 0, 25, 25, 25, 0, 0, 19, 19, 19
 pc_leveldone
 	!byte 14, 146, 146, 146, 145, 144, 141, 138, 135, 131, 0, 0, 0, 0, 23
+pc_pushwall
+	!byte 28, 0, 0, 0, 156, 0, 0, 0, 0, 0, 0, 0, 157, 0, 0, 0
+	!byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 155
 pc_movegun2
 	!byte 2, 142, 148
 pc_movegun1
@@ -115,10 +119,10 @@ pc_movegun1
 pc_escpressed
 	!byte 8, 153, 130, 113, 95, 78, 55, 45, 32
 
-; unique sound payload 546 bytes
+; unique sound payload 575 bytes
 sound_priorities
 	!byte 1, 99, 50, 50, 90, 20, 20, 50, 50, 50, 50, 50, 50, 50, 20, 50
-	!byte 50, 50, 50, 50, 49, 90, 80, 80, 85, 85, 99, 1, 1, 10
+	!byte 50, 50, 50, 50, 49, 90, 80, 80, 85, 85, 99, 50, 1, 1, 10
 
 sound_table
 	!word pc_hitwall
@@ -148,6 +152,7 @@ sound_table
 	!word pc_health1
 	!word pc_health2
 	!word pc_leveldone
+	!word pc_pushwall
 	!word pc_movegun2
 	!word pc_movegun1
 	!word pc_escpressed

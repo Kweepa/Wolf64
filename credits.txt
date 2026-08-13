@@ -1,14 +1,13 @@
-Wolfenstein 3d is a trademark of
-ID Software LLC/Zenimax Media Inc.
+^Wolfenstein 3d^ is a trademark of
+^ID Software^ LLC/^Zenimax^ Media Inc.
 Unofficial C64 fan port created
-by Steve McCrea in 2026.
+by ^Steve McCrea^ in 2026.
 Not affiliated with or endorsed
 by ID Software or Zenimax.
 For non-commercial/fan use only.
 
-Wolfenstein 3d was created by
-John Carmack, John Romero,
-Adrian Carmack, Tom Hall,
-Kevin Cloud, Bobby Prince,
-Jay Wilbur, and Jason
-Blochowiak.
+^Wolfenstein 3d^ was created by
+^John Carmack^, ^John Romero^,
+^Adrian Carmack^, ^Tom Hall^,
+^Kevin Cloud^, ^Bobby Prince^,
+^Jay Wilbur^, and ^Jason Blochowiak^.

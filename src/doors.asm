@@ -9,6 +9,7 @@ T_DOOR_MIN	= 15
 T_DOOR_MAX	= 16				; inclusive
 T_LOCKED_DOOR	= 16
 T_FLOOR		= 17
+; T_PUSHWALL from mem.asm
 TEX_DOOR	= 11
 TEX_LOCKED	= 12
 TEX_JAMB	= 15
@@ -186,13 +187,17 @@ door_poke_map
 
 ; --- open / update ----------------------------------------------------------
 
-; mapx,mapy = cell bumped; open unlocked doors if a free (or matching) slot exists
+; mapx,mapy = cell bumped; pushwalls, elevators, then doors
 try_open_door
 	lda mapx
 	sta tmp0
 	lda mapy
 	sta tmp1
 	jsr door_tile_at
+	cmp #T_PUSHWALL
+	bne .tod_elev
+	jmp try_push_wall
+.tod_elev
 	cmp #T_ELEVATOR
 	bne .tod_door
 	lda #2				; next level

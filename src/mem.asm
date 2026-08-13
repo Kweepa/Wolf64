@@ -77,6 +77,8 @@ UI_BMP_ROW0	= BITMAP
 UI_BMP_ROW1	= BITMAP + 1 * 320
 UI_BMP_ROW3	= BITMAP + 3 * 320
 T_ELEVATOR	= 13
+T_PUSHWALL	= 14
 T_EXIT		= 144
+T_PUSH_TRAJ	= 145				; +0..3 = N,E,S,W
 DEATH_MS	= 120			; frames≈; counted down with dt_ms sum ~2s feel
 LEVEL_MAX	= 9			; 1..8 maps, 9 = boss (e1mb)

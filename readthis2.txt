@@ -1,4 +1,4 @@
-Just a few weeks ago you were on
+^Just a few weeks ago you were on
 a reconnaissance mission of
 extreme importance. You were to
 infiltrate the Nazi fortress and
@@ -11,4 +11,4 @@ the plans are kept, and the
 Allies will face a great defeat
 if you don't escape! You must
 face the horrors of the prison
-keep known as Wolfenstein.
+keep known as Wolfenstein.^

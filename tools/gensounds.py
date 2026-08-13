@@ -43,6 +43,7 @@ CORE = [
     (33, "HEALTH1"),
     (34, "HEALTH2"),
     (40, "LEVELDONE"),
+    (46, "PUSHWALL"),
     # Menu UI (also emitted alone as menu_pcsounds.asm for the boot MENU overlay)
     (4, "MOVEGUN2"),
     (5, "MOVEGUN1"),

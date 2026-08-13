@@ -631,7 +631,7 @@ draw_menu_item
 	jmp print_at
 
 ; A/Y = text blob: body lines\0..., empty\0 ends.
-; Brand bar + dark-blue box; ^text^ = white. Any key returns.
+; Brand bar + dark-blue box; ^text^ = white (spans may cross lines). Any key returns.
 show_text_screen
 	sta txt_ptr_l
 	sty txt_ptr_h
@@ -642,6 +642,8 @@ show_text_screen
 
 	lda #COL_BOX
 	sta cell_bg
+	lda #TEXT_COL
+	sta ui_text_col			; ^ spans persist across lines
 	ldx #0
 .st_l
 	stx tmp4
@@ -1112,12 +1114,10 @@ print_at
 .pa_d
 	rts
 
-; Grey/white via ^; A=col X=row
+; Grey/white via ^; A=col X=row. Leaves ui_text_col so spans can cross lines.
 print_marked
 	sta pr_col
 	stx pr_row
-	lda #TEXT_COL
-	sta ui_text_col
 	ldy #0
 .pm
 	lda (ui_str_l),y

@@ -588,7 +588,7 @@ enemy_patrol_one
 	rts
 
 ; ---------------------------------------------------------------------------
-; Same WALL_MARGIN as player: borrow player coords → push_walls → write back.
+; Borrow player coords → push_walls → write back. Dogs/Hans use WALL_MARGIN_WIDE.
 enemy_push_walls
 	ldx enemy_idx
 	lda playerx_l
@@ -607,6 +607,12 @@ enemy_push_walls
 	sta playery_l
 	lda enemy_yh,x
 	sta playery_h
+	lda enemy_type,x
+	cmp #ET_DOG
+	lda #WALL_MARGIN
+	bcc +
+	lda #WALL_MARGIN_WIDE
++
 	jsr push_walls
 	ldx enemy_idx
 	lda playerx_l
@@ -747,8 +753,8 @@ enemies_draw
 	rts
 
 ; X = enemy — fill vis_depth[vis_i] (wallz) and vis_perp_l/h
-; perp = forward·delta (×4 wallz). depth = max(perp, octagon≈|δ|) so grazing
-; angles can't shrink Z/scale and punch through walls. Screen X / FOV use perp.
+; perp = forward·delta (×4 wallz). Screen X / FOV use vis_perp.
+; vis_depth = perp − SPRITE_Z_BIAS (toward camera) for Z-test + scale + sort.
 enemy_calc_depth
 	stx enemy_idx
 	; dx
@@ -814,22 +820,19 @@ enemy_calc_depth
 	lda e_acc_h
 	sta vis_perp_h,y
 
-	; approx range = max(|dx|,|dy|) + min/2 (octagon, already 8.8)
-	jsr enemy_approx_dist		; → tmp0/tmp1
-	; depth = max(perp, approx) for Z-test + sprite scale
-	lda e_acc_h
-	cmp tmp1
-	bcc .ecd_use_approx
-	bne .ecd_store
+	; vis_depth = perp − SPRITE_Z_BIAS, saturate at 0
 	lda e_acc_l
-	cmp tmp0
-	bcs .ecd_store
-.ecd_use_approx
-	lda tmp0
+	sec
+	sbc #SPRITE_Z_BIAS
 	sta e_acc_l
-	lda tmp1
+	lda e_acc_h
+	sbc #0
 	sta e_acc_h
-	jmp .ecd_store
+	bcs .ecd_store
+	lda #0
+	sta e_acc_l
+	sta e_acc_h
+	beq .ecd_store
 .ecd_far
 	lda #$ff
 	sta e_acc_l
@@ -1528,7 +1531,7 @@ enemy_calc_side
 	sta e_side_h
 	rts
 
-; e_col_cx = 20 - (side_mid * 20) / perp_mid  (true forward depth, not octagon)
+; e_col_cx = 20 - (side_mid * 20) / perp_mid  (unbiased vis_perp, not vis_depth)
 enemy_project_col
 	lda #20
 	sta e_col_cx

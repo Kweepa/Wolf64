@@ -1,8 +1,9 @@
 ; WASD only (no joystick — floating CIA bits cause phantom input)
 !zone player
 
-WALL_MARGIN = $40				; 1/4 tile keep-out from solid faces
-WALL_MARGIN_HI = $100 - WALL_MARGIN	; $C0 — max frac when east/south neighbor solid
+WALL_MARGIN = $40				; 1/4 tile keep-out (player, guard, SS)
+WALL_MARGIN_WIDE = $66			; dogs/Hans ~0.4 tile (wide billboards)
+SPRITE_Z_BIAS = $10				; vis_depth = perp − this (1/16 tile toward camera)
 T_PLAYER	= 49				; +0..3 = N,E,S,W
 
 ; Map tiles 48..51 → player tile + facing (0=E,64=N,128=W,192=S)
@@ -121,11 +122,16 @@ player_move
 	lda tmp3
 	sta playery_h
 .push
+	lda #WALL_MARGIN
 	jmp push_walls
 
-; Keep frac ≥ WALL_MARGIN from each adjacent solid face (SquareDoom push_walls).
-; tmp4/5 = player tile (probe_solid clobbers tmp0/1).
+; A = keep-out frac. tmp2 = lo, tmp3 = $100−A; tmp4/5 = tile (probe_solid clobbers tmp0/1).
 push_walls
+	sta tmp2
+	lda #0
+	sec
+	sbc tmp2
+	sta tmp3
 	lda playerx_h
 	sta tmp4
 	lda playery_h
@@ -141,9 +147,9 @@ push_walls
 	jsr probe_solid
 	beq .pw_east
 	lda playerx_l
-	cmp #WALL_MARGIN
+	cmp tmp2
 	bcs .pw_east
-	lda #WALL_MARGIN
+	lda tmp2
 	sta playerx_l
 
 .pw_east
@@ -156,9 +162,10 @@ push_walls
 	jsr probe_solid
 	beq .pw_north
 	lda playerx_l
-	cmp #WALL_MARGIN_HI + 1		; > $C0 → snap (exact $C0 ok)
+	cmp tmp3
+	beq .pw_north
 	bcc .pw_north
-	lda #WALL_MARGIN_HI
+	lda tmp3
 	sta playerx_l
 
 .pw_north
@@ -172,9 +179,9 @@ push_walls
 	jsr probe_solid
 	beq .pw_south
 	lda playery_l
-	cmp #WALL_MARGIN
+	cmp tmp2
 	bcs .pw_south
-	lda #WALL_MARGIN
+	lda tmp2
 	sta playery_l
 
 .pw_south
@@ -187,9 +194,10 @@ push_walls
 	jsr probe_solid
 	beq .pw_done
 	lda playery_l
-	cmp #WALL_MARGIN_HI + 1		; > $C0 → snap (exact $C0 ok)
+	cmp tmp3
+	beq .pw_done
 	bcc .pw_done
-	lda #WALL_MARGIN_HI
+	lda tmp3
 	sta playery_l
 .pw_done
 	rts

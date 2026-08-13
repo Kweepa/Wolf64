@@ -40,7 +40,7 @@ item_clamp63
 	rts
 
 ; ---------------------------------------------------------------------------
-; X = item — fill vis_depth[vis_i] + vis_perp (mid-tile $80).
+; X = item — fill vis_perp + vis_depth = perp − SPRITE_Z_BIAS (mid-tile $80).
 item_calc_depth
 	stx enemy_idx
 	sec
@@ -101,20 +101,19 @@ item_calc_depth
 	lda e_acc_h
 	sta vis_perp_h,y
 
-	jsr enemy_approx_dist
-	lda e_acc_h
-	cmp tmp1
-	bcc .icd_use_approx
-	bne .icd_store
+	; vis_depth = perp − SPRITE_Z_BIAS, saturate at 0
 	lda e_acc_l
-	cmp tmp0
-	bcs .icd_store
-.icd_use_approx
-	lda tmp0
+	sec
+	sbc #SPRITE_Z_BIAS
 	sta e_acc_l
-	lda tmp1
+	lda e_acc_h
+	sbc #0
 	sta e_acc_h
-	jmp .icd_store
+	bcs .icd_store
+	lda #0
+	sta e_acc_l
+	sta e_acc_h
+	beq .icd_store
 .icd_far
 	lda #$ff
 	sta e_acc_l

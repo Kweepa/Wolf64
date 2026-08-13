@@ -2,8 +2,11 @@
 ; Default $01=$34 (I/O out). Disk loads use $36; chip touch uses $35.
 
 LOADER_BASE	= $0801			; disposable boot, then low BSS overlay
-LOCODE_BASE	= $0900			; resident low code (locode.prg)
+LOCODE_BASE	= $0900			; resident low code (locode.prg); also MENU overlay pre-load
 ; future: HICODE — separate disk PRG for overflow / under-ROM code
+; Survives after boot: reboot stub + menu-owned selectors (BSS ends ≤ REBOOT_STUB)
+REBOOT_STUB	= $08C0			; 3-byte JMP reboot_game (enemy); game over → menu
+difficulty	= $08FF			; menu skill 0..3 (not ZP; trampoline leaves alone)
 
 TABLES		= $0400			; tables.asm (free bank-0 screen RAM)
 SCREEN		= $4000			; video matrix A (1000 bytes)

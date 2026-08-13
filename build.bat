@@ -18,6 +18,10 @@ python tools\gen_sqtab.py
 if errorlevel 1 exit /b 1
 python tools\gen_bss.py
 if errorlevel 1 exit /b 1
+python tools\gen_menufont.py
+if errorlevel 1 exit /b 1
+python tools\gen_menu_text.py
+if errorlevel 1 exit /b 1
 python tools\gen_painters.py
 if errorlevel 1 exit /b 1
 python tools\pack_enemies.py
@@ -48,6 +52,11 @@ if errorlevel 1 (
   popd
   exit /b 1
 )
+"%ACME%" -v3 menu.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
 "%ACME%" -v3 boot.asm
 if errorlevel 1 (
   popd
@@ -57,6 +66,7 @@ popd
 
 if exist src\game_image.prg move /y src\game_image.prg game_image.prg >nul
 if exist src\boot.prg move /y src\boot.prg boot.prg >nul
+if exist src\menu.prg move /y src\menu.prg menu.prg >nul
 if exist src\painters.bin move /y src\painters.bin painters.bin >nul
 
 python tools\mkdisk.py --all-maps
@@ -64,4 +74,4 @@ if errorlevel 1 exit /b 1
 
 echo Built wolf64.d64
 dir wolf64.d64
-dir boot.prg game_image.prg 2>nul
+dir boot.prg menu.prg game_image.prg 2>nul

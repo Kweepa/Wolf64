@@ -107,6 +107,7 @@ def main() -> None:
 	ap.add_argument("--out", default="wolf64.d64")
 	ap.add_argument("--image", default="game_image.prg", help="fat ACME CBM image")
 	ap.add_argument("--boot", default="boot.prg")
+	ap.add_argument("--menu", default="menu.prg", help="pre-locode MENU overlay @ $0900")
 	ap.add_argument("--sqtab", default="sqtab.prg", help="prebuilt Judd tables @ $3800")
 	ap.add_argument("--labels", default="wolf64.lbl")
 	ap.add_argument("--maps", default="maps")
@@ -124,9 +125,10 @@ def main() -> None:
 
 	image_path = Path(args.image)
 	boot_path = Path(args.boot)
+	menu_path = Path(args.menu)
 	sqtab_path = Path(args.sqtab)
 	lbl_path = Path(args.labels)
-	for p in (image_path, boot_path, sqtab_path, lbl_path):
+	for p in (image_path, boot_path, menu_path, sqtab_path, lbl_path):
 		if not p.is_file():
 			print(f"missing: {p}", file=sys.stderr)
 			sys.exit(1)
@@ -243,12 +245,15 @@ def main() -> None:
 			"-write",
 			str(boot_path),
 			"wolf64",
+			"-write",
+			str(menu_path),
+			"menu,p",
 		]
 		for dos_name, path in staged:
 			cmd.extend(["-write", str(path), f"{dos_name},p"])
 		subprocess.check_call(cmd)
 
-	print(f"Wrote {d64} via {c1541} ({len(staged)} files + boot)")
+	print(f"Wrote {d64} via {c1541} ({len(staged)} files + boot + menu)")
 
 
 if __name__ == "__main__":

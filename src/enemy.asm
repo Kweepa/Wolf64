@@ -69,6 +69,36 @@ enemy_gfx_base
 	!byte 0, 35, 0, 0			; EG_GUARD, EG_SS
 
 ; ---------------------------------------------------------------------------
+; Game over → REBOOT_STUB ($08C0) trampolines here. LOAD boot and re-enter menu.
+; (Caller blacks VIC; re-black after IOINIT for the disk load.)
+reboot_game
+	sei
+	lda #$36
+	sta $01
+	ldx #$ff
+	txs
+	jsr $ff84				; IOINIT
+	lda #0
+	sta $d020
+	sta $d021
+	lda #6
+	ldx #< .rg_name
+	ldy #> .rg_name
+	jsr $ffbd				; SETNAM
+	lda #1
+	ldx $ba					; same device as boot load
+	ldy #1
+	jsr $ffba				; SETLFS
+	lda #0
+	jsr $ffd5				; LOAD wolf64
+	bcs .rg_hang
+	jmp $080d				; boot_start
+.rg_hang
+	jmp .rg_hang
+.rg_name
+	!text "WOLF64"
+
+; ---------------------------------------------------------------------------
 ; Deathchase / SquareDoom GetRandom8 — new = 9 * old + 193; A = next rnd
 GetRandom8
 rnd8

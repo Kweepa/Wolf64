@@ -1,5 +1,5 @@
 ; Wolf64 disposable boot — fits LOADER_BASE..LOCODE_BASE-1.
-; ENEMY first → $8000, copy to $C000 ($01=$34), then remaining SA=1 loads.
+; MENU @ $0900 → JSR menu → ENEMY stage + JSR copy_enemy (+3) → file_tab → JMP $0900.
 ; Per file: SETNAM / SETLFS / LOAD / CLOSE only.
 ; File-table index in .xi (KERNAL LOAD clobbers ZP — do not keep ptr in $ae/$af).
 !cpu 6502
@@ -8,6 +8,7 @@
 !source "mem.asm"
 
 ENEMY_STAGING	= PAINTERS			; $8000 — overwritten later by PAINT
+MENU_COPY_ENEMY	= LOCODE_BASE + 3
 
 *= LOADER_BASE
 !byte $0b, $08, $0a, $00, $9e, $32, $30, $36, $31, $00, $00, $00	; SYS 2061
@@ -19,13 +20,31 @@ boot_start
 	jsr $ff84				; IOINIT
 	cli
 
-	; ENEMY → $8000 (SA=0), copy under I/O → $C000
+	; MENU → $0900, run difficulty select
+	lda #4
+	ldx #<name_menu
+	ldy #>name_menu
+	jsr $ffbd
+	lda #1
+	ldx $ba				; device that loaded WOLF64
+	ldy #0
+	jsr $ffba
+	lda #0
+	ldx #<LOCODE_BASE
+	ldy #>LOCODE_BASE
+	jsr $ffd5
+	bcs .fail
+	lda #1
+	jsr $ffc3
+	jsr LOCODE_BASE
+
+	; ENEMY → $8000 (SA=0), copy under I/O → $C000 via MENU+3
 	lda #5
 	ldx #<name_enemy
 	ldy #>name_enemy
 	jsr $ffbd
 	lda #1
-	ldx #8
+	ldx $ba
 	ldy #0
 	jsr $ffba
 	lda #0
@@ -35,7 +54,7 @@ boot_start
 	bcs .fail
 	lda #1
 	jsr $ffc3
-	jsr copy_enemy
+	jsr MENU_COPY_ENEMY
 
 	ldx #0
 .next
@@ -74,7 +93,7 @@ boot_start
 load_sa1
 	jsr $ffbd
 	lda #1
-	ldx #8
+	ldx $ba
 	ldy #1
 	jsr $ffba
 	lda #0
@@ -83,34 +102,6 @@ load_sa1
 	lda #1
 	jsr $ffc3
 	plp
-	rts
-
-; ENEMY gap → $C000 (I/O out). SMC abs,x; round up to whole pages
-; (map not loaded yet — overcopy into $EFxx is fine).
-ENEMY_COPY_PAGES = (MAP - ENEMY_BASE + 255) / 256
-
-copy_enemy
-	sei
-	lda #$34
-	sta $01
-	lda #>ENEMY_STAGING
-	sta .s + 2
-	lda #>ENEMY_BASE
-	sta .d + 2
-	ldx #0
-	ldy #ENEMY_COPY_PAGES
-.pg
-.s	lda ENEMY_STAGING,x
-.d	sta ENEMY_BASE,x
-	inx
-	bne .pg
-	inc .s + 2
-	inc .d + 2
-	dey
-	bne .pg
-	lda #$36
-	sta $01
-	cli
 	rts
 
 .len	!byte 0
@@ -141,6 +132,8 @@ file_tab
 	!text "COL"
 	!byte 0
 
+name_menu
+	!text "MENU"
 name_enemy
 	!text "ENEMY"
 

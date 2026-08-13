@@ -304,7 +304,7 @@ player_reset_status
 	sta ui_dirty
 	rts
 
-; Countdown while dead; then lives-- and request restart
+; Countdown while dead; lives left → restart level; else blackout → menu
 player_death_tick
 	lda death_ms_l
 	ora death_ms_h
@@ -321,20 +321,20 @@ player_death_tick
 	sta death_ms_l
 	sta death_ms_h
 .pdt_go
-	lda player_lives
-	beq .pdt_newgame
 	dec player_lives
-	lda #UI_DIRTY_LIVES
-	ora ui_dirty
-	sta ui_dirty
-	lda #1				; restart
+	beq .pdt_over
+	lda #1					; restart same level (UI_DIRTY_ALL on init)
 	sta level_want
 .pdt_rts
 	rts
-.pdt_newgame
-	lda #3				; out of lives — fresh game
-	sta level_want
-	rts
+.pdt_over
+	lda #$35
+	sta $01
+	lda #0
+	sta $d020
+	sta $d021
+	sta $d015
+	jmp REBOOT_STUB
 
 ; Walk-on exit tile 144
 player_check_exit

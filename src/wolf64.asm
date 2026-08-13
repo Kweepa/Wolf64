@@ -13,7 +13,9 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; --- memory map -----------------------------------------------------------
 ; $0400  tables.asm (disk: tab)
 ; $0801  disposable boot → low BSS overlay (col_* / LoadPrg scrap)
-; $0900  locode — game code, no enemy modules (disk: locode)
+; $08C0  reboot stub (installed at locode_entry); $08FF difficulty
+; $0900  locode — game code, no enemy modules (disk: locode); MENU overlay pre-load
+;        col_wallz_h / col_enemy live after end_sfx (not on boot page)
 ; $3800  Judd SQTAB (disk: sqt; 2K in locode–screen gap)
 ; $4000  VIC screen A / B ($4400) (disk: scr)
 ; $4800  textures (disk: tex)
@@ -46,6 +48,7 @@ end_tab = *
 
 ; Boot jumps here after LOADing locode + assets (map still on disk)
 locode_entry
+	jsr install_reboot_stub
 	lda #0
 	sta episode
 	sta load_in_play
@@ -59,6 +62,16 @@ locode_entry
 	sta $01
 .le_hang
 	jmp .le_hang
+
+; 3-byte trampoline at REBOOT_STUB → reboot_game (in enemy block; keeps locode under SQTAB)
+install_reboot_stub
+	lda #$4c
+	sta REBOOT_STUB
+	lda #<reboot_game
+	sta REBOOT_STUB+1
+	lda #>reboot_game
+	sta REBOOT_STUB+2
+	rts
 
 game_start
 	sei
@@ -419,8 +432,11 @@ end_sfx = *
 	!error "SFX overlaps ENEMY_BASE; end=$", end_sfx
 }
 
+; Column depth/hit buffers relocated off boot page (room for REBOOT_STUB)
+col_wallz_h	= end_sfx
+col_enemy	= col_wallz_h + 40
 ; Item SoA — runtime BSS in SFX→enemy gap (not loaded from disk)
-item_x		= end_sfx
+item_x		= col_enemy + 40
 item_y		= item_x + MAX_ITEMS
 item_frm	= item_y + MAX_ITEMS
 item_flags	= item_frm + MAX_ITEMS

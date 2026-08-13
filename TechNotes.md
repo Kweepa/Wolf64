@@ -42,27 +42,38 @@ SID writes, so gameplay callers never need a `$35` window for audio.
 
 ### Disk loading
 
-Boot PRG (`wolf64` on `wolf64.d64`) lives at `$0801`, blanks DEN, and loads
-**all assets except the map** with plain KERNAL SETNAM/SETLFS/LOAD (clear `$90`/ST
-between files; no per-file IOINIT/CIA), then jumps to `LOCODE_BASE` (`$0900`):
+Boot PRG (`wolf64` on `wolf64.d64`) lives at `$0801`. It loads **MENU** at
+`$0900`, `JSR`s it (difficulty → `$08FF`; shareware always episode 0), then stages
+**ENEMY** and calls MENU`+3` (`copy_enemy`), then loads remaining assets with
+plain KERNAL SETNAM/SETLFS/LOAD (clear `$90`/ST between files; no per-file
+IOINIT/CIA). **LOCODE** overwrites the menu at `$0900`. Boot then jumps to
+`LOCODE_BASE`:
 
 | DOS | Load | Contents |
 |-----|------|----------|
-| `locode` | `$0900` | game code (no enemy modules) |
+| `menu` | `$0900` | title/menu overlay (text mode + menufont @ `$3800`; disposable) |
+| `enemy` | `$8000`→`$C000` | enemy block (staged then copied) |
+| `locode` | `$0900` | game code (no enemy modules; replaces menu) |
+| `scr` | `$4000` | video matrices |
 | `tex` | `$4800` | wall textures |
 | `wpn` | `$5000` | weapon HUD sprites (all 4 + flashes, ends `$5880`) |
 | `itm` | `$5880` | world item gfx (4bpp frames + LUTs, to `$6000`) |
-| `sqt` | `$3800` | Judd square tables (2K, locode–screen gap) |
+| `bmp` | `$6000` | MCM bitmap |
+| `sqt` | `$3800` | Judd square tables (2K; replaces menufont) |
 | `paint` | `$8000` | wall height painters |
 | `sfx` | `$B8F2` | PC sounds + freq |
-| `enemy` | `$C000` | enemy code, AI, helpers, pixels, SoA |
 | `tab` | `$0400` | `tables.asm` (DEN blank — not visible) |
+| `col` | `$D800` | colour RAM |
 
-Locode’s `LoadLevel` pulls `e1m1` into **`$EF00`**. Judd SQTAB is filled after
-loads at `$3800–$3FFF`. `$5880–$5FFF` holds world item gfx (`itm`).
-After handoff, **low BSS overlays the boot footprint** (`$0801`…`$08FF`).
+Locode’s `LoadLevel` pulls `e1m1` into **`$EF00`**. After handoff, **low BSS
+overlays the boot footprint** (`$0801`…`$08BF`). **`$08C0`** holds a 3-byte
+`JMP reboot_game` trampoline installed by `locode_entry` (`reboot_game` lives
+in the enemy block so locode stays under SQTAB); **game over** (lives expired)
+blacks the screen and jumps there to LOAD `wolf64` and re-enter the menu.
+Deaths with lives remaining set `level_want=1` and restart the level. **`$08FF`**
+is `difficulty`. `col_wallz_h` / `col_enemy` live after `end_sfx`.
 
-`LoadPrg` / `LoadLevel` stay resident in locode for **restart** (`restart_level`)
+`LoadPrg` / `LoadLevel` stay resident in locode for **in-play level advance**
 without reloading code or assets. Future overflow code may ship as `hicode`.
 
 To load from disk with the KERNAL:

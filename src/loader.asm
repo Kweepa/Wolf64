@@ -5,8 +5,6 @@
 ; Screen border blacked during LoadLevel (DEN stays on).
 !zone loader
 
-LEVEL_DEVICE	= 8
-
 level_dos_name
 	!text "E1M1"
 
@@ -44,7 +42,7 @@ LoadPrg
 	ldy load_name_h
 	jsr $ffbd				; SETNAM
 	lda #1
-	ldx #LEVEL_DEVICE
+	ldx $ba					; same device as boot load
 	ldy #1					; SA=1 → PRG load address
 	jsr $ffba				; SETLFS
 	lda #0

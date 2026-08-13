@@ -5,10 +5,10 @@
 
 !zone playsound
 
-SFX_VOL		= $0f
+SFX_VOL		= $0f				; default if menu skipped
 
 ; ------------------------------------------------------------------
-; play_sound_init — clear SID; voice 3 ready; master volume on
+; play_sound_init — clear SID; voice 3 ready; master volume from menu
 ; ------------------------------------------------------------------
 play_sound_init
 	lda #$ff
@@ -24,7 +24,8 @@ play_sound_init
 	dex
 	bpl .psi_clr
 	jsr sfx_voice3_adsr
-	lda #SFX_VOL
+	lda effects_vol
+	and #SFX_VOL
 	sta $d418
 	rts
 
@@ -111,7 +112,8 @@ update_sfx
 	sta sound_index
 	lda #0
 	sta sound_priority
-	lda #SFX_VOL
+	lda effects_vol
+	and #SFX_VOL
 	sta $d418
 .sfx_idle
 	rts

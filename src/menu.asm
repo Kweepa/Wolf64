@@ -1,6 +1,6 @@
 ; Wolf64 MENU overlay — load @ LOCODE_BASE ($0900), JSR from boot, then overwritten by LOCODE.
 ; Entry: +0 run_menu, +3 copy_enemy. Hires bitmap UI + full menufont (options + text screens).
-; difficulty → $08FF.
+; difficulty → $08FF; effects_vol/music_vol → $08FD/$08FE (survive LOCODE overwrite).
 !cpu 6502
 !to "menu.prg", cbm
 
@@ -1369,8 +1369,6 @@ menu_stk_i	!byte 0, 0, 0
 box_top		!byte 0
 box_left	!byte 0
 box_width	!byte 0
-effects_vol	!byte 15
-music_vol	!byte 10
 ui_keys		!byte 0
 ui_old		!byte 0
 ui_pressed	!byte 0

@@ -6,6 +6,8 @@ LOCODE_BASE	= $0900			; resident low code (locode.prg); also MENU overlay pre-lo
 ; future: HICODE — separate disk PRG for overflow / under-ROM code
 ; Survives after boot: reboot stub + menu-owned selectors (BSS ends ≤ REBOOT_STUB)
 REBOOT_STUB	= $08C0			; 3-byte JMP reboot_game (enemy); game over → menu
+effects_vol	= $08FD			; menu SFX level 0..15 → SID $d418
+music_vol	= $08FE			; menu music level 0..15 (reserved)
 difficulty	= $08FF			; menu skill 0..3 (not ZP; trampoline leaves alone)
 
 TABLES		= $0400			; tables.asm (free bank-0 screen RAM)

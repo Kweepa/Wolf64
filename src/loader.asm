@@ -159,7 +159,6 @@ restart_level
 	jsr doors_clear
 	jsr find_spawn
 	jsr enemies_init
-	jsr items_init
 	lda #$35
 	sta $01
 	jsr refresh_weapon

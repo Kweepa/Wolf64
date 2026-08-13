@@ -1,9 +1,7 @@
-; World items — init / X-sorted cull / pickup (SoA in SFX→enemy RAM gap)
+; World items — map AABB cull / pickup (per-frame scratch in SFX→enemy gap)
 !zone items
 
-; MAX_ITEMS in mem.asm
-; item_frm = $ff → inactive (picked up / empty)
-
+T_FLOOR		= 18
 T_AMMO		= 19
 T_FIRSTAID	= 20
 T_FOOD		= 21
@@ -25,165 +23,52 @@ item_frm_19
 item_frm_33
 	!byte IF_URN, IF_TABLE_CHAIRS, IF_CHANDELIER, IF_GIBS, IF_TREE
 
-; ---------------------------------------------------------------------------
-items_init
-	lda #0
-	sta item_count
-
-	lda #<MAP
-	sta tmp0
-	lda #>MAP
-	sta tmp1
-	lda #0
-	sta tmp2				; x
-	sta tmp3				; y
-.ii_loop
-	ldy #0
-	lda (tmp0),y
-	sta tmp4				; tile
+; A = map tile → A = frame, or $ff if not a drawable/collectible item
+item_tile_frm
 	cmp #T_AMMO
-	bcc .ii_next
+	bcc .itf_no
 	cmp #T_MACHINEGUN + 1
-	bcc .ii_pick18
+	bcc .itf_pick
 	cmp #T_PILLAR
-	bcc .ii_next
+	bcc .itf_no
 	cmp #T_PLANT + 1
-	bcs .ii_next
+	bcs .itf_no
 	sec
 	sbc #T_PILLAR
 	tay
 	lda item_frm_33,y
-	jmp .ii_have
-.ii_pick18
+	rts
+.itf_pick
 	sec
 	sbc #T_AMMO
 	tay
 	lda item_frm_19,y
-.ii_have
-	cmp #$ff
-	beq .ii_next
-	ldx item_count
-	cpx #MAX_ITEMS
-	bcs .ii_next
-	sta item_frm,x
-	lda tmp2
-	sta item_x,x
-	lda tmp3
-	sta item_y,x
-	inx
-	stx item_count
-.ii_next
-	inc tmp0
-	bne +
-	inc tmp1
-+
-	inc tmp2
-	lda tmp2
-	cmp #64
-	bne .ii_loop
-	lda #0
-	sta tmp2
-	inc tmp3
-	lda tmp3
-	cmp #64
-	bne .ii_loop
-
-	; sort SoA by item_x ascending
-	ldx #1
-.is_outer
-	cpx item_count
-	bcs .is_done
-	lda item_x,x
-	sta tmp0
-	lda item_y,x
-	sta tmp1
-	lda item_frm,x
-	sta tmp2
-	stx tmp5
-	txa
-	tay
-.is_inner
-	dey
-	bmi .is_at0
-	lda item_x,y
-	cmp tmp0
-	bcc .is_place
-	beq .is_place
-	lda item_x,y
-	sta item_x+1,y
-	lda item_y,y
-	sta item_y+1,y
-	lda item_frm,y
-	sta item_frm+1,y
-	jmp .is_inner
-.is_at0
-	lda tmp0
-	sta item_x
-	lda tmp1
-	sta item_y
-	lda tmp2
-	sta item_frm
-	jmp .is_next
-.is_place
-	iny
-	lda tmp0
-	sta item_x,y
-	lda tmp1
-	sta item_y,y
-	lda tmp2
-	sta item_frm,y
-.is_next
-	ldx tmp5
-	inx
-	cpx item_count
-	bcc .is_outer
-.is_done
+	rts
+.itf_no
+	lda #$ff
 	rts
 
 ; ---------------------------------------------------------------------------
-; Walk-over collectibles at player tile (props ignored)
+; Walk-over collectibles at player tile (props left in place)
 items_try_pickup
-	lda item_count
-	bne +
-	rts
-+
 	lda playerx_h
-	sta tmp4
+	sta tmp0
 	lda playery_h
-	sta tmp5
-	; skip while item_x < player x
-	ldx #0
-.itp_skip
-	cpx item_count
-	bcs .itp_rts
-	lda item_x,x
-	cmp tmp4
-	bcs .itp_band
-	inx
-	bne .itp_skip
-.itp_band
-	cpx item_count
-	bcs .itp_rts
-	lda item_x,x
-	cmp tmp4
-	bne .itp_rts
-	lda item_frm,x
-	bmi .itp_n				; $ff = inactive
-	lda item_y,x
-	cmp tmp5
-	bne .itp_n
-	lda item_frm,x
+	sta tmp1
+	jsr map_to_tile
+	ldy #0
+	lda (tile_l),y
+	jsr item_tile_frm
+	bmi .itp_rts				; not an item / no art
 	jsr item_apply
-	bcc .itp_n
-	lda #$ff
-	sta item_frm,x
-.itp_n
-	inx
-	bne .itp_band
+	bcc .itp_rts				; prop or full inventory
+	lda #T_FLOOR
+	ldy #0
+	sta (tile_l),y
 .itp_rts
 	rts
 
-; A = frame id. C=1 if collected (deactivate), C=0 leave active
+; A = frame id. C=1 if collected (clear map), C=0 leave tile
 item_apply
 	cmp #IF_KEY_GOLD
 	bne .ia_sil
@@ -315,17 +200,14 @@ item_add_hp
 	rts
 
 ; ---------------------------------------------------------------------------
-; Append near items to vis_slot (plain index; vis_kind=1).
-; 6×6 AABB centered at player + 3·forward (fwd = cos, −sin; AMP=64 → ×3>>6).
+; Scan map AABB → per-frame item_x/y/frm scratch + vis_slot (vis_kind=1).
+; 6×6 centered at player + 3·forward (fwd = cos, −sin; AMP=64 → ×3>>6).
 ITEM_GATHER_HALF	= 3			; [c-3 .. c+2] = 6 tiles
 
 items_cull_near
 	lda #0
 	sta item_considered
-	lda item_count
-	bne +
-	rts
-+
+
 	; cx = playerx_h + (costab[playera]*3)>>6
 	ldy playera
 	lda costab,y
@@ -346,14 +228,14 @@ items_cull_near
 	pla
 	sta tmp4				; cx
 
-	; x0 = cx - 3, x1 = cx + 2 (inclusive 6-wide)
+	; x0/x1/y0/y1 — stash in e_* (free until depth pass)
 	lda tmp4
 	sec
 	sbc #ITEM_GATHER_HALF
 	bcs +
 	lda #0
 +
-	sta tmp0				; x0
+	sta e_dx_l				; x0
 	lda tmp4
 	clc
 	adc #ITEM_GATHER_HALF - 1
@@ -364,7 +246,7 @@ items_cull_near
 	bcc +
 	lda #63
 +
-	sta tmp1				; x1
+	sta e_dx_h				; x1
 
 	lda tmp5
 	sec
@@ -372,7 +254,7 @@ items_cull_near
 	bcs +
 	lda #0
 +
-	sta tmp2				; y0
+	sta e_dy_l				; y0
 	lda tmp5
 	clc
 	adc #ITEM_GATHER_HALF - 1
@@ -383,46 +265,55 @@ items_cull_near
 	bcc +
 	lda #63
 +
-	sta tmp3				; y1
+	sta e_dy_h				; y1
 
-	ldx #0
-.ic_skip
-	cpx item_count
-	bcs .ic_done
-	lda item_x,x
-	cmp tmp0
-	bcs .ic_band
-	inx
-	bne .ic_skip
-.ic_band
-	cpx item_count
-	bcs .ic_done
-	lda item_x,x
-	cmp tmp1
-	beq .ic_iny
-	bcs .ic_done
-.ic_iny
-	lda item_frm,x
-	bmi .ic_n				; $ff = inactive
-	lda item_y,x
-	cmp tmp2
-	bcc .ic_n
-	cmp tmp3
-	beq +
-	bcs .ic_n
-+
+	lda #0
+	sta tmp4				; scratch index
+
+	lda e_dy_l
+.ic_y
+	sta tmp3				; y
+	lda e_dx_l
+.ic_x
+	sta tmp2				; x
+	sta tmp0
+	lda tmp3
+	sta tmp1
+	jsr map_to_tile
+	ldy #0
+	lda (tile_l),y
+	jsr item_tile_frm
+	bmi .ic_next
 	ldy vis_count
 	cpy #MAX_VIS
 	bcs .ic_done
+	ldx tmp4
+	sta item_frm,x
+	lda tmp2
+	sta item_x,x
+	lda tmp3
+	sta item_y,x
 	txa
 	sta vis_slot,y
 	lda #1				; VK_ITEM
 	sta vis_kind,y
 	iny
 	sty vis_count
+	inc tmp4
 	inc item_considered
-.ic_n
-	inx
-	bne .ic_band
+.ic_next
+	lda tmp2
+	cmp e_dx_h
+	bcs .ic_ynext
+	clc
+	adc #1
+	jmp .ic_x
+.ic_ynext
+	lda tmp3
+	cmp e_dy_h
+	bcs .ic_done
+	clc
+	adc #1
+	jmp .ic_y
 .ic_done
 	rts

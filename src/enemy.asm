@@ -17,7 +17,7 @@ ET_DOG		= 2
 ET_HANS		= 3
 EF_ACTIVE	= $01
 EF_AMBUSH	= $02
-EF_PHASE_B	= $04				; walk A/B toggle (frame bases in enemy_gfx.asm)
+; $04 free (was per-enemy walk phase; now global walk_phase)
 EF_MOVING	= $08				; moved this frame → walk anim
 EF_FIRSTATTACK	= $10				; allow 180° on first chase dir pick
 EF_SHOT_DONE	= $20				; shoot recover / bite already applied
@@ -120,6 +120,8 @@ enemies_init
 	lda #0
 	sta enemy_count
 	sta los_rr
+	sta walk_anim_t
+	sta walk_phase
 	; hit buffer overlays boot — must be $FF before first enemies_update
 	ldx #39
 	lda #$ff
@@ -184,6 +186,21 @@ enemies_update
 	lsr
 	lsr					; /8
 	sta dt8
+	; global walk A/B phase (all movers share)
+	lda walk_anim_t
+	clc
+	adc dt_ms
+	bcc +
+	lda #$ff
++
+	cmp #ANIM_MS
+	bcc .eu_wstore
+	lda walk_phase
+	eor #1
+	sta walk_phase
+	lda #0
+.eu_wstore
+	sta walk_anim_t
 	ldx #0
 .eu_loop
 	cpx enemy_count
@@ -342,7 +359,7 @@ eu_state_hi
 	and #EF_AMBUSH
 	bne .eu_stand
 	jsr enemy_patrol_one
-	jmp .eu_anim
+	jmp .eu_next
 .eu_stand
 	; ambush: stand set only, clear walk bits
 	lda enemy_flags,x
@@ -372,12 +389,12 @@ eu_state_hi
 	lda #BITE_T
 	sta enemy_state_t,x
 	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK)
+	and #(EF_ACTIVE | EF_FIRSTATTACK)
 	sta enemy_flags,x			; clear SHOT_DONE for bite hit
 	jmp .eu_next
 .eu_chase_go
 	jsr enemy_chase_one
-	jmp .eu_anim
+	jmp .eu_next
 .eu_bite
 	stx enemy_idx
 	lda enemy_state_t,x
@@ -402,7 +419,7 @@ eu_state_hi
 	jmp .eu_next
 .eu_bite_done
 	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK)
+	and #(EF_ACTIVE | EF_FIRSTATTACK)
 	sta enemy_flags,x
 	lda #ES_CHASE
 	sta enemy_state,x
@@ -430,34 +447,13 @@ eu_state_hi
 	jmp .eu_next
 .eu_shoot_done
 	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK)
+	and #(EF_ACTIVE | EF_FIRSTATTACK)
 	sta enemy_flags,x
 	lda #0
 	sta enemy_burst,x
 	lda #ES_CHASE
 	sta enemy_state,x
 	jmp .eu_next
-.eu_anim
-	; walk phase timer only while moving
-	lda enemy_flags,x
-	and #EF_MOVING
-	bne +
-	jmp .eu_next
-+
-	lda enemy_anim_t,x
-	clc
-	adc dt_ms
-	bcc +
-	lda #$ff
-+
-	cmp #ANIM_MS
-	bcc .eu_atim
-	lda enemy_flags,x
-	eor #EF_PHASE_B
-	sta enemy_flags,x
-	lda #0
-.eu_atim
-	sta enemy_anim_t,x
 .eu_next
 	inx
 	beq .eu_los
@@ -482,7 +478,7 @@ enemy_patrol_one
 	sta probe_doors_pass			; unlocked doors walkable
 	; clear moving until a step succeeds
 	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_AMBUSH | EF_PHASE_B)
+	and #(EF_ACTIVE | EF_AMBUSH)
 	sta enemy_flags,x
 	lda enemy_yl,x				; pre-step fracs for center-cross
 	pha
@@ -635,12 +631,7 @@ enemy_push_walls
 ; ---------------------------------------------------------------------------
 ; Draw: cull enemies + items → depth → sort order tokens → project → mask blit
 enemies_draw
-	lda enemy_count
-	ora item_count
-	bne +
-	rts
-+
-	; clear hit buffer
+	; clear hit buffer (map may still have items when enemy_count=0)
 	ldx #39
 	lda #$ff
 -
@@ -1117,7 +1108,6 @@ enemy_draw_one
 	lsr
 	lsr					; /32
 	and #7
-	sta enemy_view,x
 	sta e_view
 
 	jsr enemy_pick_frm
@@ -1924,7 +1914,7 @@ damage_actor
 	lda #PAIN_T
 	sta enemy_state_t,x
 	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_PHASE_B)	; clear ambush / shot / moving
+	and #EF_ACTIVE				; clear ambush / shot / moving
 	ora #EF_FIRSTATTACK
 	sta enemy_flags,x
 .da_hit_snd
@@ -1939,8 +1929,6 @@ damage_actor
 	sta enemy_state_t,x
 	lda #EF_ACTIVE				; keep drawable; drop walk/ambush
 	sta enemy_flags,x
-	lda #0
-	sta enemy_anim_t,x
 	lda enemy_type,x
 	cmp #ET_DOG
 	bne .da_scream

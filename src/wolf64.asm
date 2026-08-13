@@ -24,7 +24,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $5880  world item gfx (disk: itm; to bitmap $6000)
 ; $6000  bitmap (8K, disk: bmp)
 ; $8000  wall painters only (disk: paint)
-; $B8F2  PC SFX (disk: sfx); item SoA + vis_depth/order/kind after end_sfx → <$C000
+; $B8F2  PC SFX (disk: sfx); item scratch + vis_depth/order/kind after end_sfx → <$C000
 ; $C000  enemy block — code, AI, gfx, hot SoA (disk: enemy); cold SoA @ $0100
 ; $0100  cold enemy tables under stack (vis_slot…enemy_type); STACK_GUARD=$01D0
 ; $EF00  map (disk: e1m1… via LoadLevel)
@@ -112,7 +112,6 @@ game_start
 	jsr doors_clear
 	jsr find_spawn
 	jsr enemies_init
-	jsr items_init
 	cli
 	jmp main_loop
 
@@ -197,12 +196,13 @@ end_locode = *
 !warn "Locode free $", SQTAB1 - end_locode, " (end=$", end_locode, " limit SQTAB1=$", SQTAB1, ")"
 
 ; --- Locode runtime BSS in cassette buffer (not emitted into locode PRG) ---
-; item_* SoA is in RAM after end_sfx; col_* overlays boot (bss.asm)
+; item_* scratch is in RAM after end_sfx; col_* overlays boot (bss.asm)
 enemy_count	= TAPE_BSS
-item_count	= enemy_count + 1
-item_considered	= item_count + 1
+item_considered	= enemy_count + 1
 los_rr		= item_considered + 1
-player_hp	= los_rr + 1
+walk_anim_t	= los_rr + 1			; global walk A/B ms accumulator
+walk_phase	= walk_anim_t + 1		; 0=A, nonzero=B
+player_hp	= walk_phase + 1
 player_ammo	= player_hp + 1
 player_keys	= player_ammo + 1
 player_score_l	= player_keys + 1
@@ -369,15 +369,14 @@ end_sfx = *
 ; Column depth/hit buffers relocated off boot page (room for REBOOT_STUB)
 col_wallz_h	= end_sfx
 col_enemy	= col_wallz_h + 40
-; Item SoA + vis depth/order — runtime BSS in SFX→enemy gap (not loaded from disk)
+; Per-frame item scratch (map AABB cull) + vis depth/order — SFX→enemy gap
 item_x		= col_enemy + 40
-item_y		= item_x + MAX_ITEMS
-item_frm	= item_y + MAX_ITEMS		; $ff = inactive / picked up
-; Depth/sort scratch keyed by stable vis index (not entity SoA)
-vis_depth_l	= item_frm + MAX_ITEMS
+item_y		= item_x + MAX_VIS
+item_frm	= item_y + MAX_VIS
+vis_depth_l	= item_frm + MAX_VIS
 vis_depth_h	= vis_depth_l + MAX_VIS
 vis_order	= vis_depth_h + MAX_VIS		; sort tokens → vis_slot/vis_depth
-vis_kind	= vis_order + MAX_VIS		; 0=enemy, 1=item (plain index in vis_slot)
+vis_kind	= vis_order + MAX_VIS		; 0=enemy, 1=item (scratch idx in vis_slot)
 end_item_soa	= vis_kind + MAX_VIS
 !if end_item_soa > ENEMY_BASE {
 	!error "Item/vis BSS overlaps ENEMY_BASE; end=$", end_item_soa
@@ -387,10 +386,8 @@ end_item_soa	= vis_kind + MAX_VIS
 vis_slot	= STACK_BSS			; MAX_VIS entity ids (unsorted; kind in vis_kind)
 enemy_burst	= vis_slot + MAX_VIS
 enemy_state_t	= enemy_burst + 32
-enemy_anim_t	= enemy_state_t + 32
-enemy_view	= enemy_anim_t + 32
-enemy_type	= enemy_view + 32		; cold: spawn / AI branch
-end_stack_bss	= enemy_type + 32		; $01D0
+enemy_type	= enemy_state_t + 32		; cold: spawn / AI branch
+end_stack_bss	= enemy_type + 32
 !if end_stack_bss > STACK_GUARD {
 	!error "Stack BSS hits STACK_GUARD; end=$", end_stack_bss
 }

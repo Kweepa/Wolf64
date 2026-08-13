@@ -19,7 +19,6 @@ BITMAP_END	= BITMAP + BITMAP_SIZE	; $7F40
 TEXTURES	= $4800
 WPN_SPRITES	= $5000			; HUD weapons + flashes (34 sprites → $5880)
 ITEM_SPRITES	= $5880			; world item gfx (4bpp + LUTs; to bitmap $6000)
-MAX_ITEMS	= 200			; world item SoA slots (byte tile x/y)
 MAX_VIS		= 48			; enemies + items in one depth-sorted draw list
 SQTAB1		= $3800			; Judd 2K (disk: sqt; locode..screen gap)
 SQTAB2		= SQTAB1 + $200
@@ -28,7 +27,7 @@ SQTAB4		= SQTAB1 + $600
 PAINTERS	= $8000
 PAINTERS_SIZE	= $38F2			; painters.bin length (must match build)
 SFX_BASE	= PAINTERS + PAINTERS_SIZE	; $B8F2 — pcsounds + pcsfreq_hi
-; Item SoA + vis_depth/order live in RAM after end_sfx (see wolf64.asm); must end ≤ ENEMY_BASE
+; Item scratch + vis_depth/order live in RAM after end_sfx (see wolf64.asm); must end ≤ ENEMY_BASE
 ENEMY_BASE	= $C000			; contiguous enemy code+gfx+hot SoA
 MAP		= $EF00			; 4K level (under-KERNAL; LoadLevel)
 ; Cassette buffer — locode runtime BSS (disk LOAD does not use tape buf)

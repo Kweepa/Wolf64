@@ -84,7 +84,7 @@ enemy_los_rr
 	; walked out of range — drop aim, no LOS used
 	ldx enemy_idx
 	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK)
+	and #(EF_ACTIVE | EF_FIRSTATTACK)
 	sta enemy_flags,x
 	lda #ES_CHASE
 	sta enemy_state,x
@@ -196,7 +196,7 @@ enemy_rr_chase
 	lda enemy_burst_tab,y
 	sta enemy_burst,x
 	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK)
+	and #(EF_ACTIVE | EF_FIRSTATTACK)
 	sta enemy_flags,x			; clear SHOT_DONE/MOVING/DODGE
 .erc_rts
 	rts
@@ -520,7 +520,7 @@ enemy_tile_dist
 first_sighting
 	stx enemy_idx
 	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_PHASE_B)	; drop ambush
+	and #EF_ACTIVE				; drop ambush
 	ora #EF_FIRSTATTACK
 	sta enemy_flags,x
 	lda #ES_CHASE
@@ -590,7 +590,7 @@ enemy_chase_one
 	bcs .ec_go				; too far — chase
 .ec_do_stand
 	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK | EF_SHOT_DONE)
+	and #(EF_ACTIVE | EF_FIRSTATTACK | EF_SHOT_DONE)
 	sta enemy_flags,x			; clear MOVING
 	lda #0
 	sta enemy_burst,x			; dog: repath when chase resumes
@@ -602,7 +602,7 @@ enemy_chase_one
 	lda #1
 	sta probe_doors_pass
 	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_PHASE_B | EF_FIRSTATTACK | EF_SHOT_DONE)
+	and #(EF_ACTIVE | EF_FIRSTATTACK | EF_SHOT_DONE)
 	sta enemy_flags,x
 	lda #0
 	sta move_dx_l
@@ -1383,8 +1383,7 @@ enemy_pick_frm
 	lda enemy_flags,x
 	and #EF_MOVING
 	beq .epf_stand
-	lda enemy_flags,x
-	and #EF_PHASE_B
+	lda walk_phase
 	bne .epf_wb
 	lda #EF_WALKA
 	bne .epf_base
@@ -1420,8 +1419,7 @@ enemy_pick_frm
 	rts
 
 .epf_dog_live
-	lda enemy_flags,x
-	and #EF_PHASE_B
+	lda walk_phase
 	bne .epf_dwb
 	lda #EF_DOG_WALKA
 	bne .epf_dbase
@@ -1452,8 +1450,7 @@ enemy_pick_frm
 	rts
 
 .epf_hans_live
-	lda enemy_flags,x
-	and #EF_PHASE_B
+	lda walk_phase
 	bne .epf_hw2
 	lda #EF_HANS_W1
 	bne .epf_hwf
@@ -1537,8 +1534,6 @@ enemy_spawn_one
 	sta enemy_xl,x
 	sta enemy_yl,x
 	lda #0
-	sta enemy_anim_t,x
-	sta enemy_view,x
 	sta enemy_state_t,x
 	sta enemy_burst,x
 	ldy enemy_type,x

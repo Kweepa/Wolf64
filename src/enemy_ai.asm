@@ -286,7 +286,7 @@ has_los_to_player
 	rts
 
 ; X = enemy. C=1 if tile DDA to player is clear.
-; Solid 1..14 block; doors 15..16 need door_pos ≥ DOOR_LOS_MIN.
+; Solid 1..14 block; doors 15..17 need door_pos ≥ DOOR_LOS_MIN.
 ; 8.8 DDA: steps = max(|dx|,|dy|), step = (delta<<8)/steps from cell centers.
 check_line
 	stx enemy_idx
@@ -474,8 +474,8 @@ check_line
 	bcc .clc_ok			; 0 = empty
 	cmp #15
 	bcc .clc_wall			; 1..14 solid
-	cmp #17
-	bcs .clc_ok			; ≥17 floor
+	cmp #18
+	bcs .clc_ok			; ≥18 floor
 	lda tmp0
 	sta mapx
 	lda tmp1

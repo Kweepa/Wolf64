@@ -6,12 +6,14 @@ NUM_DOOR_SLOTS	= 8				; player + concurrent patrol doors
 DOOR_STEP_MS	= 2				; door_pos ±1 when accum ≥ this
 DOOR_HOLD_MS	= 2000				; fully open before auto-close
 T_DOOR_MIN	= 15
-T_DOOR_MAX	= 16				; inclusive
-T_LOCKED_DOOR	= 16
-T_FLOOR		= 17
+T_DOOR_MAX	= 17				; inclusive
+T_LOCKED_GOLD	= 16
+T_LOCKED_SILVER	= 17
+T_FLOOR		= 18
 ; T_PUSHWALL from mem.asm
 TEX_DOOR	= 11
-TEX_LOCKED	= 12
+TEX_LOCKED_GOLD	= 0
+TEX_LOCKED_SILVER = 12
 TEX_JAMB	= 15
 DS_FREE		= 0
 DS_OPENING	= 1
@@ -84,20 +86,28 @@ door_infer_orient
 	sbc #1
 	sta tmp1
 	jsr door_tile_at
-	cmp #17
+	cmp #T_FLOOR
 	bcs .dio_midy
 	lda mapy
 	clc
 	adc #1
 	sta tmp1
 	jsr door_tile_at
-	cmp #17
+	cmp #T_FLOOR
 	bcs .dio_midy
 	lda #DO_MIDX
 	rts
 .dio_midy
 	lda #DO_MIDY
 	rts
+
+; A = door tile 15..17 → A = TEX_* (table indexed by tile)
+door_tex_for_tile
+	tax
+	lda door_tex_tab - T_DOOR_MIN,x
+	rts
+door_tex_tab
+	!byte TEX_DOOR, TEX_LOCKED_GOLD, TEX_LOCKED_SILVER
 
 ; tmp0=x tmp1=y → A = tile; clobbers tile_*
 door_tile_at
@@ -106,7 +116,7 @@ door_tile_at
 	lda (tile_l),y
 	rts
 
-; tmp0=x tmp1=y → A≠0 if door tile or animating slot (open map=16)
+; tmp0=x tmp1=y → A≠0 if door tile or animating slot (open map=floor)
 ; Clobbers: tile_*, Y, tmp2
 door_is_door_xy
 	jsr door_tile_at
@@ -206,15 +216,17 @@ try_open_door
 .tod_door
 	cmp #T_DOOR_MIN
 	bcc .tod_rts
-	cmp #T_LOCKED_DOOR
-	bne .tod_ulock
-	lda player_keys
-	beq .tod_rts			; need any key
-	lda #T_LOCKED_DOOR
-	jmp .tod_open
-.tod_ulock
+	cmp #T_LOCKED_GOLD
+	bcc .tod_open			; unlocked 15
 	cmp #T_DOOR_MAX + 1
-	bcs .tod_rts
+	bcs .tod_rts			; not a door
+	sta tmp3				; 16 gold / 17 silver
+	and #1
+	tax
+	lda .tod_keybit,x
+	and player_keys
+	beq .tod_rts
+	lda tmp3
 .tod_open
 	sta tmp3				; saved door tile id
 	; already in a slot?
@@ -259,6 +271,8 @@ try_open_door
 	bcc .tod_free
 .tod_rts
 	rts
+.tod_keybit
+	!byte KEY_GOLD, KEY_SILVER
 .tod_claim
 	lda mapx
 	sta door_x,y
@@ -533,13 +547,7 @@ door_try_x
 	sta tile_h
 	ldy #0
 	lda (tile_l),y
-	cmp #T_LOCKED_DOOR
-	bne +
-	lda #TEX_LOCKED
-	bne ++
-+
-	lda #TEX_DOOR
-++
+	jsr door_tex_for_tile
 	sta tex_id
 	lda #0
 	sta side
@@ -615,13 +623,7 @@ door_try_y
 	sta tile_h
 	ldy #0
 	lda (tile_l),y
-	cmp #T_LOCKED_DOOR
-	bne +
-	lda #TEX_LOCKED
-	bne ++
-+
-	lda #TEX_DOOR
-++
+	jsr door_tex_for_tile
 	sta tex_id
 	lda #1
 	sta side

@@ -48,7 +48,7 @@ try_push_wall
 	sta tmp1
 	jsr map_to_tile
 	lda (tile_l),y
-	cmp #17
+	cmp #18
 	bcc .no
 
 	; origin → floor
@@ -57,7 +57,7 @@ try_push_wall
 	lda mapy
 	sta tmp1
 	jsr map_to_tile
-	lda #17
+	lda #18
 	sta (tile_l),y
 
 	; dest ← pushwall

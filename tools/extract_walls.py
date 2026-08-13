@@ -76,7 +76,7 @@ WOLF_PALETTE = [
 # MapFormat texture slot -> (name, VSWAP wall page). Light N/S face.
 # Door pages: DOORWALL = spriteStart-8 → normal, +4 elevator door, +6 locked.
 TEXTURE_SOURCES = [
-    (0, "empty", None),  # solid black / unused
+    (0, "locked_gold", 104),  # gold lock plate (author gold tint in walls_preview)
     (1, "grey_stone", 0),  # wall tile 1
     (2, "grey_banner", 4),  # wall tile 3
     (3, "blue_stone", 14),  # wall tile 8
@@ -88,7 +88,7 @@ TEXTURE_SOURCES = [
     (9, "purple", 36),  # wall tile 19
     (10, "purple_blood", 48),  # wall tile 25
     (11, "door", 98),  # DOORWALL
-    (12, "locked_door", 104),  # DOORWALL+6
+    (12, "locked_silver", 104),  # silver lock plate (DOORWALL+6)
     (13, "elevator", 41),  # wall tile 21 dark face (switch panel)
     (14, "pushwall", 0),  # reuse grey (runtime may override)
     (15, "door_jamb", 100),  # DOORWALL+2 side / expansion

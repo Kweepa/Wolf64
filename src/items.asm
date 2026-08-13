@@ -4,25 +4,25 @@
 ; MAX_ITEMS in mem.asm
 IF_ACTIVE	= $01
 
-T_AMMO		= 18
-T_FIRSTAID	= 19
-T_FOOD		= 20
-T_GOLD_KEY	= 21
-T_SILVER_KEY	= 22
-; 23 cross / 24 chalice — no packed art
-T_MACHINEGUN	= 25
-T_PILLAR	= 32
-T_TABLE		= 33
-T_LAMP		= 34
-T_BLOOD		= 35
-T_PLANT		= 36
+T_AMMO		= 19
+T_FIRSTAID	= 20
+T_FOOD		= 21
+T_GOLD_KEY	= 22
+T_SILVER_KEY	= 23
+; 24 cross / 25 chalice — no packed art
+T_MACHINEGUN	= 26
+T_PILLAR	= 33
+T_TABLE		= 34
+T_LAMP		= 35
+T_BLOOD		= 36
+T_PLANT		= 37
 
-; tile 18..25 → frame ($ff = skip)
-item_frm_18
+; tile 19..26 → frame ($ff = skip)
+item_frm_19
 	!byte IF_AMMO_CLIP, IF_FIRSTAID, IF_FOOD, IF_KEY_GOLD, IF_KEY_SILVER
 	!byte $ff, $ff, IF_MACHINEGUN
-; tile 32..36 → frame
-item_frm_32
+; tile 33..37 → frame
+item_frm_33
 	!byte IF_URN, IF_TABLE_CHAIRS, IF_CHANDELIER, IF_GIBS, IF_TREE
 
 ; ---------------------------------------------------------------------------
@@ -58,13 +58,13 @@ items_init
 	sec
 	sbc #T_PILLAR
 	tay
-	lda item_frm_32,y
+	lda item_frm_33,y
 	jmp .ii_have
 .ii_pick18
 	sec
 	sbc #T_AMMO
 	tay
-	lda item_frm_18,y
+	lda item_frm_19,y
 .ii_have
 	cmp #$ff
 	beq .ii_next

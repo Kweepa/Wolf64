@@ -3,14 +3,14 @@
 
 MAX_ENEMIES	= 32
 MAX_VIS		= 48				; enemies + items in one depth sort
-T_GUARD		= 52				; +0..3 NESW patrol
-T_AMBUSH	= 56				; +0..3 NESW ambush
-T_SS_PATROL	= 60				; +0..3 NESW
-T_SS_AMBUSH	= 64				; +0..3 NESW
-T_DOG		= 68				; +0..3 NESW
-T_BOSS		= 72				; Hans = 72 (other boss subtypes ignored)
-T_FLOOR		= 17
-T_TURN		= 112				; +0..7 N,NE,E,SE,S,SW,W,NW
+T_GUARD		= 53				; +0..3 NESW patrol
+T_AMBUSH	= 57				; +0..3 NESW ambush
+T_SS_PATROL	= 61				; +0..3 NESW
+T_SS_AMBUSH	= 65				; +0..3 NESW
+T_DOG		= 69				; +0..3 NESW
+T_BOSS		= 73				; Hans = 73 (other boss subtypes ignored)
+T_FLOOR		= 18
+T_TURN		= 113				; +0..7 N,NE,E,SE,S,SW,W,NW
 ET_GUARD	= 0
 ET_SS		= 1
 ET_DOG		= 2
@@ -153,7 +153,7 @@ enemies_init
 	sta tmp4				; tile id
 	cmp #T_GUARD
 	bcc .ei_next
-	cmp #T_BOSS + 1			; 52..72 (Hans only among bosses)
+	cmp #T_BOSS + 1			; 53..73 (Hans only among bosses)
 	bcs .ei_next
 	ldx enemy_count
 	cpx #MAX_ENEMIES

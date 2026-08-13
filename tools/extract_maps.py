@@ -21,8 +21,8 @@ EXITTILE = 99
 ICONARROWS = 90
 ELEVATORTILE = 21
 
-# Wolf64 geometry: 1..14 solid, 15..16 doors, 17+ walkable
-T_EMPTY = 17
+# Wolf64 geometry: 1..14 solid, 15..17 doors, 18+ walkable
+T_EMPTY = 18
 T_GREY = 1
 T_GREY_BANNER = 2
 T_BLUE = 3
@@ -36,32 +36,33 @@ T_PURPLE_BLOOD = 10
 T_ELEVATOR = 13
 T_PUSHWALL = 14
 T_DOOR = 15
-T_LOCKED = 16
+T_LOCKED_GOLD = 16
+T_LOCKED_SILVER = 17
 
-# Items / props / actors (18+; 17 = empty floor)
-T_AMMO = 18
-T_FIRSTAID = 19
-T_FOOD = 20
-T_GOLD_KEY = 21
-T_SILVER_KEY = 22
-T_CROSS = 23
-T_CHALICE = 24
-T_MACHINEGUN = 25
-T_PILLAR = 32
-T_TABLE = 33
-T_LAMP = 34
-T_BLOOD = 35
-T_PLANT = 36
-T_PLAYER = 48  # +0..3 NESW
-T_GUARD_PATROL = 52
-T_GUARD_AMBUSH = 56
-T_SS_PATROL = 60
-T_SS_AMBUSH = 64
-T_DOG = 68
-T_BOSS = 72
-T_TURN = 112  # +0..7 N,NE,E,SE,S,SW,W,NW (Wolf ICONARROWS)
-T_EXIT = 144
-T_PUSH_TRAJ = 145  # +0..3 NESW
+# Items / props / actors (19+; 18 = empty floor)
+T_AMMO = 19
+T_FIRSTAID = 20
+T_FOOD = 21
+T_GOLD_KEY = 22
+T_SILVER_KEY = 23
+T_CROSS = 24
+T_CHALICE = 25
+T_MACHINEGUN = 26
+T_PILLAR = 33
+T_TABLE = 34
+T_LAMP = 35
+T_BLOOD = 36
+T_PLANT = 37
+T_PLAYER = 49  # +0..3 NESW
+T_GUARD_PATROL = 53
+T_GUARD_AMBUSH = 57
+T_SS_PATROL = 61
+T_SS_AMBUSH = 65
+T_DOG = 69
+T_BOSS = 73
+T_TURN = 113  # +0..7 N,NE,E,SE,S,SW,W,NW (Wolf ICONARROWS)
+T_EXIT = 145
+T_PUSH_TRAJ = 146  # +0..3 NESW
 
 # Wolf dir 0..3 = E,N,W,S  ->  our 0..3 = N,E,S,W
 WOLF_DIR_TO_NESW = (1, 0, 3, 2)
@@ -319,7 +320,10 @@ def map_door(tile: int) -> int:
     lock = (tile - 90) // 2
     if lock == 0 or tile >= 100:
         return T_DOOR
-    return T_LOCKED
+    # Wolf lock 1/3 → gold key bit0; 2/4 → silver key bit1
+    if lock in (1, 3):
+        return T_LOCKED_GOLD
+    return T_LOCKED_SILVER
 
 
 def facing(base: int, wolf_dir: int) -> int:

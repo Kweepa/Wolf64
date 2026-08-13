@@ -3,7 +3,7 @@
 
 WALL_MARGIN = $40				; 1/4 tile keep-out from solid faces
 WALL_MARGIN_HI = $100 - WALL_MARGIN	; $C0 — max frac when east/south neighbor solid
-T_PLAYER	= 48				; +0..3 = N,E,S,W
+T_PLAYER	= 49				; +0..3 = N,E,S,W
 
 ; Map tiles 48..51 → player tile + facing (0=E,64=N,128=W,192=S)
 find_spawn
@@ -202,7 +202,7 @@ probe_solid
 	jsr map_to_tile
 	ldy #0
 	lda (tile_l),y
-	cmp #17				; solid walls + doors < 17
+	cmp #18				; solid walls + doors < 18
 	bcs .clear
 	cmp #15				; unlocked door
 	bne .solid

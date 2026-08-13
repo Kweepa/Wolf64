@@ -1,5 +1,5 @@
 ; The Keep–style DDA for a 64×64 Wolf64 map
-; 1..14 solid walls, 15..16 doors, >=17 walkable (empty=17)
+; 1..14 solid walls, 15..17 doors, >=18 walkable (empty=18)
 !zone dda
 
 MAX_DDA = 64
@@ -213,10 +213,10 @@ cast_march
 .smc_mapx
 	inc mapx
 	lda (tile_l),y
-	cmp #17
+	cmp #18
 	bcs .ax_miss				; walkable — common case
 	cmp #15
-	bcs .ax_door				; 15..16 door
+	bcs .ax_door				; 15..17 door
 	sta tex_id
 	lda #0
 	sta side
@@ -256,10 +256,10 @@ cast_march
 .smc_mapy
 	inc mapy
 	lda (tile_l),y
-	cmp #17
+	cmp #18
 	bcs .ay_miss				; walkable — common case
 	cmp #15
-	bcs .ay_door				; 15..16 door
+	bcs .ay_door				; 15..17 door
 	sta tex_id
 	lda #1
 	sta side

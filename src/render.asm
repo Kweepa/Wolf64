@@ -80,7 +80,7 @@ patch_painter_tex
 paint_column
 	ldx col
 	lda col_texid,x
-	bne .have_tex
+	bpl .have_tex			; $ff = miss (tex 0 is gold locked door)
 	jmp draw_sky_floor
 
 .have_tex

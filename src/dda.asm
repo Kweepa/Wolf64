@@ -286,9 +286,10 @@ cast_march
 	jmp .inner
 
 .miss
-	lda #0
 	ldx col
+	lda #$ff				; miss sentinel (tex 0 = gold lock plate)
 	sta col_texid,x
+	lda #0
 	sta col_half_h,x
 	sta col_texx,x
 	lda #$ff

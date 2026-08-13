@@ -15,6 +15,8 @@ SCREENS = (
 	("readthis1_text", ROOT / "readthis1.txt"),
 	("readthis2_text", ROOT / "readthis2.txt"),
 	("readthis3_text", ROOT / "readthis3.txt"),
+	("ending1_text", ROOT / "ending1.txt"),
+	("ending2_text", ROOT / "ending2.txt"),
 )
 
 

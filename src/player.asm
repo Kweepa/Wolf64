@@ -323,12 +323,14 @@ player_death_tick
 	sta death_ms_h
 .pdt_go
 	dec player_lives
-	beq .pdt_over
+	beq reboot_to_menu
 	lda #1					; restart same level (UI_DIRTY_ALL on init)
 	sta level_want
 .pdt_rts
 	rts
-.pdt_over
+
+; Blackout VIC and reboot to menu (game over / episode complete)
+reboot_to_menu
 	lda #$35
 	sta $01
 	lda #0
@@ -362,6 +364,16 @@ handle_level_want
 	pha					; 1=restart 2=next 3=new game
 	cmp #2
 	bne .hlw_chknew
+	lda level_num
+	cmp #LEVEL_MAX
+	bne .hlw_adv
+	; episode done — SP reset in reboot_game; skip pla / clear want
+	lda #SOUND_LEVELDONE
+	jsr play_sound
+	lda #1
+	sta game_complete
+	jmp reboot_to_menu
+.hlw_adv
 	jsr advance_level			; needs new level_num before FormatDosName
 	jmp .hlw_load
 .hlw_chknew

@@ -419,6 +419,7 @@ hit_wall
 
 ; wallz 8.8 → half_h in 1..MAX_HALF_H (256-entry heightab, idx = wallz>>5)
 ; Scale $1800 = 3/4 of former $2000 (squarer tiles)
+; wallz>=$2000 → (wallz>>5) high != 0; 8-bit idx would wrap into near heights
 calc_half_h
 	lda wallz_h
 	sta tmp1
@@ -432,10 +433,16 @@ calc_half_h
 	lsr tmp1
 	ror
 	lsr tmp1
-	ror					; A = wallz >> 5
-	beq .near				; wallz < 32: close, spend on divide
+	ror					; A = (wallz>>5) low; tmp1 = high
+	ldx tmp1
+	bne .far1				; wallz >= $2000 → half_h = 1
 	tax
+	beq .near				; wallz < 32: close, spend on divide
 	lda heightab,x
+	sta half_h
+	rts
+.far1
+	lda #1
 	sta half_h
 	rts
 .near

@@ -1,6 +1,6 @@
 ; Wolf64 MENU overlay — load @ LOCODE_BASE ($0900), JSR from boot, then overwritten by LOCODE.
 ; Entry: +0 run_menu, +3 copy_enemy. Hires bitmap UI + full menufont (options + text screens).
-; difficulty → $08FF; effects_vol/music_vol → $08FD/$08FE (survive LOCODE overwrite).
+; difficulty → $08FF; effects_vol/game_complete → $08FD/$08FE (survive LOCODE overwrite).
 ; Menu SFX: CIA1 Timer A + playsound (MOVEGUN/SHOOT/ESC from AUDIOT).
 !cpu 6502
 !to "menu.prg", cbm
@@ -33,6 +33,9 @@ COL_MAIN	= 14			; light blue
 COL_BAR		= 0			; black
 COL_BOX		= 6			; dark blue
 COL_LOGO_RED	= 2			; sprite fill under logo
+STORY_BG	= 12			; grey screen around story panel
+STORY_BOX	= 1			; white story panel
+STORY_TEXT	= 0			; black story text
 MARK_CARET	= $1e			; !scr "^" — white span toggle, not drawn
 
 NM_BACK		= 256 - 66
@@ -109,12 +112,22 @@ run_menu
 	sta menu_can_ret
 	lda #15
 	sta effects_vol
-	lda #10
-	sta music_vol
 	jsr menu_sfx_init
 	jsr clear_screen_all
 	jsr draw_brand
 	jsr sync_vol_strings
+	lda game_complete
+	cmp #1
+	bne .rm_menu
+	lda #0
+	sta game_complete
+	lda #<ending1_text
+	ldy #>ending1_text
+	jsr show_story_screen
+	lda #<ending2_text
+	ldy #>ending2_text
+	jsr show_story_screen
+.rm_menu
 	jsr draw_menu
 .rm_loop
 	jsr ui_read_keys
@@ -214,25 +227,16 @@ menu_esc
 
 menu_vol_input
 	lda menu_item
-	cmp #2
-	bcs .mvi_o
+	bne .mvi_o				; only effects row (0); back is 1
 	lda #UI_RIGHT
 	and ui_pressed
 	bne .mvi_i
 	lda #UI_LEFT
 	and ui_pressed
 	beq .mvi_o
-	lda menu_item
-	bne .mvi_md
 	jmp vol_fx_dec
-.mvi_md
-	jmp vol_mus_dec
 .mvi_i
-	lda menu_item
-	bne .mvi_mi
 	jmp vol_fx_inc
-.mvi_mi
-	jmp vol_mus_inc
 .mvi_o
 	rts
 
@@ -251,22 +255,6 @@ vol_fx_dec
 	sta effects_vol
 	sta $d418
 	jsr sfx_movegun1
-	jmp sync_redraw
-vol_mus_inc
-	inc music_vol
-	lda music_vol
-	and #15
-	sta music_vol
-	sta $d418				; preview at music level
-	jsr sfx_movegun1
-	jmp sync_redraw
-vol_mus_dec
-	dec music_vol
-	lda music_vol
-	and #15
-	sta music_vol
-	sta $d418
-	jsr sfx_movegun1
 sync_redraw
 	jsr sync_vol_strings
 	ldx menu_item
@@ -280,13 +268,6 @@ sync_vol_strings
 	sta ptr_h
 	ldx #15
 	lda effects_vol
-	jsr write_vol2
-	lda #<str_mus_vol
-	sta ptr_l
-	lda #>str_mus_vol
-	sta ptr_h
-	ldx #13
-	lda music_vol
 	jmp write_vol2
 
 write_vol2
@@ -413,13 +394,13 @@ menu_select
 	jsr sfx_shoot
 	lda #<readthis1_text
 	ldy #>readthis1_text
-	jsr show_text_screen
+	jsr show_story_screen
 	lda #<readthis2_text
 	ldy #>readthis2_text
-	jsr show_text_screen
+	jsr show_story_screen
 	lda #<readthis3_text
 	ldy #>readthis3_text
-	jsr show_text_screen
+	jsr show_story_screen
 	jmp .ms_ret
 .ms_crd
 	jsr sfx_shoot
@@ -455,10 +436,10 @@ next_menu
 	!byte 1, 3, NM_CTRL, NM_HELP, NM_CREDITS, NM_QUIT, 0, 0
 	!byte 2, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_BACK, 0
 	!byte NM_START, NM_START, NM_START, NM_START, NM_BACK, 0, 0, 0
-	!byte 3, 3, NM_BACK, 0, 0, 0, 0, 0
+	!byte 3, NM_BACK, 0, 0, 0, 0, 0, 0
 
 menu_sizes
-	!byte 6, 7, 5, 3
+	!byte 6, 7, 5, 2
 
 ; --- drawing ---------------------------------------------------------------
 draw_menu
@@ -470,6 +451,8 @@ draw_menu
 
 	jsr calc_box
 	jsr draw_section_title
+	lda #COL_BOX
+	sta cell_bg
 	jsr fill_option_box
 
 	ldx #0
@@ -635,15 +618,42 @@ draw_menu_item
 show_text_screen
 	sta txt_ptr_l
 	sty txt_ptr_h
-	jsr clear_screen
-
-	jsr calc_text_box
-	jsr fill_option_box
-
 	lda #COL_BOX
 	sta cell_bg
 	lda #TEXT_COL
+	sta mark_col_a
 	sta ui_text_col			; ^ spans persist across lines
+	lda #HILITE_COL
+	sta mark_col_b
+	jmp .sts_body
+
+; Read This! / endings: grey surround, white panel, black text. Restores COL_MAIN.
+show_story_screen
+	sta txt_ptr_l
+	sty txt_ptr_h
+	lda #STORY_BG
+	sta clear_bg
+	sta $d021
+	lda #STORY_BOX
+	sta cell_bg
+	lda #STORY_TEXT
+	sta mark_col_a
+	sta mark_col_b
+	sta ui_text_col
+	jsr .sts_body
+	lda #COL_MAIN
+	sta clear_bg
+	sta $d021
+	lda #TEXT_COL
+	sta mark_col_a
+	lda #HILITE_COL
+	sta mark_col_b
+	rts
+
+.sts_body
+	jsr clear_screen
+	jsr calc_text_box
+	jsr fill_option_box
 	ldx #0
 .st_l
 	stx tmp4
@@ -665,7 +675,8 @@ show_text_screen
 	cpx menu_size
 	bcc .st_l
 .st_wait
-	jmp wait_any_key
+	jsr wait_any_key
+	rts
 
 ; Size box from body lines. Leaves ui_str at first line.
 calc_text_box
@@ -771,7 +782,7 @@ clear_screen
 	bcc .cs_p
 	; colour matrix from row 6: 760 bytes (do not touch sprite ptrs @ $43F8)
 	ldx #0
-	lda #COL_MAIN
+	lda clear_bg
 .cs_c
 	sta SCREEN + BRAND_KEEP_ROWS * 40,x
 	sta SCREEN + BRAND_KEEP_ROWS * 40 + $100,x
@@ -1000,7 +1011,7 @@ fill_option_box
 	ldy #0
 .fob_c
 	jsr bmp_blank_cell_y
-	lda #COL_BOX
+	lda cell_bg
 	sta (aux_l),y
 	iny
 	cpy box_width
@@ -1114,7 +1125,7 @@ print_at
 .pa_d
 	rts
 
-; Grey/white via ^; A=col X=row. Leaves ui_text_col so spans can cross lines.
+; mark_col_a/b via ^; A=col X=row. Leaves ui_text_col so spans can cross lines.
 print_marked
 	sta pr_col
 	stx pr_row
@@ -1125,12 +1136,12 @@ print_marked
 	cmp #MARK_CARET
 	bne .pm_ch
 	lda ui_text_col
-	cmp #TEXT_COL
-	beq .pm_w
-	lda #TEXT_COL
-	bne .pm_set
-.pm_w
-	lda #HILITE_COL
+	cmp mark_col_a
+	bne .pm_to_a
+	lda mark_col_b
+	jmp .pm_set
+.pm_to_a
+	lda mark_col_a
 .pm_set
 	sta ui_text_col
 	iny
@@ -1411,6 +1422,9 @@ pr_len		!byte 0
 txt_ptr_l	!byte 0
 txt_ptr_h	!byte 0
 cell_bg		!byte 0
+clear_bg	!byte COL_MAIN
+mark_col_a	!byte TEXT_COL
+mark_col_b	!byte HILITE_COL
 
 str_hint	!scr "W/S move  A/D adjust  Return select",0
 str_new_game	!scr "New Game",0
@@ -1427,7 +1441,6 @@ str_e4		!scr "A Dark Secret",0
 str_e5		!scr "Trail of the Madman",0
 str_e6		!scr "Confrontation",0
 str_fx_vol	!scr "Effects Volume 15",0
-str_mus_vol	!scr "Music Volume 10",0
 str_itytd	!scr "Can I play, Daddy?",0
 str_dhm		!scr "Don't hurt me.",0
 str_hmp		!scr "Bring 'em on!",0
@@ -1452,7 +1465,7 @@ menu_str_lo
 	!byte <str_e5, <str_e6, <str_back, 0
 	!byte <str_itytd, <str_dhm, <str_hmp, <str_uv
 	!byte <str_back, 0, 0, 0
-	!byte <str_fx_vol, <str_mus_vol, <str_back, 0
+	!byte <str_fx_vol, <str_back, 0, 0
 	!byte 0, 0, 0, 0
 menu_str_hi
 	!byte >str_new_game, >str_sound, >str_control, >str_read_this
@@ -1461,7 +1474,7 @@ menu_str_hi
 	!byte >str_e5, >str_e6, >str_back, 0
 	!byte >str_itytd, >str_dhm, >str_hmp, >str_uv
 	!byte >str_back, 0, 0, 0
-	!byte >str_fx_vol, >str_mus_vol, >str_back, 0
+	!byte >str_fx_vol, >str_back, 0, 0
 	!byte 0, 0, 0, 0
 
 !source "menu_logo.asm"

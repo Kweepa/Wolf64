@@ -13,7 +13,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; --- memory map -----------------------------------------------------------
 ; $0400  tables.asm (disk: tab)
 ; $0801  disposable boot → low BSS overlay (col_* / LoadPrg scrap)
-; $08C0  reboot stub (installed at locode_entry); $08FD/$08FE vols; $08FF difficulty
+; $08C0  reboot stub (installed at locode_entry); $08FD effects_vol; $08FE game_complete; $08FF difficulty
 ; $0900  locode — game code, no enemy modules (disk: locode); MENU overlay pre-load
 ;        col_wallz_h / col_enemy live after end_sfx (not on boot page)
 ; $033C  locode runtime BSS (cassette buffer; not in locode PRG)

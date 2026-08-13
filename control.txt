@@ -8,5 +8,6 @@
 ^1^-^4^..... ^Change weapon^
 
 ^Walk into doors to open them.
-Walk into secret walls to push them.
+Walk into secret walls to push
+them.
 Walk over items to pick them up.^

@@ -15,18 +15,23 @@ BOX_VGAP	= 1			; empty rows inside box top/bottom
 CURSOR_GAP	= 1			; blank cols between pistol and text
 BAR_TOP		= 2			; leave 2 rows of main bg above bar
 BAR_ROWS	= 3
-BRAND_ROW	= 3			; middle of black bar
+BADGE_TOP	= BAR_TOP - 1		; 5-row logo plaque overlaps bar
+BADGE_LEFT	= 8			; (40 - 24) / 2 — 2 cols pad each side of logo
+BRAND_KEEP_ROWS	= 6			; rows 0..5 fixed (bar + badge); skip on repaint
 HINT_ROW	= 23
 HINT_COL	= 0			; black help text
 CURSOR_CH	= '@'			; pistol glyph in menufont
+LOGO_SPR_RAM	= $4800			; 7×64 in VIC bank 1 (menu-only)
+LOGO_SPR_PTR0	= (LOGO_SPR_RAM - SCREEN) / 64
 
 TEXT_COL	= 12			; grey options
-HILITE_COL	= 1			; white selected
+HILITE_COL	= 1			; white selected / logo ink
 TITLE_COL	= 7			; yellow titles
 MENU_BORDER	= 12			; grey
 COL_MAIN	= 14			; light blue
 COL_BAR		= 0			; black
 COL_BOX		= 6			; dark blue
+COL_LOGO_RED	= 2			; sprite fill under logo
 MARK_CARET	= $1e			; !scr "^" — white span toggle, not drawn
 
 NM_BACK		= 256 - 66
@@ -87,7 +92,8 @@ copy_enemy
 
 run_menu
 	jsr init_menu_vic
-	jsr clear_screen
+	jsr clear_screen_all
+	jsr draw_brand
 	lda #0
 	sta menu_id
 	sta menu_item
@@ -139,6 +145,7 @@ run_menu
 	jmp .rm_loop
 .rm_done
 	lda #0
+	sta $d015
 	sta $d020
 	sta $d021
 	rts
@@ -312,7 +319,9 @@ menu_select
 .ms_go
 	lda menu_item
 	sta difficulty
-	jsr clear_screen
+	lda #0
+	sta $d015
+	jsr clear_screen_all
 	ldx #20
 	jsr wait_frames_x
 	sec
@@ -422,16 +431,6 @@ menu_sizes
 ; --- drawing ---------------------------------------------------------------
 draw_menu
 	jsr clear_screen
-	jsr fill_top_bar
-
-	lda #COL_BAR
-	sta cell_bg
-	lda #TITLE_COL
-	sta ui_text_col
-	lda #<str_title
-	ldy #>str_title
-	ldx #BRAND_ROW
-	jsr print_centered
 
 	ldx menu_id
 	lda menu_sizes,x
@@ -529,7 +528,7 @@ calc_box
 	adc #BOX_VGAP
 	adc #BOX_VGAP
 	sta tmp5				; box_height
-	lda #BAR_TOP + BAR_ROWS + 2
+	lda #BADGE_TOP + MENU_LOGO_ROWS + 1
 	sta box_top
 	lda #HINT_ROW
 	sec
@@ -605,16 +604,6 @@ show_text_screen
 	sta txt_ptr_l
 	sty txt_ptr_h
 	jsr clear_screen
-	jsr fill_top_bar
-
-	lda #COL_BAR
-	sta cell_bg
-	lda #TITLE_COL
-	sta ui_text_col
-	lda #<str_title
-	ldy #>str_title
-	ldx #BRAND_ROW
-	jsr print_centered
 
 	jsr calc_text_box
 	jsr fill_option_box
@@ -683,7 +672,7 @@ calc_text_box
 	adc #BOX_VGAP
 	adc #BOX_VGAP
 	sta tmp5
-	lda #BAR_TOP + BAR_ROWS + 2
+	lda #BADGE_TOP + MENU_LOGO_ROWS + 1
 	sta box_top
 	lda #HINT_ROW
 	sec
@@ -728,7 +717,42 @@ init_menu_vic
 	sta $d021
 	rts
 
+; Clear rows BRAND_KEEP_ROWS..24 only — bar/badge stay put.
 clear_screen
+	lda #<BITMAP + BRAND_KEEP_ROWS * 320
+	sta ptr_l
+	lda #>BITMAP + BRAND_KEEP_ROWS * 320
+	sta ptr_h
+	ldy #0
+	lda #>(BITMAP + $2000)
+	sta tmp5
+.cs_p
+	lda #0
+	sta (ptr_l),y
+	iny
+	bne .cs_p
+	inc ptr_h
+	lda ptr_h
+	cmp tmp5
+	bcc .cs_p
+	; colour matrix from row 6: 760 bytes (do not touch sprite ptrs @ $43F8)
+	ldx #0
+	lda #COL_MAIN
+.cs_c
+	sta SCREEN + BRAND_KEEP_ROWS * 40,x
+	sta SCREEN + BRAND_KEEP_ROWS * 40 + $100,x
+	inx
+	bne .cs_c
+	ldx #0
+.cs_c2
+	sta SCREEN + BRAND_KEEP_ROWS * 40 + $200,x
+	inx
+	cpx #248				; 240+512+248 = 1000
+	bne .cs_c2
+	rts
+
+; Full bitmap + matrix clear (menu entry / exit).
+clear_screen_all
 	lda #<BITMAP
 	sta ptr_l
 	lda #>BITMAP
@@ -736,23 +760,23 @@ clear_screen
 	lda #0
 	tax
 	tay
-.cs_p
+.csa_p
 	sta (ptr_l),y
 	iny
-	bne .cs_p
+	bne .csa_p
 	inc ptr_h
 	inx
 	cpx #32
-	bcc .cs_p
+	bcc .csa_p
 	ldx #0
-	lda #COL_MAIN			; fg0 | bg light-blue
-.cs_c
+	lda #COL_MAIN
+.csa_c
 	sta SCREEN,x
 	sta SCREEN+$100,x
 	sta SCREEN+$200,x
 	sta SCREEN+$2e8,x
 	inx
-	bne .cs_c
+	bne .csa_c
 	rts
 
 fill_top_bar
@@ -774,6 +798,155 @@ fill_top_bar
 	cpx #BAR_TOP + BAR_ROWS
 	bcc .ftb_r
 	rts
+
+; 3-row bar + 5-row badge + white logo + red sprite fill
+draw_brand
+	jsr fill_top_bar
+	jsr fill_logo_badge
+	jsr blit_menu_logo
+	jmp setup_logo_sprites
+
+fill_logo_badge
+	ldx #0
+.flb_r
+	stx tmp4
+	txa
+	clc
+	adc #BADGE_TOP
+	tax
+	lda #BADGE_LEFT
+	jsr bmp_cell_addr
+	ldy #0
+.flb_c
+	jsr bmp_blank_cell_y
+	lda #COL_BAR
+	sta (aux_l),y
+	iny
+	cpy #MENU_LOGO_COLS
+	bcc .flb_c
+	ldx tmp4
+	inx
+	cpx #MENU_LOGO_ROWS
+	bcc .flb_r
+	rts
+
+blit_menu_logo
+	lda #<menu_logo_data
+	sta .bld + 1
+	lda #>menu_logo_data
+	sta .bld + 2
+	ldx #0
+.blr
+	stx tmp4
+	txa
+	clc
+	adc #BADGE_TOP
+	tax
+	lda #BADGE_LEFT
+	jsr bmp_cell_addr
+	ldx #0
+.blc
+	stx tmp5
+	txa
+	asl
+	asl
+	asl
+	tay
+	ldx #0
+.blb
+.bld	lda $ffff,x
+	sta (ptr_l),y
+	iny
+	inx
+	cpx #8
+	bne .blb
+	lda .bld + 1
+	clc
+	adc #8
+	sta .bld + 1
+	bcc .bln
+	inc .bld + 2
+.bln
+	lda #HILITE_COL
+	asl
+	asl
+	asl
+	asl
+	ora #COL_BAR
+	ldy tmp5
+	sta (aux_l),y
+	ldx tmp5
+	inx
+	cpx #MENU_LOGO_COLS
+	bcc .blc
+	ldx tmp4
+	inx
+	cpx #MENU_LOGO_ROWS
+	bcc .blr
+	rts
+
+setup_logo_sprites
+	ldx #0
+.slc0
+	lda menu_logo_spr,x
+	sta LOGO_SPR_RAM,x
+	inx
+	bne .slc0
+	ldx #0
+.slc1
+	lda menu_logo_spr + $100,x
+	sta LOGO_SPR_RAM + $100,x
+	inx
+	cpx #$c0
+	bne .slc1
+	ldx #0
+	lda #LOGO_SPR_PTR0
+.slp
+	sta SCREEN + $3f8,x
+	clc
+	adc #1
+	inx
+	cpx #MENU_LOGO_SPR_COUNT
+	bne .slp
+	lda #COL_LOGO_RED
+	ldx #0
+.slcol
+	sta $d027,x
+	inx
+	cpx #MENU_LOGO_SPR_COUNT
+	bne .slcol
+	ldx #0
+	ldy #0
+.slx
+	lda logo_spr_x,x
+	sta $d000,y
+	iny
+	iny
+	inx
+	cpx #MENU_LOGO_SPR_COUNT
+	bne .slx
+	lda #0
+	sta $d010
+	lda #50 + BADGE_TOP * 8 + MENU_LOGO_PAD_Y + MENU_LOGO_SPR_OFF_Y
+	ldx #0
+	ldy #1
+.sly
+	sta $d000,y
+	iny
+	iny
+	inx
+	cpx #MENU_LOGO_SPR_COUNT
+	bne .sly
+	lda #0
+	sta $d01b				; sprites in front of bitmap
+	sta $d017
+	sta $d01d
+	lda #%01111111
+	sta $d015
+	rts
+
+logo_spr_x
+	!byte 104, 128, 152, 176, 200, 224, 248
 
 fill_option_box
 	lda menu_size
@@ -1209,7 +1382,6 @@ txt_ptr_l	!byte 0
 txt_ptr_h	!byte 0
 cell_bg		!byte 0
 
-str_title	!scr "Wolf64",0
 str_hint	!scr "W/S move  A/D adjust  Return select",0
 str_new_game	!scr "New Game",0
 str_sound	!scr "Sound",0
@@ -1262,6 +1434,7 @@ menu_str_hi
 	!byte >str_fx_vol, >str_mus_vol, >str_back, 0
 	!byte 0, 0, 0, 0
 
+!source "menu_logo.asm"
 !source "../assets/menufont.asm"
 
 end_menu = *

@@ -7,6 +7,7 @@ Extract Wolfenstein 3D shareware maps (GAMEMAPS.WL1) and compress each
 from __future__ import annotations
 
 import argparse
+import random
 import struct
 import sys
 from pathlib import Path
@@ -169,6 +170,42 @@ def is_spawn_item_tile(tile: int) -> bool:
     if T_AMMO <= tile <= T_MACHINEGUN:
         return tile not in (T_CROSS, T_CHALICE)
     return T_PILLAR <= tile <= T_PLANT
+
+
+# Runtime enemy pool (must match MAX_ENEMIES in src/mem.asm).
+MAX_ENEMIES_BUDGET = 64
+
+
+def is_enemy_tile(tile: int) -> bool:
+    return T_GUARD_PATROL <= tile <= T_BOSS
+
+
+def is_cullable_enemy_tile(tile: int) -> bool:
+    """Any enemy except Hans/boss — overflow maps drop these randomly."""
+    return is_enemy_tile(tile) and tile != T_BOSS
+
+
+def cull_enemies_to_budget(out: bytearray, rng: random.Random) -> int:
+    n = sum(1 for t in out if is_enemy_tile(t))
+    if n <= MAX_ENEMIES_BUDGET:
+        return 0
+    culled = 0
+    cells = len(out)
+    attempts = 0
+    max_attempts = cells * 64
+    while n > MAX_ENEMIES_BUDGET and attempts < max_attempts:
+        attempts += 1
+        i = rng.randrange(cells)
+        if not is_cullable_enemy_tile(out[i]):
+            continue
+        out[i] = T_EMPTY
+        culled += 1
+        n -= 1
+    if n > MAX_ENEMIES_BUDGET:
+        raise RuntimeError(
+            f"enemy cull stuck at {n} (budget {MAX_ENEMIES_BUDGET}); culled {culled}"
+        )
+    return culled
 
 
 def carmack_expand(data: bytes, expanded_len: int) -> bytearray:
@@ -469,6 +506,7 @@ def pushwall_direction(walls: list[int], x: int, y: int) -> int:
 def convert_level(
     walls: list[int],
     objs: list[int],
+    rng: random.Random | None = None,
 ) -> bytes:
     out = bytearray(MAP_W * MAP_H)
     pushwalls: list[tuple[int, int]] = []
@@ -534,6 +572,12 @@ def convert_level(
         if out[ti] == T_EMPTY:
             out[ti] = T_PUSH_TRAJ + d
 
+    if rng is None:
+        rng = random.Random(0x57464F4C)
+    culled = cull_enemies_to_budget(out, rng)
+    if culled:
+        print(f"  culled {culled} enemies to <={MAX_ENEMIES_BUDGET}")
+
     return flip_vertical(bytes(out))
 
 
@@ -598,7 +642,8 @@ def extract_all(shareware_dir: Path, out_dir: Path) -> list[tuple[str, Path]]:
             continue
         name, walls, objs = read_level(gamemaps, off, rlew_tag)
         print(f"{i:02d} {name}")
-        blob = convert_level(walls, objs)
+        rng = random.Random(0x57464F4C ^ (i * 0x9E3779B9))
+        blob = convert_level(walls, objs, rng)
         assert len(blob) == 4096
         path = out_dir / sanitize_filename(name, i)
         path.write_bytes(blob)

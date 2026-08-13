@@ -20,6 +20,7 @@ TEXTURES	= $4800
 WPN_SPRITES	= $5000			; HUD weapons + flashes (34 sprites → $5880)
 ITEM_SPRITES	= $5880			; world item gfx (4bpp + LUTs; to bitmap $6000)
 MAX_VIS		= 48			; enemies + items in one depth-sorted draw list
+MAX_ENEMIES	= 64			; enemy SoA pool (hot in enemy PRG / gap / stack)
 SQTAB1		= $3800			; Judd 2K (disk: sqt; locode..screen gap)
 SQTAB2		= SQTAB1 + $200
 SQTAB3		= SQTAB1 + $400

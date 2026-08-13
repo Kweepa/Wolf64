@@ -24,9 +24,9 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $5880  world item gfx (disk: itm; to bitmap $6000)
 ; $6000  bitmap (8K, disk: bmp)
 ; $8000  wall painters only (disk: paint)
-; $B8F2  PC SFX (disk: sfx); item scratch + vis_depth/order/kind after end_sfx → <$C000
-; $C000  enemy block — code, AI, gfx, hot SoA (disk: enemy); cold SoA @ $0100
-; $0100  cold enemy tables under stack (vis_slot…enemy_type); STACK_GUARD=$01D0
+; $B8F2  PC SFX (disk: sfx); item/vis scratch + cold enemy SoA after end_sfx → <$C000
+; $C000  enemy block — code, AI, gfx, hot pos/facing/flags (disk: enemy)
+; $0100  vis_slot + vis_perp + enemy_burst; STACK_GUARD=$01D0
 ; $EF00  map (disk: e1m1… via LoadLevel)
 
 !source "mem.asm"
@@ -369,7 +369,7 @@ end_sfx = *
 ; Column depth/hit buffers relocated off boot page (room for REBOOT_STUB)
 col_wallz_h	= end_sfx
 col_enemy	= col_wallz_h + 40
-; Per-frame item scratch (map AABB cull) + vis depth/order — SFX→enemy gap
+; Per-frame item scratch + vis depth/order — SFX→enemy gap
 item_x		= col_enemy + 40
 item_y		= item_x + MAX_VIS
 item_frm	= item_y + MAX_VIS
@@ -377,17 +377,22 @@ vis_depth_l	= item_frm + MAX_VIS
 vis_depth_h	= vis_depth_l + MAX_VIS
 vis_order	= vis_depth_h + MAX_VIS		; sort tokens → vis_slot/vis_depth
 vis_kind	= vis_order + MAX_VIS		; 0=enemy, 1=item (scratch idx in vis_slot)
-end_item_soa	= vis_kind + MAX_VIS
+; Cold + overflow hot enemy SoA (not in enemy PRG)
+enemy_state_t	= vis_kind + MAX_VIS
+enemy_type	= enemy_state_t + MAX_ENEMIES
+enemy_hp		= enemy_type + MAX_ENEMIES
+enemy_state	= enemy_hp + MAX_ENEMIES
+end_item_soa	= enemy_state + MAX_ENEMIES
 !if end_item_soa > ENEMY_BASE {
-	!error "Item/vis BSS overlaps ENEMY_BASE; end=$", end_item_soa
+	!error "Item/vis/enemy BSS overlaps ENEMY_BASE; end=$", end_item_soa
 }
 
-; Cold/runtime enemy tables under the stack ($0100..<$01D0) — not on enemy PRG
+; Under stack: vis list + perp + burst (packs to STACK_GUARD)
 vis_slot	= STACK_BSS			; MAX_VIS entity ids (unsorted; kind in vis_kind)
-enemy_burst	= vis_slot + MAX_VIS
-enemy_state_t	= enemy_burst + 32
-enemy_type	= enemy_state_t + 32		; cold: spawn / AI branch
-end_stack_bss	= enemy_type + 32
+vis_perp_l	= vis_slot + MAX_VIS		; true forward perp (enemies+items)
+vis_perp_h	= vis_perp_l + MAX_VIS
+enemy_burst	= vis_perp_h + MAX_VIS
+end_stack_bss	= enemy_burst + MAX_ENEMIES
 !if end_stack_bss > STACK_GUARD {
 	!error "Stack BSS hits STACK_GUARD; end=$", end_stack_bss
 }
@@ -402,27 +407,19 @@ end_stack_bss	= enemy_type + 32
 !source "enemy_painters.asm"
 enemy_gfx_data
 !binary "../textures/enemies.bin"
-; Enemy SoA (hot fields; cold tables under stack — STACK_BSS / enemy_type)
+; Enemy SoA (pos/facing/flags; hp/state/type/burst elsewhere — see wolf64 BSS)
 enemy_xh
-!fill 32, 0
+!fill MAX_ENEMIES, 0
 enemy_xl
-!fill 32, 0
+!fill MAX_ENEMIES, 0
 enemy_yh
-!fill 32, 0
+!fill MAX_ENEMIES, 0
 enemy_yl
-!fill 32, 0
+!fill MAX_ENEMIES, 0
 enemy_facing
-!fill 32, 0
+!fill MAX_ENEMIES, 0
 enemy_flags
-!fill 32, 0
-enemy_perp_l
-!fill 32, 0
-enemy_perp_h
-!fill 32, 0
-enemy_hp
-!fill 32, 0
-enemy_state
-!fill 32, 0
+!fill MAX_ENEMIES, 0
 end_enemy = *
 !if end_enemy > MAP {
 	!error "Enemy block overlaps MAP; end=$", end_enemy

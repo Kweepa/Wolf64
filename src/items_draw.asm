@@ -40,7 +40,7 @@ item_clamp63
 	rts
 
 ; ---------------------------------------------------------------------------
-; X = item — fill vis_depth[vis_i] (mid-tile $80). Perp recomputed in draw_one.
+; X = item — fill vis_depth[vis_i] + vis_perp (mid-tile $80).
 item_calc_depth
 	stx enemy_idx
 	sec
@@ -94,11 +94,12 @@ item_calc_depth
 	rol e_acc_h
 	bcs .icd_far
 
-	; stash true perp in e_side temporarily → item_perp ZP
+	; stash true perp → vis_perp[vis_i]
+	ldy vis_i
 	lda e_acc_l
-	sta item_perp_l
+	sta vis_perp_l,y
 	lda e_acc_h
-	sta item_perp_h
+	sta vis_perp_h,y
 
 	jsr enemy_approx_dist
 	lda e_acc_h
@@ -118,8 +119,9 @@ item_calc_depth
 	lda #$ff
 	sta e_acc_l
 	sta e_acc_h
-	sta item_perp_l
-	sta item_perp_h
+	ldy vis_i
+	sta vis_perp_l,y
+	sta vis_perp_h,y
 .icd_store
 	ldy vis_i
 	lda e_acc_l
@@ -172,7 +174,7 @@ item_draw_one
 	lda item_frm_h,y
 	sta e_frm_h
 
-	; mid-tile delta + side + true perp (for FOV / project)
+	; mid-tile delta + side; perp from vis_perp[vis_tok]
 	ldx enemy_idx
 	sec
 	lda #$80
@@ -189,44 +191,12 @@ item_draw_one
 	sbc playery_h
 	sta e_dy_h
 
-	ldy playera
-	lda costab,y
-	sta e_mul
-	lda e_dx_l
-	sta aux_l
-	lda e_dx_h
-	sta aux_h
-	jsr enemy_mul_s16x8
-	sta e_acc_l
-	stx e_acc_h
-	ldy playera
-	lda sintab,y
-	sta e_mul
-	lda e_dy_l
-	sta aux_l
-	lda e_dy_h
-	sta aux_h
-	jsr enemy_mul_s16x8
-	sta tmp0
-	stx tmp1
-	sec
-	lda e_acc_l
-	sbc tmp0
+	ldx vis_tok
+	lda vis_perp_l,x
 	sta item_perp_l
-	lda e_acc_h
-	sbc tmp1
+	lda vis_perp_h,x
 	sta item_perp_h
 	bpl +
-	jmp .ido_rts
-+
-	asl item_perp_l
-	rol item_perp_h
-	bcc +
-	jmp .ido_rts
-+
-	asl item_perp_l
-	rol item_perp_h
-	bcc +
 	jmp .ido_rts
 +
 

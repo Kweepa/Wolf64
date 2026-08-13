@@ -1,8 +1,7 @@
 ; Enemies — SoA pool, patrol/chase/shoot/bite, depth-sorted masked billboards
 !zone enemy
 
-MAX_ENEMIES	= 32
-; MAX_VIS in mem.asm — shared vis_slot / vis_depth / vis_order
+; MAX_ENEMIES / MAX_VIS in mem.asm
 T_GUARD		= 53				; +0..3 NESW patrol
 T_AMBUSH	= 57				; +0..3 NESW ambush
 T_SS_PATROL	= 61				; +0..3 NESW
@@ -747,7 +746,7 @@ enemies_draw
 .ed_done
 	rts
 
-; X = enemy — fill vis_depth[vis_i] (wallz) and enemy_perp_l/h
+; X = enemy — fill vis_depth[vis_i] (wallz) and vis_perp_l/h
 ; perp = forward·delta (×4 wallz). depth = max(perp, octagon≈|δ|) so grazing
 ; angles can't shrink Z/scale and punch through walls. Screen X / FOV use perp.
 enemy_calc_depth
@@ -808,12 +807,12 @@ enemy_calc_depth
 	rol e_acc_h
 	bcs .ecd_far
 
-	; stash true perp for projection / FOV
-	ldx enemy_idx
+	; stash true perp for projection / FOV (vis_perp[vis_i])
+	ldy vis_i
 	lda e_acc_l
-	sta enemy_perp_l,x
+	sta vis_perp_l,y
 	lda e_acc_h
-	sta enemy_perp_h,x
+	sta vis_perp_h,y
 
 	; approx range = max(|dx|,|dy|) + min/2 (octagon, already 8.8)
 	jsr enemy_approx_dist		; → tmp0/tmp1
@@ -835,9 +834,9 @@ enemy_calc_depth
 	lda #$ff
 	sta e_acc_l
 	sta e_acc_h
-	ldx enemy_idx
-	sta enemy_perp_l,x
-	sta enemy_perp_h,x
+	ldy vis_i
+	sta vis_perp_l,y
+	sta vis_perp_h,y
 .ecd_store
 	ldy vis_i
 	lda e_acc_l
@@ -1129,11 +1128,11 @@ enemy_draw_one
 	sbc tmp1
 	sta tmp1
 +
-	ldx enemy_idx
-	lda enemy_perp_h,x
+	ldx vis_tok
+	lda vis_perp_h,x
 	lsr
 	sta tmp3
-	lda enemy_perp_l,x
+	lda vis_perp_l,x
 	ror
 	sta tmp2
 	lsr tmp3
@@ -1533,8 +1532,8 @@ enemy_calc_side
 enemy_project_col
 	lda #20
 	sta e_col_cx
-	ldx enemy_idx
-	lda enemy_perp_h,x
+	ldx vis_tok
+	lda vis_perp_h,x
 	cmp #$ff
 	bne .epj_ok
 	rts
@@ -1542,7 +1541,7 @@ enemy_project_col
 	; perp_mid = perp >> 2
 	lsr
 	sta tmp3
-	lda enemy_perp_l,x
+	lda vis_perp_l,x
 	ror
 	sta tmp2
 	lsr tmp3

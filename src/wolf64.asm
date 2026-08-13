@@ -168,6 +168,7 @@ main_loop
 !source "profil.asm"
 !source "input.asm"
 !source "playsound.asm"
+!source "playsound_at.asm"
 !source "loader.asm"
 !source "dda.asm"
 !source "doors.asm"
@@ -193,6 +194,7 @@ end_locode = *
 !if end_locode > SQTAB1 {
 	!error "Locode overlaps SQTAB1; end=$", end_locode
 }
+!warn "Locode free $", SQTAB1 - end_locode, " (end=$", end_locode, " limit SQTAB1=$", SQTAB1, ")"
 
 ; --- Locode runtime BSS in cassette buffer (not emitted into locode PRG) ---
 ; item_* SoA is in RAM after end_sfx; col_* overlays boot (bss.asm)
@@ -429,3 +431,4 @@ end_enemy = *
 !if end_enemy > MAP {
 	!error "Enemy block overlaps MAP; end=$", end_enemy
 }
+!warn "Enemy free $", MAP - end_enemy, " (end=$", end_enemy, " limit MAP=$", MAP, ")"

@@ -40,7 +40,7 @@ item_clamp63
 	rts
 
 ; ---------------------------------------------------------------------------
-; X = item — fill item_depth (mid-tile $80). Perp recomputed in draw_one.
+; X = item — fill vis_depth[vis_i] (mid-tile $80). Perp recomputed in draw_one.
 item_calc_depth
 	stx enemy_idx
 	sec
@@ -121,41 +121,40 @@ item_calc_depth
 	sta item_perp_l
 	sta item_perp_h
 .icd_store
-	ldx enemy_idx
+	ldy vis_i
 	lda e_acc_l
-	sta item_depth_l,x
+	sta vis_depth_l,y
 	lda e_acc_h
-	sta item_depth_h,x
-	; persist perp for this item (reuse depth hi slot pair — see note)
-	; stored only in ZP last-item; draw recomputes — wipe stash
+	sta vis_depth_h,y
 	rts
 
 ; ---------------------------------------------------------------------------
 item_draw_one
 	stx enemy_idx
-	lda item_depth_h,x
+	ldx vis_tok
+	lda vis_depth_h,x
 	cmp #$ff
 	bne +
-	lda item_depth_l,x
+	lda vis_depth_l,x
 	cmp #$ff
 	bne +
 	rts
 +
-	lda item_depth_h,x
-	ora item_depth_l,x
+	lda vis_depth_h,x
+	ora vis_depth_l,x
 	bne +
 	rts
 +
-	lda item_depth_h,x
+	lda vis_depth_h,x
 	bne +
-	lda item_depth_l,x
+	lda vis_depth_l,x
 	cmp #32
 	bcs +
 	rts
 +
-	lda item_depth_l,x
+	lda vis_depth_l,x
 	sta wallz_l
-	lda item_depth_h,x
+	lda vis_depth_h,x
 	sta wallz_h
 	jsr calc_half_h
 	jsr enemy_calc_spr_h
@@ -451,14 +450,14 @@ item_draw_one
 	bcc .ido_cnxt
 	cmp #COL_LIMIT
 	bcs .ido_cnxt
-	ldx enemy_idx
-	lda item_depth_h,x
+	ldx vis_tok
+	lda vis_depth_h,x
 	ldx col
 	cmp col_wallz_h,x
 	bcc .ido_zok
 	bne .ido_cnxt
-	ldx enemy_idx
-	lda item_depth_l,x
+	ldx vis_tok
+	lda vis_depth_l,x
 	ldx col
 	cmp col_wallz_l,x
 	bcs .ido_cnxt

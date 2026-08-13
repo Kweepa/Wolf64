@@ -7,6 +7,7 @@ Extract Wolfenstein 3D shareware maps (GAMEMAPS.WL1) and compress each
 from __future__ import annotations
 
 import argparse
+import random
 import struct
 import sys
 from pathlib import Path
@@ -162,6 +163,76 @@ STATIC_MAP = {
     46: None,
     47: None,
 }
+
+# Runtime item pool budget (must match MAX_ITEMS in src/mem.asm).
+MAX_ITEMS_BUDGET = 200
+
+# Wolf object ids kept when randomly culling overflow props.
+# Ceiling lamps (chandelier / ceiling light) + all pickups / weapons / 1-up.
+KEEP_STATIC_OBJS = frozenset(
+    {
+        27,  # chandelier
+        29,  # dog food
+        37,  # ceiling light
+        43,  # gold key
+        44,  # silver key
+        47,  # food
+        48,  # first aid
+        49,  # ammo
+        50,  # machinegun
+        51,  # chaingun
+        56,  # 1-up → first aid
+    }
+)
+
+
+def is_spawn_item_tile(tile: int) -> bool:
+    """Tiles that items_init registers into the SoA (cross/chalice skipped)."""
+    if T_AMMO <= tile <= T_MACHINEGUN:
+        return tile not in (T_CROSS, T_CHALICE)
+    return T_PILLAR <= tile <= T_PLANT
+
+
+def is_cullable_static_obj(obj: int) -> bool:
+    if obj in KEEP_STATIC_OBJS:
+        return False
+    if not (23 <= obj <= 74):
+        return False
+    mapped = map_static(obj)
+    return mapped is not None and is_spawn_item_tile(mapped)
+
+
+def cull_items_to_budget(out: bytearray, objs: list[int], rng: random.Random) -> int:
+    """
+    Random rejection cull: pick a cell; if its object is a cullable prop and the
+    output tile still occupies an item slot, clear it. Repeat until under budget.
+    """
+    n = sum(1 for t in out if is_spawn_item_tile(t))
+    if n <= MAX_ITEMS_BUDGET:
+        return 0
+
+    culled = 0
+    cells = MAP_W * MAP_H
+    # Bound attempts so a misconfigured keep-set cannot hang.
+    attempts = 0
+    max_attempts = cells * 64
+    while n > MAX_ITEMS_BUDGET and attempts < max_attempts:
+        attempts += 1
+        i = rng.randrange(cells)
+        o = objs[i]
+        if not is_cullable_static_obj(o):
+            continue
+        if not is_spawn_item_tile(out[i]):
+            continue
+        out[i] = T_EMPTY
+        culled += 1
+        n -= 1
+    if n > MAX_ITEMS_BUDGET:
+        raise RuntimeError(
+            f"item cull stuck at {n} spawnables (budget {MAX_ITEMS_BUDGET}); "
+            f"culled {culled}"
+        )
+    return culled
 
 
 def carmack_expand(data: bytes, expanded_len: int) -> bytearray:
@@ -459,7 +530,11 @@ def pushwall_direction(walls: list[int], x: int, y: int) -> int:
     return best_dir
 
 
-def convert_level(walls: list[int], objs: list[int]) -> bytes:
+def convert_level(
+    walls: list[int],
+    objs: list[int],
+    rng: random.Random | None = None,
+) -> bytes:
     out = bytearray(MAP_W * MAP_H)
     pushwalls: list[tuple[int, int]] = []
 
@@ -524,6 +599,12 @@ def convert_level(walls: list[int], objs: list[int]) -> bytes:
         if out[ti] == T_EMPTY:
             out[ti] = T_PUSH_TRAJ + d
 
+    if rng is None:
+        rng = random.Random(0x57464F4C)  # "WOLF"
+    culled = cull_items_to_budget(out, objs, rng)
+    if culled:
+        print(f"  culled {culled} props to <={MAX_ITEMS_BUDGET} item slots")
+
     return flip_vertical(bytes(out))
 
 
@@ -587,7 +668,9 @@ def extract_all(shareware_dir: Path, out_dir: Path) -> list[tuple[str, Path]]:
         if off <= 0:
             continue
         name, walls, objs = read_level(gamemaps, off, rlew_tag)
-        blob = convert_level(walls, objs)
+        print(f"{i:02d} {name}")
+        rng = random.Random(0x57464F4C ^ (i * 0x9E3779B9))
+        blob = convert_level(walls, objs, rng)
         assert len(blob) == 4096
         path = out_dir / sanitize_filename(name, i)
         path.write_bytes(blob)

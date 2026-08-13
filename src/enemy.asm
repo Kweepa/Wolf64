@@ -2,7 +2,7 @@
 !zone enemy
 
 MAX_ENEMIES	= 32
-MAX_VIS		= 48				; enemies + items in one depth sort
+; MAX_VIS in mem.asm — shared vis_slot / vis_depth / vis_order
 T_GUARD		= 53				; +0..3 NESW patrol
 T_AMBUSH	= 57				; +0..3 NESW ambush
 T_SS_PATROL	= 61				; +0..3 NESW
@@ -633,7 +633,7 @@ enemy_push_walls
 	rts
 
 ; ---------------------------------------------------------------------------
-; Draw: cull enemies + items → depth → sort far→near → project → mask blit
+; Draw: cull enemies + items → depth → sort order tokens → project → mask blit
 enemies_draw
 	lda enemy_count
 	ora item_count
@@ -686,6 +686,8 @@ enemies_draw
 	bcs .ed_culldone
 	txa
 	sta vis_slot,y
+	lda #0				; VK_ENEMY
+	sta vis_kind,y
 	iny
 	sty vis_count
 .ed_cn
@@ -697,17 +699,27 @@ enemies_draw
 	bne +
 	rts
 +
-	; depths for visible
+	; identity order tokens (vis_slot/vis_depth/vis_kind stay fixed)
+	ldx #0
+.ed_ord
+	txa
+	sta vis_order,x
+	inx
+	cpx vis_count
+	bcc .ed_ord
+
+	; depths for visible → vis_depth[stable index]
 	ldy #0
 .ed_dep
 	sty vis_i
+	lda vis_kind,y
+	bne .ed_dep_item
 	lda vis_slot,y
-	bmi .ed_dep_item
 	tax
 	jsr enemy_calc_depth
 	jmp .ed_dep_n
 .ed_dep_item
-	and #$7f
+	lda vis_slot,y
 	tax
 	jsr item_calc_depth
 .ed_dep_n
@@ -718,20 +730,24 @@ enemies_draw
 
 	jsr enemy_sort_depth
 
-	; draw far → near
+	; draw far → near via sorted tokens
 	lda #0
 	sta vis_i
 .ed_draw
 	ldy vis_i
 	cpy vis_count
 	bcs .ed_done
+	lda vis_order,y
+	sta vis_tok
+	tay
+	lda vis_kind,y
+	bne .ed_draw_item
 	lda vis_slot,y
-	bmi .ed_draw_item
 	tax
 	jsr enemy_draw_one
 	jmp .ed_draw_n
 .ed_draw_item
-	and #$7f
+	lda vis_slot,y
 	tax
 	jsr item_draw_one
 .ed_draw_n
@@ -740,7 +756,7 @@ enemies_draw
 .ed_done
 	rts
 
-; X = enemy — fill enemy_depth_l/h (wallz) and enemy_perp_l/h
+; X = enemy — fill vis_depth[vis_i] (wallz) and enemy_perp_l/h
 ; perp = forward·delta (×4 wallz). depth = max(perp, octagon≈|δ|) so grazing
 ; angles can't shrink Z/scale and punch through walls. Screen X / FOV use perp.
 enemy_calc_depth
@@ -832,11 +848,11 @@ enemy_calc_depth
 	sta enemy_perp_l,x
 	sta enemy_perp_h,x
 .ecd_store
-	ldx enemy_idx
+	ldy vis_i
 	lda e_acc_l
-	sta enemy_depth_l,x
+	sta vis_depth_l,y
 	lda e_acc_h
-	sta enemy_depth_h,x
+	sta vis_depth_h,y
 	rts
 
 ; |e_dx|,|e_dy| → tmp0/tmp1 = max + min/2
@@ -936,15 +952,15 @@ neg_aux
 	sta aux_h
 	rts
 
-; Insertion sort vis_slot by depth descending (far first)
-; vis_slot: 0..31 enemy, $80+item = item index
+; Insertion sort vis_order by vis_depth descending (far first).
+; vis_slot / vis_depth / vis_kind stay fixed; tokens are stable indices.
 enemy_sort_depth
 	ldx #1
 .es_outer
 	cpx vis_count
 	bcs .es_done
-	lda vis_slot,x
-	sta tmp0
+	lda vis_order,x
+	sta tmp0				; token being inserted
 	stx tmp5
 	txa
 	tay
@@ -952,60 +968,40 @@ enemy_sort_depth
 	dey
 	bmi .es_at0
 	sty tmp4
-	lda vis_slot,y
-	jsr .es_depth			; → tmp1=h tmp2=l for [y]
-	lda tmp1
-	sta tmp3				; save [y] hi
-	lda tmp2
-	sta e_acc_l				; save [y] lo (reuse)
-	lda tmp0
-	jsr .es_depth			; → tmp1/tmp2 for new
-	lda tmp1
+	ldx vis_order,y
+	lda vis_depth_h,x
+	sta tmp3				; [y] hi
+	lda vis_depth_l,x
+	sta e_acc_l				; [y] lo
+	ldx tmp0
+	lda vis_depth_h,x
 	cmp tmp3
 	bcc .es_place			; new nearer than [y]
 	bne .es_shift
-	lda tmp2
+	lda vis_depth_l,x
 	cmp e_acc_l
 	bcc .es_place
 	beq .es_place
 .es_shift
 	ldy tmp4
-	lda vis_slot,y
-	sta vis_slot+1,y
+	lda vis_order,y
+	sta vis_order+1,y
 	jmp .es_inner
 .es_at0
 	lda tmp0
-	sta vis_slot
+	sta vis_order
 	jmp .es_next
 .es_place
 	ldy tmp4
 	iny
 	lda tmp0
-	sta vis_slot,y
+	sta vis_order,y
 .es_next
 	ldx tmp5
 	inx
 	cpx vis_count
 	bcc .es_outer
 .es_done
-	rts
-
-; A = vis_slot entry → tmp1=depth_h tmp2=depth_l
-.es_depth
-	tax
-	bpl .es_den
-	and #$7f
-	tax
-	lda item_depth_h,x
-	sta tmp1
-	lda item_depth_l,x
-	sta tmp2
-	rts
-.es_den
-	lda enemy_depth_h,x
-	sta tmp1
-	lda enemy_depth_l,x
-	sta tmp2
 	rts
 
 ; wallz → e_spr_h = $2400/wallz (≡ 3/2 · $1800/wallz), 1..ENEMY_MAX_H
@@ -1046,34 +1042,35 @@ enemy_calc_spr_h
 	sta e_spr_h
 	rts
 
-; X = enemy — project + paint
+; X = enemy — project + paint (depth from vis_depth[vis_tok])
 enemy_draw_one
 	stx enemy_idx
-	lda enemy_depth_h,x
+	ldx vis_tok
+	lda vis_depth_h,x
 	cmp #$ff
 	bne +
-	lda enemy_depth_l,x
+	lda vis_depth_l,x
 	cmp #$ff
 	bne +
 	rts					; behind camera
 +
-	lda enemy_depth_h,x
-	ora enemy_depth_l,x
+	lda vis_depth_h,x
+	ora vis_depth_l,x
 	bne +
 	rts					; on top of player
 +
 	; reject extremely near (unstable / fills view)
-	lda enemy_depth_h,x
+	lda vis_depth_h,x
 	bne +
-	lda enemy_depth_l,x
+	lda vis_depth_l,x
 	cmp #32
 	bcs +
 	rts
 +
 	; wallz = depth for half_h (floor alignment) + fine sprite height
-	lda enemy_depth_l,x
+	lda vis_depth_l,x
 	sta wallz_l
-	lda enemy_depth_h,x
+	lda vis_depth_h,x
 	sta wallz_h
 	jsr calc_half_h
 	jsr enemy_calc_spr_h
@@ -1318,14 +1315,14 @@ enemy_draw_one
 	bcc .edo_cnxt
 	cmp #COL_LIMIT
 	bcs .edo_cnxt
-	ldx enemy_idx
-	lda enemy_depth_h,x
+	ldx vis_tok
+	lda vis_depth_h,x
 	ldx col
 	cmp col_wallz_h,x
 	bcc .edo_zok
 	bne .edo_cnxt
-	ldx enemy_idx
-	lda enemy_depth_l,x
+	ldx vis_tok
+	lda vis_depth_l,x
 	ldx col
 	cmp col_wallz_l,x
 	bcs .edo_cnxt

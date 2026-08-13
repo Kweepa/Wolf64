@@ -2,7 +2,7 @@
 !zone items
 
 ; MAX_ITEMS in mem.asm
-IF_ACTIVE	= $01
+; item_frm = $ff → inactive (picked up / empty)
 
 T_AMMO		= 19
 T_FIRSTAID	= 20
@@ -29,12 +29,6 @@ item_frm_33
 items_init
 	lda #0
 	sta item_count
-	tax
-.ii_clr
-	sta item_flags,x
-	inx
-	cpx #MAX_ITEMS
-	bne .ii_clr
 
 	lda #<MAP
 	sta tmp0
@@ -76,8 +70,6 @@ items_init
 	sta item_x,x
 	lda tmp3
 	sta item_y,x
-	lda #IF_ACTIVE
-	sta item_flags,x
 	inx
 	stx item_count
 .ii_next
@@ -107,8 +99,6 @@ items_init
 	sta tmp1
 	lda item_frm,x
 	sta tmp2
-	lda item_flags,x
-	sta tmp3
 	stx tmp5
 	txa
 	tay
@@ -125,8 +115,6 @@ items_init
 	sta item_y+1,y
 	lda item_frm,y
 	sta item_frm+1,y
-	lda item_flags,y
-	sta item_flags+1,y
 	jmp .is_inner
 .is_at0
 	lda tmp0
@@ -135,8 +123,6 @@ items_init
 	sta item_y
 	lda tmp2
 	sta item_frm
-	lda tmp3
-	sta item_flags
 	jmp .is_next
 .is_place
 	iny
@@ -146,8 +132,6 @@ items_init
 	sta item_y,y
 	lda tmp2
 	sta item_frm,y
-	lda tmp3
-	sta item_flags,y
 .is_next
 	ldx tmp5
 	inx
@@ -183,17 +167,16 @@ items_try_pickup
 	lda item_x,x
 	cmp tmp4
 	bne .itp_rts
-	lda item_flags,x
-	and #IF_ACTIVE
-	beq .itp_n
+	lda item_frm,x
+	bmi .itp_n				; $ff = inactive
 	lda item_y,x
 	cmp tmp5
 	bne .itp_n
 	lda item_frm,x
 	jsr item_apply
 	bcc .itp_n
-	lda #0
-	sta item_flags,x
+	lda #$ff
+	sta item_frm,x
 .itp_n
 	inx
 	bne .itp_band
@@ -332,7 +315,7 @@ item_add_hp
 	rts
 
 ; ---------------------------------------------------------------------------
-; Append near items to vis_slot as index|$80.
+; Append near items to vis_slot (plain index; vis_kind=1).
 ; 6×6 AABB centered at player + 3·forward (fwd = cos, −sin; AMP=64 → ×3>>6).
 ITEM_GATHER_HALF	= 3			; [c-3 .. c+2] = 6 tiles
 
@@ -419,9 +402,8 @@ items_cull_near
 	beq .ic_iny
 	bcs .ic_done
 .ic_iny
-	lda item_flags,x
-	and #IF_ACTIVE
-	beq .ic_n
+	lda item_frm,x
+	bmi .ic_n				; $ff = inactive
 	lda item_y,x
 	cmp tmp2
 	bcc .ic_n
@@ -433,8 +415,9 @@ items_cull_near
 	cpy #MAX_VIS
 	bcs .ic_done
 	txa
-	ora #$80
 	sta vis_slot,y
+	lda #1				; VK_ITEM
+	sta vis_kind,y
 	iny
 	sty vis_count
 	inc item_considered

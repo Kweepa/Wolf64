@@ -24,7 +24,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $5880  world item gfx (disk: itm; to bitmap $6000)
 ; $6000  bitmap (8K, disk: bmp)
 ; $8000  wall painters only (disk: paint)
-; $B8F2  PC SFX (disk: sfx); item SoA in RAM after end_sfx → <$C000
+; $B8F2  PC SFX (disk: sfx); item SoA + vis_depth/order/kind after end_sfx → <$C000
 ; $C000  enemy block — code, AI, gfx, hot SoA (disk: enemy); cold SoA @ $0100
 ; $0100  cold enemy tables under stack (vis_slot…enemy_type); STACK_GUARD=$01D0
 ; $EF00  map (disk: e1m1… via LoadLevel)
@@ -54,7 +54,7 @@ locode_entry
 	lda #0
 	sta episode
 	sta load_in_play
-	lda #9
+	lda #2
 	sta level_num
 	jsr LoadLevel
 	bcs .le_fail
@@ -231,7 +231,8 @@ ai_old		= ai_turn + 1
 ai_dirtry	= ai_old + 1			; 5 bytes
 vis_count	= ai_dirtry + 5
 vis_i		= vis_count + 1
-enemy_idx	= vis_i + 1
+vis_tok		= vis_i + 1			; stable vis_slot/vis_depth index
+enemy_idx	= vis_tok + 1
 probe_doors_pass = enemy_idx + 1
 e_dx_l		= probe_doors_pass + 1
 e_dx_h		= e_dx_l + 1
@@ -368,21 +369,23 @@ end_sfx = *
 ; Column depth/hit buffers relocated off boot page (room for REBOOT_STUB)
 col_wallz_h	= end_sfx
 col_enemy	= col_wallz_h + 40
-; Item SoA — runtime BSS in SFX→enemy gap (not loaded from disk)
+; Item SoA + vis depth/order — runtime BSS in SFX→enemy gap (not loaded from disk)
 item_x		= col_enemy + 40
 item_y		= item_x + MAX_ITEMS
-item_frm	= item_y + MAX_ITEMS
-item_flags	= item_frm + MAX_ITEMS
-item_depth_l	= item_flags + MAX_ITEMS
-item_depth_h	= item_depth_l + MAX_ITEMS
-end_item_soa	= item_depth_h + MAX_ITEMS
+item_frm	= item_y + MAX_ITEMS		; $ff = inactive / picked up
+; Depth/sort scratch keyed by stable vis index (not entity SoA)
+vis_depth_l	= item_frm + MAX_ITEMS
+vis_depth_h	= vis_depth_l + MAX_VIS
+vis_order	= vis_depth_h + MAX_VIS		; sort tokens → vis_slot/vis_depth
+vis_kind	= vis_order + MAX_VIS		; 0=enemy, 1=item (plain index in vis_slot)
+end_item_soa	= vis_kind + MAX_VIS
 !if end_item_soa > ENEMY_BASE {
-	!error "Item SoA overlaps ENEMY_BASE; end=$", end_item_soa
+	!error "Item/vis BSS overlaps ENEMY_BASE; end=$", end_item_soa
 }
 
 ; Cold/runtime enemy tables under the stack ($0100..<$01D0) — not on enemy PRG
-vis_slot	= STACK_BSS			; MAX_VIS = 48
-enemy_burst	= vis_slot + 48
+vis_slot	= STACK_BSS			; MAX_VIS entity ids (unsorted; kind in vis_kind)
+enemy_burst	= vis_slot + MAX_VIS
 enemy_state_t	= enemy_burst + 32
 enemy_anim_t	= enemy_state_t + 32
 enemy_view	= enemy_anim_t + 32
@@ -414,10 +417,6 @@ enemy_yl
 enemy_facing
 !fill 32, 0
 enemy_flags
-!fill 32, 0
-enemy_depth_l
-!fill 32, 0
-enemy_depth_h
 !fill 32, 0
 enemy_perp_l
 !fill 32, 0

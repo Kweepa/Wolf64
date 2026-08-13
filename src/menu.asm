@@ -1,6 +1,7 @@
 ; Wolf64 MENU overlay — load @ LOCODE_BASE ($0900), JSR from boot, then overwritten by LOCODE.
 ; Entry: +0 run_menu, +3 copy_enemy. Hires bitmap UI + full menufont (options + text screens).
 ; difficulty → $08FF; effects_vol/music_vol → $08FD/$08FE (survive LOCODE overwrite).
+; Menu SFX: CIA1 Timer A + playsound (MOVEGUN/SHOOT/ESC from AUDIOT).
 !cpu 6502
 !to "menu.prg", cbm
 
@@ -27,7 +28,7 @@ LOGO_SPR_PTR0	= (LOGO_SPR_RAM - SCREEN) / 64
 TEXT_COL	= 12			; grey options
 HILITE_COL	= 1			; white selected / logo ink
 TITLE_COL	= 7			; yellow titles
-MENU_BORDER	= 12			; grey
+MENU_BORDER	= 6			; blue
 COL_MAIN	= 14			; light blue
 COL_BAR		= 0			; black
 COL_BOX		= 6			; dark blue
@@ -61,6 +62,15 @@ tmp4		= $06
 tmp5		= $07
 aux_l		= $fd
 aux_h		= $fe
+; Match zp.asm — playsound / menu_sfx (boot BSS still holds boot.prg)
+sound_index	= $b2
+sound_ptr_l	= $b3
+sound_ptr_h	= $b4
+sound_priority	= $c1
+sound_count	= $c2
+sound_max	= $c3
+ps_save_x	= $c4
+ps_save_y	= $c5
 
 *= LOCODE_BASE
 	jmp run_menu
@@ -92,8 +102,6 @@ copy_enemy
 
 run_menu
 	jsr init_menu_vic
-	jsr clear_screen_all
-	jsr draw_brand
 	lda #0
 	sta menu_id
 	sta menu_item
@@ -103,6 +111,9 @@ run_menu
 	sta effects_vol
 	lda #10
 	sta music_vol
+	jsr menu_sfx_init
+	jsr clear_screen_all
+	jsr draw_brand
 	jsr sync_vol_strings
 	jsr draw_menu
 .rm_loop
@@ -144,6 +155,7 @@ run_menu
 	bne .rm_rel
 	jmp .rm_loop
 .rm_done
+	jsr menu_sfx_done
 	lda #0
 	sta $d015
 	sta $d020
@@ -160,7 +172,8 @@ menu_move_up
 	dex
 .mmu
 	stx menu_item
-	jmp update_selection
+	jsr update_selection
+	jmp sfx_movegun2
 
 menu_move_down
 	lda menu_item
@@ -172,7 +185,8 @@ menu_move_down
 	ldx #0
 .mmd
 	stx menu_item
-	jmp update_selection
+	jsr update_selection
+	jmp sfx_movegun2
 
 ; Repaint only old + new rows (no clear / full redraw)
 update_selection
@@ -184,6 +198,7 @@ update_selection
 	jmp draw_menu_item
 
 menu_esc
+	jsr sfx_esc
 	lda menu_stack_d
 	beq .me_rts
 	tax
@@ -226,24 +241,32 @@ vol_fx_inc
 	lda effects_vol
 	and #15
 	sta effects_vol
+	sta $d418
+	jsr sfx_movegun1
 	jmp sync_redraw
 vol_fx_dec
 	dec effects_vol
 	lda effects_vol
 	and #15
 	sta effects_vol
+	sta $d418
+	jsr sfx_movegun1
 	jmp sync_redraw
 vol_mus_inc
 	inc music_vol
 	lda music_vol
 	and #15
 	sta music_vol
+	sta $d418				; preview at music level
+	jsr sfx_movegun1
 	jmp sync_redraw
 vol_mus_dec
 	dec music_vol
 	lda music_vol
 	and #15
 	sta music_vol
+	sta $d418
+	jsr sfx_movegun1
 sync_redraw
 	jsr sync_vol_strings
 	ldx menu_item
@@ -317,6 +340,7 @@ menu_select
 	beq .ms_go
 	jmp .ms_st
 .ms_go
+	jsr sfx_shoot
 	lda menu_item
 	sta difficulty
 	lda #0
@@ -335,6 +359,7 @@ menu_select
 	jmp .ms_st
 .ms_ne
 	bcc .ms_po
+	jsr sfx_shoot
 	ldx menu_stack_d
 	lda menu_id
 	sta menu_stk_m,x
@@ -349,6 +374,7 @@ menu_select
 	jsr draw_menu
 	jmp .ms_st
 .ms_po
+	jsr sfx_shoot
 	ldx menu_stack_d
 	dex
 	stx menu_stack_d
@@ -372,16 +398,19 @@ menu_select
 	beq quit_to_basic
 	jmp .ms_st
 .ms_ord
+	jsr sfx_shoot
 	lda #<order_text
 	ldy #>order_text
 	jsr show_text_screen
 	jmp .ms_ret
 .ms_ctl
+	jsr sfx_shoot
 	lda #<control_text
 	ldy #>control_text
 	jsr show_text_screen
 	jmp .ms_ret
 .ms_hlp
+	jsr sfx_shoot
 	lda #<readthis1_text
 	ldy #>readthis1_text
 	jsr show_text_screen
@@ -393,6 +422,7 @@ menu_select
 	jsr show_text_screen
 	jmp .ms_ret
 .ms_crd
+	jsr sfx_shoot
 	lda #<credits_text
 	ldy #>credits_text
 	jsr show_text_screen
@@ -405,6 +435,8 @@ menu_select
 
 ; Warm-start BASIC → READY.
 quit_to_basic
+	jsr sfx_shoot
+	jsr menu_sfx_done
 	sei
 	lda #$37
 	sta $01
@@ -693,7 +725,7 @@ calc_text_box
 
 ; --- hires bitmap (full menufont) ------------------------------------------
 init_menu_vic
-	lda #$36
+	lda #$35				; I/O in, KERNAL out (menu_sfx IRQ uses $fffe)
 	sta $01
 	lda $dd00
 	and #%11111100
@@ -1434,6 +1466,10 @@ menu_str_hi
 
 !source "menu_logo.asm"
 !source "../assets/menufont.asm"
+!source "playsound.asm"
+!source "menu_sfx.asm"
+!source "menu_pcsounds.asm"
+!source "pcsfreq.asm"
 
 end_menu = *
 !if end_menu > $4000 {

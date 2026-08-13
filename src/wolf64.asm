@@ -16,6 +16,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $08C0  reboot stub (installed at locode_entry); $08FD/$08FE vols; $08FF difficulty
 ; $0900  locode — game code, no enemy modules (disk: locode); MENU overlay pre-load
 ;        col_wallz_h / col_enemy live after end_sfx (not on boot page)
+; $033C  locode runtime BSS (cassette buffer; not in locode PRG)
 ; $3800  Judd SQTAB (disk: sqt; 2K in locode–screen gap)
 ; $4000  VIC screen A / B ($4400) (disk: scr)
 ; $4800  textures (disk: tex)
@@ -25,6 +26,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $8000  wall painters only (disk: paint)
 ; $B8F2  PC SFX (disk: sfx); item SoA in RAM after end_sfx → <$C000
 ; $C000  enemy block — code, AI, gfx, hot SoA (disk: enemy); cold SoA @ $0100
+; $0100  cold enemy tables under stack (vis_slot…enemy_type); STACK_GUARD=$01D0
 ; $EF00  map (disk: e1m1… via LoadLevel)
 
 !source "mem.asm"
@@ -82,6 +84,15 @@ game_start
 	sta $dc02
 	lda #0
 	sta $dc03
+
+	; Tape BSS is absolute RAM (not in locode PRG) — clear once
+	ldx #0
+	txa
+.gs_cltape
+	sta TAPE_BSS,x
+	inx
+	cpx #(end_tape_bss - TAPE_BSS)
+	bne .gs_cltape
 
 	; KERNAL LOAD clobbered ZP — Judd table hi ptrs (tables LOADed by boot)
 	jsr init_sqtabs
@@ -166,180 +177,7 @@ main_loop
 !source "items.asm"
 !source "painter_tables.asm"
 
-; --- BSS after code (col_* overlays boot; see bss.asm) --------------------
-; item_* SoA is in RAM after end_sfx (not in locode PRG)
-enemy_count
-!byte 0
-item_count
-!byte 0
-item_considered
-!byte 0
-los_rr
-!byte 0
-player_hp
-!byte 0
-player_ammo
-!byte 0
-player_keys
-!byte 0
-player_score_l
-!byte 0
-player_score_h
-!byte 0
-player_lives
-!byte 0
-player_dead
-!byte 0
-death_ms_l
-!byte 0
-death_ms_h
-!byte 0
-hurt_flash
-!byte 0				; 1=red this frame, 2=clear next (player_border_tick)
-ui_dirty
-!byte 0
-level_want
-!byte 0				; 0=none 1=restart 2=next
-ai_dx
-!byte 0
-ai_dy
-!byte 0
-ai_steps
-!byte 0
-ai_xl
-!byte 0
-ai_xh
-!byte 0
-ai_yl
-!byte 0
-ai_yh
-!byte 0
-ai_xsl
-!byte 0
-ai_xsh
-!byte 0
-ai_ysl
-!byte 0
-ai_ysh
-!byte 0
-ai_dist
-!byte 0
-ai_turn
-!byte 0
-ai_old
-!byte 0
-ai_dirtry
-!fill 5, 0
-vis_count
-!byte 0
-vis_i
-!byte 0
-enemy_idx
-!byte 0
-probe_doors_pass
-!byte 0
-e_dx_l
-!byte 0
-e_dx_h
-!byte 0
-e_dy_l
-!byte 0
-e_dy_h
-!byte 0
-e_mul
-!byte 0
-e_acc_l
-!byte 0
-e_acc_h
-!byte 0
-e_side_l
-!byte 0
-e_side_h
-!byte 0
-e_spr_h
-!byte 0
-e_top
-!byte 0
-e_bot
-!byte 0
-e_view
-!byte 0
-e_frm_base
-!byte 0
-e_src_i
-!byte 0
-e_flip
-!byte 0
-e_frm
-!byte 0
-e_frm_w
-!byte 0
-e_frm_h
-!byte 0
-e_scr_w
-!byte 0
-e_col_cx
-!byte 0
-e_col0
-!byte 0
-e_sx
-!byte 0
-e_scol
-!byte 0
-e_scol_raw
-!byte 0
-e_scol_cache
-!byte 0
-e_u_numer
-!byte 0
-e_u_denom
-!byte 0
-e_clip_skip
-!byte 0
-e_gfx_l
-!byte 0
-e_gfx_h
-!byte 0
-e_step_l
-!byte 0
-e_step_h
-!byte 0
-e_row
-!byte 0
-e_pix
-!fill 16, 0
-door_x
-!fill 8, 0
-door_y
-!fill 8, 0
-door_pos
-!fill 8, 0
-door_state
-!fill 8, 0
-door_orient
-!fill 8, 0
-door_tic_l
-!fill 8, 0
-door_tic_h
-!fill 8, 0
-door_tile
-!fill 8, 0
-door_savex
-!byte 0
-door_savetl
-!byte 0
-door_saveth
-!byte 0
-turn_acc_l
-!byte 0
-turn_acc_h
-!byte 0
-frame_t0
-!fill 4, 0
-frame_cy
-!fill 4, 0
-casc_now
-!fill 4, 0
+; PROFILE-only BSS stays in locode PRG (won't fit leftover tape slack)
 !if PROFILE = 1 {
 casc_snap
 !fill 4, 0
@@ -354,6 +192,99 @@ prof_cy
 end_locode = *
 !if end_locode > SQTAB1 {
 	!error "Locode overlaps SQTAB1; end=$", end_locode
+}
+
+; --- Locode runtime BSS in cassette buffer (not emitted into locode PRG) ---
+; item_* SoA is in RAM after end_sfx; col_* overlays boot (bss.asm)
+enemy_count	= TAPE_BSS
+item_count	= enemy_count + 1
+item_considered	= item_count + 1
+los_rr		= item_considered + 1
+player_hp	= los_rr + 1
+player_ammo	= player_hp + 1
+player_keys	= player_ammo + 1
+player_score_l	= player_keys + 1
+player_score_h	= player_score_l + 1
+player_lives	= player_score_h + 1
+player_dead	= player_lives + 1
+death_ms_l	= player_dead + 1
+death_ms_h	= death_ms_l + 1
+hurt_flash	= death_ms_h + 1		; 1=red this frame, 2=clear next
+ui_dirty	= hurt_flash + 1
+level_want	= ui_dirty + 1			; 0=none 1=restart 2=next
+ai_dx		= level_want + 1
+ai_dy		= ai_dx + 1
+ai_steps	= ai_dy + 1
+ai_xl		= ai_steps + 1
+ai_xh		= ai_xl + 1
+ai_yl		= ai_xh + 1
+ai_yh		= ai_yl + 1
+ai_xsl		= ai_yh + 1
+ai_xsh		= ai_xsl + 1
+ai_ysl		= ai_xsh + 1
+ai_ysh		= ai_ysl + 1
+ai_dist		= ai_ysh + 1
+ai_turn		= ai_dist + 1
+ai_old		= ai_turn + 1
+ai_dirtry	= ai_old + 1			; 5 bytes
+vis_count	= ai_dirtry + 5
+vis_i		= vis_count + 1
+enemy_idx	= vis_i + 1
+probe_doors_pass = enemy_idx + 1
+e_dx_l		= probe_doors_pass + 1
+e_dx_h		= e_dx_l + 1
+e_dy_l		= e_dx_h + 1
+e_dy_h		= e_dy_l + 1
+e_mul		= e_dy_h + 1
+e_acc_l		= e_mul + 1
+e_acc_h		= e_acc_l + 1
+e_side_l	= e_acc_h + 1
+e_side_h	= e_side_l + 1
+e_spr_h		= e_side_h + 1
+e_top		= e_spr_h + 1
+e_bot		= e_top + 1
+e_view		= e_bot + 1
+e_frm_base	= e_view + 1
+e_src_i		= e_frm_base + 1
+e_flip		= e_src_i + 1
+e_frm		= e_flip + 1
+e_frm_w		= e_frm + 1
+e_frm_h		= e_frm_w + 1
+e_scr_w		= e_frm_h + 1
+e_col_cx	= e_scr_w + 1
+e_col0		= e_col_cx + 1
+e_sx		= e_col0 + 1
+e_scol		= e_sx + 1
+e_scol_raw	= e_scol + 1
+e_scol_cache	= e_scol_raw + 1
+e_u_numer	= e_scol_cache + 1
+e_u_denom	= e_u_numer + 1
+e_clip_skip	= e_u_denom + 1
+e_gfx_l		= e_clip_skip + 1
+e_gfx_h		= e_gfx_l + 1
+e_step_l	= e_gfx_h + 1
+e_step_h	= e_step_l + 1
+e_row		= e_step_h + 1
+e_pix		= e_row + 1			; 16 bytes
+door_x		= e_pix + 16
+door_y		= door_x + 8
+door_pos	= door_y + 8
+door_state	= door_pos + 8
+door_orient	= door_state + 8
+door_tic_l	= door_orient + 8
+door_tic_h	= door_tic_l + 8
+door_tile	= door_tic_h + 8
+door_savex	= door_tile + 8
+door_savetl	= door_savex + 1
+door_saveth	= door_savetl + 1
+turn_acc_l	= door_saveth + 1
+turn_acc_h	= turn_acc_l + 1
+frame_t0	= turn_acc_h + 1			; 4 bytes
+frame_cy	= frame_t0 + 4
+casc_now	= frame_cy + 4
+end_tape_bss	= casc_now + 4
+!if end_tape_bss > TAPE_BSS_END {
+	!error "Tape BSS overflows cassette buffer; end=$", end_tape_bss
 }
 
 ; =========================================================================
@@ -447,13 +378,14 @@ end_item_soa	= item_depth_h + MAX_ITEMS
 	!error "Item SoA overlaps ENEMY_BASE; end=$", end_item_soa
 }
 
-; Cold/runtime enemy tables under the stack ($0100..<$01C0) — not on enemy PRG
+; Cold/runtime enemy tables under the stack ($0100..<$01D0) — not on enemy PRG
 vis_slot	= STACK_BSS			; MAX_VIS = 48
 enemy_burst	= vis_slot + 48
 enemy_state_t	= enemy_burst + 32
 enemy_anim_t	= enemy_state_t + 32
 enemy_view	= enemy_anim_t + 32
-end_stack_bss	= enemy_view + 32		; $01B0
+enemy_type	= enemy_view + 32		; cold: spawn / AI branch
+end_stack_bss	= enemy_type + 32		; $01D0
 !if end_stack_bss > STACK_GUARD {
 	!error "Stack BSS hits STACK_GUARD; end=$", end_stack_bss
 }
@@ -468,7 +400,7 @@ end_stack_bss	= enemy_view + 32		; $01B0
 !source "enemy_painters.asm"
 enemy_gfx_data
 !binary "../textures/enemies.bin"
-; Enemy SoA (hot fields; cold tables live under stack — see STACK_BSS)
+; Enemy SoA (hot fields; cold tables under stack — STACK_BSS / enemy_type)
 enemy_xh
 !fill 32, 0
 enemy_xl
@@ -492,8 +424,6 @@ enemy_perp_h
 enemy_hp
 !fill 32, 0
 enemy_state
-!fill 32, 0
-enemy_type
 !fill 32, 0
 end_enemy = *
 !if end_enemy > MAP {

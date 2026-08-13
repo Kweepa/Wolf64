@@ -165,3 +165,9 @@ key_wpn_mg		= $bd
 key_wpn_chaingun	= $be
 item_perp_l		= $bf		; item draw: true forward perp (wallz units)
 item_perp_h		= $c0
+; SFX step state — ZP so MENU overlay can share playsound (boot still owns BSS)
+sound_priority		= $c1
+sound_count		= $c2
+sound_max		= $c3
+ps_save_x		= $c4
+ps_save_y		= $c5

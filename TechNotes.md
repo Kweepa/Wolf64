@@ -93,10 +93,17 @@ To load from disk with the KERNAL:
 
 Map is disk-only at `$EF00` (not part of the locode image).
 
-### Under-stack BSS (`$0100–$01BF`)
+### Cassette-buffer BSS (`$033C–$03FB`)
 
-Hardware stack grows down from `$01FF`. Reserve **`$01C0–$01FF`** (`STACK_GUARD`) for
-IRQ + nested `jsr`; put cold/runtime tables in `$0100..STACK_GUARD`:
+Locode runtime BSS (player/doors/AI scratch, `turn_acc`, frame timing) lives in the
+**cassette buffer** — not emitted into the locode PRG. Disk `LOAD` does not use
+this region. `game_start` zero-fills `TAPE_BSS`‥`end_tape_bss` once. ~170 bytes
+today; limit `TAPE_BSS_END` (`$03FC`). `PROFILE=1` extras stay in the locode image.
+
+### Under-stack BSS (`$0100–$01CF`)
+
+Hardware stack grows down from `$01FF`. Reserve **`$01D0–$01FF`** (`STACK_GUARD`) for
+IRQ + nested `jsr` (48 bytes); put cold/runtime tables in `$0100..STACK_GUARD`:
 
 | Symbol | Size | Role |
 |--------|------|------|
@@ -105,9 +112,10 @@ IRQ + nested `jsr`; put cold/runtime tables in `$0100..STACK_GUARD`:
 | `enemy_state_t` | 32 | state timers |
 | `enemy_anim_t` | 32 | walk-phase ms |
 | `enemy_view` | 32 | billboard octant |
+| `enemy_type` | 32 | spawn type (cold; not in enemy PRG) |
 
-Ends at `$01B0` today (`end_stack_bss`). Not part of any disk PRG. Do not let `SP`
-drop below `$C0`.
+Ends at `$01D0` today (`end_stack_bss`). Not part of any disk PRG. Do not let `SP`
+drop below `$D0`.
 
 ### Under-I/O RAM (`$D000–$DFFF`)
 

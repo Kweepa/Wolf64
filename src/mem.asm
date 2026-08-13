@@ -30,9 +30,12 @@ SFX_BASE	= PAINTERS + PAINTERS_SIZE	; $B8F2 — pcsounds + pcsfreq_hi
 ; Item SoA lives in RAM after end_sfx (see wolf64.asm); must end ≤ ENEMY_BASE
 ENEMY_BASE	= $C000			; contiguous enemy code+gfx+hot SoA
 MAP		= $EF00			; 4K level (under-KERNAL; LoadLevel)
-; Page-1 BSS under the hardware stack. SP must stay ≥ STACK_GUARD ($01C0).
+; Cassette buffer — locode runtime BSS (disk LOAD does not use tape buf)
+TAPE_BSS	= $033C
+TAPE_BSS_END	= $03FC			; exclusive; 192 bytes
+; Page-1 BSS under the hardware stack. SP must stay ≥ STACK_GUARD.
 STACK_BSS	= $0100
-STACK_GUARD	= $01C0			; ~64 bytes for IRQ + nested jsr
+STACK_GUARD	= $01D0			; 48 bytes for IRQ + nested jsr ($01D0–$01FF)
 
 ; Pickup / HUD constants
 AMMO_MAX	= 99

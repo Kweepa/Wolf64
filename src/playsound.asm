@@ -118,4 +118,4 @@ update_sfx
 .sfx_idle
 	rts
 
-; sound_* / ps_save_* live in BSS overlay (bss.asm)
+; sound_* / ps_save_* live in ZP (zp.asm) — shared with MENU overlay

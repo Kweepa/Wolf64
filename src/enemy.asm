@@ -8,6 +8,8 @@ T_SS_PATROL	= 61				; +0..3 NESW
 T_SS_AMBUSH	= 65				; +0..3 NESW
 T_DOG		= 69				; +0..3 NESW
 T_BOSS		= 73				; Hans = 73 (other boss subtypes ignored)
+T_HARD		= 150				; +0..19 copy of 53..72 (skills 3–4 only)
+T_HARD_N	= 20
 T_FLOOR		= 18
 T_TURN		= 113				; +0..7 N,NE,E,SE,S,SW,W,NW
 ET_GUARD	= 0
@@ -154,8 +156,20 @@ enemies_init
 	sta tmp4				; tile id
 	cmp #T_GUARD
 	bcc .ei_next
-	cmp #T_BOSS + 1			; 53..73 (Hans only among bosses)
+	cmp #T_BOSS + 1			; 53..73 always
+	bcc .ei_try
+	sbc #T_HARD				; C=1; 150..169 → 0..19
+	cmp #T_HARD_N
 	bcs .ei_next
+	adc #T_GUARD				; C=0 from cmp #20
+	sta tmp4
+	lda difficulty
+	lsr					; 0–1 skip, 2–3 spawn
+	bne .ei_try
+	lda #T_FLOOR
+	sta (tmp0),y
+	bne .ei_next
+.ei_try
 	ldx enemy_count
 	cpx #MAX_ENEMIES
 	bcs .ei_next
@@ -308,15 +322,7 @@ eu_state_hi
 	jsr play_sound
 	jmp .eu_du_mark
 .eu_du_ammo
-	clc
-	adc #AMMO_CLIP_AMT
-	bcs .eu_du_sat
-	cmp #AMMO_MAX + 1
-	bcc .eu_du_ok
-.eu_du_sat
-	lda #AMMO_MAX
-.eu_du_ok
-	sta player_ammo
+	jsr ammo_clip_amt
 	lda #UI_DIRTY_AMMO
 	ora ui_dirty
 	sta ui_dirty

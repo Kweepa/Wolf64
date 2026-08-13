@@ -127,15 +127,7 @@ item_apply
 	bcc +
 	jmp .ia_no				; full — leave clip
 +
-	clc
-	adc #AMMO_CLIP_AMT
-	bcs .ia_ammo_sat
-	cmp #AMMO_MAX + 1
-	bcc .ia_ammo_ok
-.ia_ammo_sat
-	lda #AMMO_MAX
-.ia_ammo_ok
-	sta player_ammo
+	jsr ammo_clip_amt
 	lda #UI_DIRTY_AMMO
 	ora ui_dirty
 	sta ui_dirty
@@ -161,15 +153,7 @@ item_apply
 	lda player_ammo
 	cmp #AMMO_MAX
 	bcs .ia_mg_wep			; weapon only; ammo already max
-	clc
-	adc #AMMO_CLIP_AMT
-	bcs .ia_mg_sat
-	cmp #AMMO_MAX + 1
-	bcc .ia_mg_ok
-.ia_mg_sat
-	lda #AMMO_MAX
-.ia_mg_ok
-	sta player_ammo
+	jsr ammo_clip_amt
 	lda #UI_DIRTY_AMMO
 	ora ui_dirty
 	sta ui_dirty

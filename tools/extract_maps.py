@@ -61,6 +61,8 @@ T_SS_PATROL = 61
 T_SS_AMBUSH = 65
 T_DOG = 69
 T_BOSS = 73
+T_HARD = 150  # +0..19 copy of 53..72 (Death-incarnate extras; no Hans)
+T_HARD_COUNT = 20
 T_TURN = 113  # +0..7 N,NE,E,SE,S,SW,W,NW (Wolf ICONARROWS)
 T_EXIT = 145
 T_PUSH_TRAJ = 146  # +0..3 NESW
@@ -176,31 +178,35 @@ def is_spawn_item_tile(tile: int) -> bool:
 MAX_ENEMIES_BUDGET = 64
 
 
+def is_hard_enemy_tile(tile: int) -> bool:
+    return T_HARD <= tile < T_HARD + T_HARD_COUNT
+
+
 def is_enemy_tile(tile: int) -> bool:
-    return T_GUARD_PATROL <= tile <= T_BOSS
+    return T_GUARD_PATROL <= tile <= T_BOSS or is_hard_enemy_tile(tile)
 
 
-def is_cullable_enemy_tile(tile: int) -> bool:
-    """Any enemy except Hans/boss — overflow maps drop these randomly."""
-    return is_enemy_tile(tile) and tile != T_BOSS
+def is_cullable_always_tile(tile: int) -> bool:
+    """Always-on enemies except Hans/boss."""
+    return T_GUARD_PATROL <= tile <= T_BOSS and tile != T_BOSS
 
 
 def cull_enemies_to_budget(out: bytearray, rng: random.Random) -> int:
     n = sum(1 for t in out if is_enemy_tile(t))
     if n <= MAX_ENEMIES_BUDGET:
         return 0
+    hard = [i for i, t in enumerate(out) if is_hard_enemy_tile(t)]
+    always = [i for i, t in enumerate(out) if is_cullable_always_tile(t)]
+    rng.shuffle(hard)
+    rng.shuffle(always)
     culled = 0
-    cells = len(out)
-    attempts = 0
-    max_attempts = cells * 64
-    while n > MAX_ENEMIES_BUDGET and attempts < max_attempts:
-        attempts += 1
-        i = rng.randrange(cells)
-        if not is_cullable_enemy_tile(out[i]):
-            continue
-        out[i] = T_EMPTY
-        culled += 1
-        n -= 1
+    for pool in (hard, always):
+        for i in pool:
+            if n <= MAX_ENEMIES_BUDGET:
+                return culled
+            out[i] = T_EMPTY
+            culled += 1
+            n -= 1
     if n > MAX_ENEMIES_BUDGET:
         raise RuntimeError(
             f"enemy cull stuck at {n} (budget {MAX_ENEMIES_BUDGET}); culled {culled}"
@@ -395,14 +401,28 @@ def _match_stand_patrol(
     return None
 
 
-# Wolf skill gates (WL_GAME.C fallthrough): +0 always, +36 ≥ gd_medium
-# ("Bring 'em On!"), +72 ≥ gd_hard only. Mutants use +18 / +36.
-DIFF_BRING_EM_ON = (0, 36)			# exclude Death-incarnate-only (+72)
-DIFF_BRING_EM_ON_MUTANT = (0, 18)		# exclude hard-only (+36)
+# Wolf skill gates (WL_GAME.C fallthrough): +0 always, +36 ≥ gd_medium,
+# +72 ≥ gd_hard. Mutants use +18 / +36. Packed maps: +0 → 53–73;
+# extras → T_HARD (skills 3–4 only).
+DIFF_ALWAYS = (0,)
+DIFF_HARD = (36, 72)
+DIFF_ALWAYS_MUTANT = (0,)
+DIFF_HARD_MUTANT = (18, 36)
+
+
+def _actor_tile(kind: str, wolf_dir: int, patrol_id: int, ambush_id: int, hard: bool) -> int:
+    if kind == "patrol" or patrol_id == ambush_id:
+        base = patrol_id
+    else:
+        base = ambush_id
+    tile = facing(base, wolf_dir)
+    if hard:
+        tile = T_HARD + (tile - T_GUARD_PATROL)
+    return tile
 
 
 def enemy_from_object(obj: int, ambush: bool) -> int | None:
-    """Map Wolf object-plane enemy codes onto our actor IDs (Bring 'em On)."""
+    """Map Wolf object-plane enemy codes onto packed actor IDs."""
     # Guards / officers / SS / dogs. Officers -> guards.
     # Stand (108–111…) = static until alert. Patrol (112–115…) = walk paths.
     # Ambush wall-plane marks deaf stand; both stand IDs use T_*_AMBUSH for now
@@ -414,22 +434,24 @@ def enemy_from_object(obj: int, ambush: bool) -> int | None:
         (126, 130, T_SS_PATROL, T_SS_AMBUSH),
         (134, 138, T_DOG, T_DOG),
     ):
-        hit = _match_stand_patrol(obj, stand_easy, patrol_easy, DIFF_BRING_EM_ON)
-        if hit is None:
-            continue
-        kind, wolf_dir = hit
-        if kind == "patrol" or patrol_id == ambush_id:
-            base = patrol_id
-        else:
-            base = ambush_id
-        return facing(base, wolf_dir)
+        hit = _match_stand_patrol(obj, stand_easy, patrol_easy, DIFF_ALWAYS)
+        if hit is not None:
+            return _actor_tile(*hit, patrol_id, ambush_id, False)
+        hit = _match_stand_patrol(obj, stand_easy, patrol_easy, DIFF_HARD)
+        if hit is not None:
+            return _actor_tile(*hit, patrol_id, ambush_id, True)
 
     # Mutants (+18 medium, +36 hard) -> SS
-    hit = _match_stand_patrol(obj, 216, 220, DIFF_BRING_EM_ON_MUTANT)
+    hit = _match_stand_patrol(obj, 216, 220, DIFF_ALWAYS_MUTANT)
     if hit is not None:
         kind, wolf_dir = hit
         base = T_SS_AMBUSH if kind == "stand" else T_SS_PATROL
         return facing(base, wolf_dir)
+    hit = _match_stand_patrol(obj, 216, 220, DIFF_HARD_MUTANT)
+    if hit is not None:
+        kind, wolf_dir = hit
+        base = T_SS_AMBUSH if kind == "stand" else T_SS_PATROL
+        return T_HARD + (facing(base, wolf_dir) - T_GUARD_PATROL)
 
     bosses = {
         214: 0,  # Hans
@@ -589,6 +611,11 @@ _FACING_BASES = (
     T_SS_PATROL,
     T_SS_AMBUSH,
     T_DOG,
+    T_HARD + 0,   # hard guard patrol
+    T_HARD + 4,   # hard guard ambush
+    T_HARD + 8,   # hard SS patrol
+    T_HARD + 12,  # hard SS ambush
+    T_HARD + 16,  # hard dog
     T_PUSH_TRAJ,
 )
 

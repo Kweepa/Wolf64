@@ -223,12 +223,34 @@ probe_solid
 	lda #0
 	rts
 
+; Add clip grant to player_ammo (Daddy doubles); saturate at AMMO_MAX.
+ammo_clip_amt
+	lda #AMMO_CLIP_AMT
+	ldx difficulty
+	bne +
+	asl
++
+	clc
+	adc player_ammo
+	bcs .aca_sat
+	cmp #AMMO_MAX + 1
+	bcc .aca_ok
+.aca_sat
+	lda #AMMO_MAX
+.aca_ok
+	sta player_ammo
+	rts
+
 ; A = damage — subtract from player_hp, floor at 0 (Wolf TakeDamage lite)
-; Queues one-frame red border (applied in player_border_tick with I/O in).
+; Daddy (difficulty 0): points >>= 2. Queues one-frame red border.
 take_damage
-	rts ; TEMP!!!
 	ldx player_dead
 	bne .td_rts
+	ldx difficulty
+	bne .td_sub
+	lsr
+	lsr
+.td_sub
 	sta tmp0
 	lda player_hp
 	sec
@@ -288,6 +310,10 @@ player_init_game
 	sta player_score_l
 	sta player_score_h
 	lda #START_AMMO
+	ldx difficulty
+	bne +
+	asl					; Daddy: double start ammo
++
 	sta player_ammo
 	lda #$03				; knife + pistol
 	sta owned_weapons

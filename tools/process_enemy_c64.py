@@ -103,6 +103,7 @@ def process_set(
     ban_floor_names: set[str],
     strip_rgb: tuple[int, int, int] | None = None,
     refresh_edit: bool = False,
+    extra_allow: set[int] | frozenset[int] | None = None,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     if not src_sheet.is_file():
@@ -136,7 +137,11 @@ def process_set(
         nw = max(1, round(content.width * scale))
         nh = max(1, round(content.height * scale))
         scaled = content.resize((nw, nh), Image.NEAREST)
-        c64 = to_c64(scaled, ban_floor=(frame_name in ban_floor_names))
+        c64 = to_c64(
+            scaled,
+            ban_floor=(frame_name in ban_floor_names),
+            extra_allow=extra_allow,
+        )
         bbox = opaque_bbox(c64)
         final = c64 if bbox is None else c64.crop(bbox)
         finals.append((frame_name, final))
@@ -236,6 +241,8 @@ def main(argv: list[str]) -> int:
             src_rows=2,
             ban_floor_names={"hans_dead"},
             refresh_edit=args.refresh_edit,
+            # Hans armor/accents: cyan ($3), green ($5), yellow ($7)
+            extra_allow={3, 5, 7},
         )
     return 0
 

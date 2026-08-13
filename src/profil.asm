@@ -469,7 +469,7 @@ ui_update
 	beq +
 	ldx #UI_COL_AMMO
 	lda player_ammo
-	ldy #3
+	ldy #2
 	jsr .ui_num
 +
 	lda ui_dirty

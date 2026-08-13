@@ -92,7 +92,7 @@ WALL_TEXTURE_MAP = {
     10: T_WOOD_HITLER,  # wood eagle -> wood portrait
     11: T_WOOD_HITLER,
     12: T_WOOD,
-    13: T_ELEVATOR,  # level entrance jamb
+    # 13 = entrance jamb — inherit neighbor texture in convert_level (not exit)
     14: T_GREY,  # steel -> stone
     15: T_GREY,
     16: T_GREY,  # landscape slot
@@ -409,6 +409,32 @@ def is_solid_wall_plane(tile: int) -> bool:
     return 1 <= tile <= 89
 
 
+def entrance_jamb_texture(walls: list[int], x: int, y: int) -> int:
+    """
+    Wolf wall 13 is the level-entrance shaft (not the exit switch).
+    Match the most common adjacent solid wall texture so bumping it
+    does not trigger T_ELEVATOR / next-level.
+    """
+    counts: dict[int, int] = {}
+    for dx, dy in DIR_DELTA:
+        nx, ny = x + dx, y + dy
+        if not in_bounds(nx, ny):
+            continue
+        nw = walls[idx(nx, ny)]
+        if nw in (13, ELEVATORTILE, 22):
+            continue
+        if not is_solid_wall_plane(nw):
+            continue
+        tex = map_wall_texture(nw)
+        if tex == T_ELEVATOR:
+            continue
+        counts[tex] = counts.get(tex, 0) + 1
+    if not counts:
+        return T_GREY
+    # Majority; ties prefer lower texture id for stable output
+    return max(counts.items(), key=lambda kv: (kv[1], -kv[0]))[0]
+
+
 def pushwall_direction(walls: list[int], x: int, y: int) -> int:
     """
     Infer push direction: longest run of walkable tiles on a cardinal side.
@@ -448,6 +474,11 @@ def convert_level(walls: list[int], objs: list[int]) -> bytes:
             if w == ELEVATORTILE or w == 22:
                 out[i] = T_ELEVATOR
                 # Pushwall marker on an elevator is degenerate; ignore object.
+                continue
+
+            # Entrance jamb: blend into neighboring walls (not an exit switch)
+            if w == 13:
+                out[i] = entrance_jamb_texture(walls, x, y)
                 continue
 
             if is_solid_wall_plane(w):
@@ -500,7 +531,6 @@ _FACING_BASES = (
     T_SS_PATROL,
     T_SS_AMBUSH,
     T_DOG,
-    T_BOSS,
     T_PUSH_TRAJ,
 )
 

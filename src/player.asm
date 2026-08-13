@@ -218,6 +218,7 @@ probe_solid
 ; A = damage — subtract from player_hp, floor at 0 (Wolf TakeDamage lite)
 ; Queues one-frame red border (applied in player_border_tick with I/O in).
 take_damage
+	rts ; TEMP!!!
 	ldx player_dead
 	bne .td_rts
 	sta tmp0

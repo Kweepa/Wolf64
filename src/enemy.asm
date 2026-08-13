@@ -247,7 +247,7 @@ eu_state_hi
 +
 	lda enemy_type,x
 	cmp #ET_DOG
-	bcs .eu_die_idle			; dog/Hans — no corpse loot
+	beq .eu_die_idle			; dog — no corpse loot
 	lda #ES_DEAD_UNLOOTED
 	sta enemy_state,x
 	jmp .eu_next
@@ -262,6 +262,19 @@ eu_state_hi
 	lda enemy_yh,x
 	cmp playery_h
 	bne .eu_du_rts
+	lda enemy_type,x
+	cmp #ET_HANS
+	bne .eu_du_not_hans
+	lda player_keys
+	ora #KEY_GOLD
+	sta player_keys
+	lda #UI_DIRTY_KEYS
+	ora ui_dirty
+	sta ui_dirty
+	lda #SOUND_GETKEY
+	jsr play_sound
+	jmp .eu_du_mark
+.eu_du_not_hans
 	; ammo full: only SS can still grant MG
 	lda player_ammo
 	cmp #AMMO_MAX
@@ -310,16 +323,6 @@ eu_state_hi
 .eu_du_rts
 	jmp .eu_next
 .eu_alive
-!if DBG_NO_DETECT = 0 {
-	; Hans should not be ALIVE (spawns chasing); belt-and-suspenders
-	lda enemy_type,x
-	cmp #ET_HANS
-	bne +
-	lda #ES_CHASE
-	sta enemy_state,x
-	jmp .eu_chase
-+
-}
 	; reaction countdown after sight (Wolf SightPlayer temp2)
 	lda enemy_state_t,x
 	beq .eu_idle_ai
@@ -1914,6 +1917,10 @@ damage_actor
 	bcc .da_kill
 	beq .da_kill
 	sta enemy_hp,x
+	; Hans: HP only — do not change state/flags (keeps shoot/chase)
+	lda enemy_type,x
+	cmp #ET_HANS
+	beq .da_hit_snd
 	; pain → then chase (alerted)
 	lda #ES_PAIN
 	sta enemy_state,x
@@ -1923,6 +1930,7 @@ damage_actor
 	and #(EF_ACTIVE | EF_PHASE_B)	; clear ambush / shot / moving
 	ora #EF_FIRSTATTACK
 	sta enemy_flags,x
+.da_hit_snd
 	lda #SOUND_HITENEMY
 	jmp play_sound
 .da_kill

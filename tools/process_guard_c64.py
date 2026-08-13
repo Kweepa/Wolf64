@@ -84,13 +84,26 @@ def content_height(img: Image.Image) -> int:
     return 0 if b is None else b[3] - b[1]
 
 
-def to_c64(img: Image.Image, *, ban_floor: bool = False) -> Image.Image:
+def to_c64(
+    img: Image.Image,
+    *,
+    ban_floor: bool = False,
+    extra_allow: set[int] | frozenset[int] | None = None,
+) -> Image.Image:
+    """Remap opaque pixels to the guard Pepto subset.
+
+    extra_allow: Pepto indices re-enabled on top of C64_EXCLUDE
+    (e.g. cyan/green/yellow for Hans).
+    """
+    exclude = C64_EXCLUDE - set(extra_allow or ())
+    face = [i for i in range(16) if i not in exclude | {CEILING_GREY}]
+    body = [i for i in range(16) if i not in exclude | FACE_ONLY]
     px = img.load()
     w, h = img.size
     out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     opx = out.load()
     for y in range(h):
-        allowed = C64_GUARD_FACE if y < FACE_ROWS else C64_GUARD_BODY
+        allowed = face if y < FACE_ROWS else body
         if ban_floor:
             allowed = [i for i in allowed if i != FLOOR_GREY]
         for x in range(w):

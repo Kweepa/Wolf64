@@ -54,7 +54,7 @@ locode_entry
 	lda #0
 	sta episode
 	sta load_in_play
-	lda #1
+	lda #9
 	sta level_num
 	jsr LoadLevel
 	bcs .le_fail

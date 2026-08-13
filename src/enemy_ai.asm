@@ -1478,13 +1478,9 @@ enemy_spawn_one
 	sta enemy_type,x
 	lda #0
 	sta enemy_facing,x
-	lda #EF_ACTIVE
+	lda #EF_ACTIVE | EF_AMBUSH
 	sta enemy_flags,x
-!if DBG_NO_DETECT = 1 {
-	lda #ES_ALIVE			; stand still for patrol preview
-} else {
-	lda #ES_CHASE
-}
+	lda #ES_ALIVE
 	sta enemy_state,x
 	jmp .eso_common
 .eso_faced

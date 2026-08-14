@@ -68,10 +68,10 @@ readthis2a_text
 readthis2b_text
 	!scr "Only you know where the plans are",0
 	!scr "kept, and the Allies will face a great",0
-	!scr "defeat if you don't escape!",0
+	!scr "defeat if you don't escape.",0
 	!scr " ",0
 	!scr "You must face the horrors of the",0
-	!scr "prison keep known as Wolfenstein.",0
+	!scr "prison keep known as... Wolfenstein!",0
 	!byte 0
 
 readthis3_text

@@ -53,17 +53,23 @@ readthis1_text
 	!scr "to aid your escape.",0
 	!byte 0
 
-readthis2_text
+readthis2a_text
 	!scr "Just a few weeks ago you were on a",0
 	!scr "reconnaissance mission of extreme",0
 	!scr "importance. You were to infiltrate",0
 	!scr "the Nazi fortress and find the plans",0
-	!scr "for Operation Eisenfaust. Captured",0
-	!scr "in your attempt, you were taken to",0
-	!scr "their prison, and awaited your",0
-	!scr "execution. Only you know where the",0
-	!scr "plans are kept, and the Allies will face",0
-	!scr "a great defeat if you don't escape!",0
+	!scr "for Operation Eisenfaust.",0
+	!scr " ",0
+	!scr "Captured in your attempt, you were",0
+	!scr "taken to their prison, and awaited",0
+	!scr "your execution.",0
+	!byte 0
+
+readthis2b_text
+	!scr "Only you know where the plans are",0
+	!scr "kept, and the Allies will face a great",0
+	!scr "defeat if you don't escape!",0
+	!scr " ",0
 	!scr "You must face the horrors of the",0
 	!scr "prison keep known as Wolfenstein.",0
 	!byte 0

@@ -406,8 +406,11 @@ menu_select
 	lda #<readthis1_text
 	ldy #>readthis1_text
 	jsr show_story_screen
-	lda #<readthis2_text
-	ldy #>readthis2_text
+	lda #<readthis2a_text
+	ldy #>readthis2a_text
+	jsr show_story_screen
+	lda #<readthis2b_text
+	ldy #>readthis2b_text
 	jsr show_story_screen
 	lda #<readthis3_text
 	ldy #>readthis3_text

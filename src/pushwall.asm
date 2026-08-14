@@ -47,6 +47,7 @@ try_push_wall
 	lda tmp3
 	sta tmp1
 	jsr map_to_tile
+	ldy #0
 	lda (tile_l),y
 	cmp #18
 	bcc .no
@@ -57,6 +58,7 @@ try_push_wall
 	lda mapy
 	sta tmp1
 	jsr map_to_tile
+	ldy #0
 	lda #18
 	sta (tile_l),y
 
@@ -66,6 +68,7 @@ try_push_wall
 	lda tmp3
 	sta tmp1
 	jsr map_to_tile
+	ldy #0
 	lda #T_PUSHWALL
 	sta (tile_l),y
 

@@ -49,6 +49,7 @@ T_SILVER_KEY = 23
 T_CROSS = 24
 T_CHALICE = 25
 T_MACHINEGUN = 26
+T_CHAINGUN = 27
 T_PILLAR = 33
 T_TABLE = 34
 T_LAMP = 35
@@ -144,7 +145,7 @@ STATIC_MAP = {
     25: T_FIRSTAID,
     26: T_AMMO,
     27: T_MACHINEGUN,
-    28: T_MACHINEGUN,  # chaingun -> machine gun
+    28: T_CHAINGUN,
     29: T_CROSS,
     30: T_CHALICE,
     31: T_CROSS,  # bible -> cross
@@ -169,7 +170,7 @@ STATIC_MAP = {
 
 def is_spawn_item_tile(tile: int) -> bool:
     """Tiles that map AABB cull/pickup treat as world items (cross/chalice skipped)."""
-    if T_AMMO <= tile <= T_MACHINEGUN:
+    if T_AMMO <= tile <= T_CHAINGUN:
         return tile not in (T_CROSS, T_CHALICE)
     return T_PILLAR <= tile <= T_PLANT
 

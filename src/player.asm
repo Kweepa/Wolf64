@@ -226,7 +226,7 @@ probe_solid
 ; Add clip grant to player_ammo (Daddy doubles); saturate at AMMO_MAX.
 ammo_clip_amt
 	lda #AMMO_CLIP_AMT
-	ldx difficulty
+	ldy difficulty
 	bne +
 	asl
 +

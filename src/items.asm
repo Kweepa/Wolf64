@@ -9,6 +9,7 @@ T_GOLD_KEY	= 22
 T_SILVER_KEY	= 23
 ; 24 cross / 25 chalice — no packed art
 T_MACHINEGUN	= 26
+T_CHAINGUN	= 27
 T_PILLAR	= 33
 T_TABLE		= 34
 T_LAMP		= 35
@@ -18,7 +19,7 @@ T_PLANT		= 37
 ; tile 19..26 → frame ($ff = skip)
 item_frm_19
 	!byte IF_AMMO_CLIP, IF_FIRSTAID, IF_FOOD, IF_KEY_GOLD, IF_KEY_SILVER
-	!byte $ff, $ff, IF_MACHINEGUN
+	!byte $ff, $ff, IF_MACHINEGUN, IF_CHAINGUN
 ; tile 33..37 → frame
 item_frm_33
 	!byte IF_URN, IF_TABLE_CHAIRS, IF_CHANDELIER, IF_GIBS, IF_TREE
@@ -27,7 +28,7 @@ item_frm_33
 item_tile_frm
 	cmp #T_AMMO
 	bcc .itf_no
-	cmp #T_MACHINEGUN + 1
+	cmp #T_CHAINGUN + 1
 	bcc .itf_pick
 	cmp #T_PILLAR
 	bcc .itf_no
@@ -137,27 +138,35 @@ item_apply
 	rts
 .ia_mg
 	cmp #IF_MACHINEGUN
+	bne .ia_cg
+	ldx #WPN_MG
+	jmp item_take_gun
+.ia_cg
+	cmp #IF_CHAINGUN
 	bne .ia_no
-	; already own MG and full ammo → leave
-	lda owned_weapons
-	and #$04
-	beq .ia_mg_take
+	ldx #WPN_CHAINGUN
+	; fall through
+
+; X = weapon. First pickup switches to it; already owned + full ammo → leave.
+item_take_gun
+	lda wpn_own_bit,x
+	bit owned_weapons
+	beq .itg_take
 	lda player_ammo
 	cmp #AMMO_MAX
-	bcc .ia_mg_take
-	jmp .ia_no
-.ia_mg_take
-	lda owned_weapons
-	ora #$04
-	sta owned_weapons
+	bcc .itg_take
+	clc
+	rts
+.itg_take
+	jsr give_weapon
 	lda player_ammo
 	cmp #AMMO_MAX
-	bcs .ia_mg_wep			; weapon only; ammo already max
+	bcs .itg_wep
 	jsr ammo_clip_amt
 	lda #UI_DIRTY_AMMO
 	ora ui_dirty
 	sta ui_dirty
-.ia_mg_wep
+.itg_wep
 	lda #SOUND_GETMACHINE
 	jsr play_sound
 	sec

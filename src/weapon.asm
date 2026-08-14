@@ -62,6 +62,17 @@ switch_weapon
 .sw_done
 	rts
 
+; X = weapon id. Own it; switch to it if this is the first time.
+give_weapon
+	lda wpn_own_bit,x
+	ora owned_weapons
+	cmp owned_weapons
+	beq .gw_had
+	sta owned_weapons
+	jmp switch_weapon
+.gw_had
+	rts
+
 init_weapon
 	lda #0
 	sta wpn_visible
@@ -125,6 +136,10 @@ hide_weapon
 	rts
 
 setup_weapon
+	lda $01
+	pha
+	lda #$35
+	sta $01					; VIC regs; $D000–$DFFF is enemy RAM when I/O out
 	ldx cur_weapon
 	lda #0
 	sta $d01c
@@ -186,7 +201,10 @@ setup_weapon
 .su_fptrs
 	jsr .set_flash_ptrs
 .su_pose
-	jmp apply_pose
+	jsr apply_pose
+	pla
+	sta $01
+	rts
 
 .set_flash_ptrs
 	ldx cur_weapon

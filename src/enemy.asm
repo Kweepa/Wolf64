@@ -286,6 +286,7 @@ eu_state_hi
 	sta enemy_state,x
 	jmp .eu_next
 .eu_dead_unlooted
+	stx enemy_idx
 	lda enemy_xh,x
 	cmp playerx_h
 	bne .eu_du_rts
@@ -315,9 +316,8 @@ eu_state_hi
 	lda owned_weapons
 	and #$04
 	bne .eu_du_rts			; already have MG
-	lda owned_weapons
-	ora #$04
-	sta owned_weapons
+	ldx #WPN_MG
+	jsr give_weapon
 	lda #SOUND_GETMACHINE
 	jsr play_sound
 	jmp .eu_du_mark
@@ -330,9 +330,8 @@ eu_state_hi
 	lda enemy_type,x
 	cmp #ET_SS
 	bne .eu_du_ammo_snd
-	lda owned_weapons
-	ora #$04
-	sta owned_weapons
+	ldx #WPN_MG
+	jsr give_weapon
 	lda #SOUND_GETMACHINE
 	jsr play_sound
 	jmp .eu_du_mark
@@ -340,9 +339,11 @@ eu_state_hi
 	lda #SOUND_GETAMMO
 	jsr play_sound
 .eu_du_mark
+	ldx enemy_idx
 	lda #ES_DEAD
 	sta enemy_state,x
 .eu_du_rts
+	ldx enemy_idx
 	jmp .eu_next
 .eu_alive
 	; reaction countdown after sight (Wolf SightPlayer temp2)

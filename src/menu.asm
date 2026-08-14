@@ -60,6 +60,10 @@ ptr_l		= $fb
 ptr_h		= $fc
 ui_str_l	= $f9
 ui_str_h	= $fa
+ptr_r_l		= $f5			; bitmap cell to the right of ptr
+ptr_r_h		= $f6
+gptr_l		= $f7			; current glyph (8 bytes)
+gptr_h		= $f8
 tmp0		= $02
 tmp1		= $03
 tmp2		= $04
@@ -107,6 +111,7 @@ copy_enemy
 	rts
 
 run_menu
+	jsr init_font_tabs
 	jsr init_menu_vic
 	lda #0
 	sta menu_id
@@ -655,6 +660,8 @@ show_text_screen
 	sta cell_bg
 	lda #HILITE_COL
 	sta ui_text_col
+	lda #1
+	sta pr_setcol
 	jmp .sts_body
 
 ; Read This! / endings: grey surround, white panel, black text. Restores COL_MAIN.
@@ -668,7 +675,11 @@ show_story_screen
 	sta cell_bg
 	lda #STORY_TEXT
 	sta ui_text_col
+	lda #0
+	sta pr_setcol				; panel already black-on-white
 	jsr .sts_body
+	lda #1
+	sta pr_setcol
 	lda #COL_MAIN
 	sta clear_bg
 	sta $d021
@@ -854,15 +865,32 @@ clear_screen
 	ldy #0
 	lda #>(BITMAP + $2000)
 	sta tmp5
-.cs_p
 	lda #0
+.cs_p
+	sta (ptr_l),y
+	iny
+	sta (ptr_l),y
+	iny
+	sta (ptr_l),y
+	iny
+	sta (ptr_l),y
+	iny
+	sta (ptr_l),y
+	iny
+	sta (ptr_l),y
+	iny
+	sta (ptr_l),y
+	iny
 	sta (ptr_l),y
 	iny
 	bne .cs_p
 	inc ptr_h
 	lda ptr_h
 	cmp tmp5
-	bcc .cs_p
+	bcs .cs_col
+	lda #0
+	beq .cs_p
+.cs_col
 	; colour matrix from row 6: 760 bytes (do not touch sprite ptrs @ $43F8)
 	ldx #0
 	lda clear_bg
@@ -1077,6 +1105,19 @@ logo_spr_x
 	!byte 104, 128, 152, 176, 200, 224, 248
 
 fill_option_box
+	lda pr_setcol
+	bne .fob_bg
+	lda ui_text_col
+	asl
+	asl
+	asl
+	asl
+	ora cell_bg
+	jmp .fob_sv
+.fob_bg
+	lda cell_bg
+.fob_sv
+	sta tmp0
 	lda menu_size
 	clc
 	adc #BOX_VGAP
@@ -1093,8 +1134,7 @@ fill_option_box
 	jsr bmp_cell_addr
 	ldy #0
 .fob_c
-	jsr bmp_blank_cell_y
-	lda cell_bg
+	lda tmp0
 	sta (aux_l),y
 	iny
 	cpy box_width
@@ -1230,12 +1270,9 @@ print_go
 .pa
 	lda (ui_str_l),y
 	beq .pa_d
-	tya
-	pha
-	lda (ui_str_l),y
+	sty pr_si
 	jsr bmp_put_scr
-	pla
-	tay
+	ldy pr_si
 	iny
 	bne .pa
 .pa_d
@@ -1269,57 +1306,45 @@ print_marked
 	iny
 	bne .pm
 .pm_ch
-	tya
-	pha
-	lda (ui_str_l),y
+	sty pr_si
 	jsr bmp_put_scr
-	pla
-	tay
+	ldy pr_si
 	iny
 	bne .pm
 .pm_d
 	rts
 
-; A = !scr byte → scan blank columns, shift, OR into bitmap at pr_col/pr_shift.
+; A = !scr byte → 16-bit shifted OR blit at pr_col/pr_shift.
 bmp_put_scr
 	cmp #MARK_CARET
 	bne .bps_go
 	rts
 .bps_go
-	jsr font_set_src
-	lda pr_mono
+	jsr scr_to_font
+	sta ft_idx
+	ldx pr_mono
 	bne .bps_mono
-	jsr font_scan
-	jmp .bps_gotw
+	tax
+	lda glyph_w_tab,x
+	bne .bps_ink
+	lda #SPACE_W
+	sta glyph_w
+	jmp bmp_advance
+.bps_ink
+	sta glyph_w
+	jsr font_set_gptr
+	jmp .bps_draw
 .bps_mono
-	lda #0
-	sta glyph_lead
 	lda #8
 	sta glyph_w
-.bps_gotw
-	lda pr_col
-	ldx pr_row
-	jsr bmp_cell_addr
-	lda pr_col
-	sta ft_cell
-	lda #$80
-	ldx pr_shift
-	beq .bps_dm
-.bps_dml
-	lsr
-	dex
-	bne .bps_dml
-.bps_dm
-	sta ft_mask_d
-	lda #$80
-	ldx glyph_lead
-	beq .bps_sm
-.bps_sml
-	lsr
-	dex
-	bne .bps_sml
-.bps_sm
-	sta ft_mask_s
+	jsr font_set_gptr
+.bps_draw
+	jsr bmp_sync_ptr
+	lda #0
+	sta ft_spill
+	tay
+	lda pr_setcol
+	beq .bps_pick
 	lda ui_text_col
 	asl
 	asl
@@ -1327,59 +1352,257 @@ bmp_put_scr
 	asl
 	ora cell_bg
 	sta ft_color
-	ldy #0
 	sta (aux_l),y
-	ldx glyph_w
-.bps_col
-	ldy #0
-.bps_row
+.bps_pick
+	lda pr_shift
+	bne .bps_sh
 	lda ft_lc
-	beq .bps_g
-	cpy #0
-	beq .bps_empty			; dest row 0 blank
-	dey
-	jsr glyph_byte
-	iny
-	jmp .bps_and
-.bps_g
-	jsr glyph_byte
-.bps_and
-	and ft_mask_s
-	beq .bps_empty
-	lda (ptr_l),y
-	ora ft_mask_d
+	bne blit_zdrop
+	jmp blit_z
+.bps_sh
+	tax
+	lda shift_lo,x
+	sta do_shift_j + 1
+	lda shift_hi,x
+	sta do_shift_j + 2
+	lda ft_lc
+	bne .to_drop
+	jmp blit_nd
+.to_drop
+	jmp blit_drop
+
+; pr_shift = 0: OR 8 rows, no right cell.
+blit_z
+	ldy #0
+	lda (gptr_l),y
+	ora (ptr_l),y
 	sta (ptr_l),y
-.bps_empty
+	iny
+	lda (gptr_l),y
+	ora (ptr_l),y
+	sta (ptr_l),y
+	iny
+	lda (gptr_l),y
+	ora (ptr_l),y
+	sta (ptr_l),y
+	iny
+	lda (gptr_l),y
+	ora (ptr_l),y
+	sta (ptr_l),y
+	iny
+	lda (gptr_l),y
+	ora (ptr_l),y
+	sta (ptr_l),y
+	iny
+	lda (gptr_l),y
+	ora (ptr_l),y
+	sta (ptr_l),y
+	iny
+	lda (gptr_l),y
+	ora (ptr_l),y
+	sta (ptr_l),y
+	iny
+	lda (gptr_l),y
+	ora (ptr_l),y
+	sta (ptr_l),y
+	jmp bmp_advance
+
+blit_zdrop
+	ldy #0
+	lda (gptr_l),y
+	iny
+	ora (ptr_l),y
+	sta (ptr_l),y
+	lda (gptr_l),y
+	iny
+	ora (ptr_l),y
+	sta (ptr_l),y
+	lda (gptr_l),y
+	iny
+	ora (ptr_l),y
+	sta (ptr_l),y
+	lda (gptr_l),y
+	iny
+	ora (ptr_l),y
+	sta (ptr_l),y
+	lda (gptr_l),y
+	iny
+	ora (ptr_l),y
+	sta (ptr_l),y
+	lda (gptr_l),y
+	iny
+	ora (ptr_l),y
+	sta (ptr_l),y
+	lda (gptr_l),y
+	iny
+	ora (ptr_l),y
+	sta (ptr_l),y
+	lda (gptr_l),y
+	ldy #0
+	ora (tmp2),y
+	sta (tmp2),y
+	lda pr_setcol
+	beq .zd_a
+	lda #0
+	sta ft_spill
+	jsr color_below
+.zd_a
+	jmp bmp_advance
+
+; Shifted, no lowercase drop.
+blit_nd
+	ldy #0
+.bnd
+	lda (gptr_l),y
+	jsr do_shift
+	ora (ptr_l),y
+	sta (ptr_l),y
+	lda ft_right
+	beq .bnd0
+	ora (ptr_r_l),y
+	sta (ptr_r_l),y
+	sta ft_spill
+.bnd0
 	iny
 	cpy #8
-	bne .bps_row
-	lda ft_lc
-	beq .bps_h
-	lda pr_row
-	cmp #24
-	bcs .bps_h
-	ldy #7
-	jsr glyph_byte
-	and ft_mask_s
-	beq .bps_h
-	lda ptr_h
-	pha
-	lda ptr_l
-	pha
-	clc
-	adc #<320
-	sta ptr_l
-	lda ptr_h
-	adc #>320
-	sta ptr_h
+	bne .bnd
+	jmp .bps_col2
+
+; Shifted, lowercase drop (rows 0–6 → dest 1–7, row 7 below).
+blit_drop
 	ldy #0
-	lda (ptr_l),y
-	ora ft_mask_d
+.bd
+	lda (gptr_l),y
+	jsr do_shift
+	iny
+	ora (ptr_l),y
 	sta (ptr_l),y
-	pla
-	sta ptr_l
-	pla
-	sta ptr_h
+	lda ft_right
+	beq .bd0
+	ora (ptr_r_l),y
+	sta (ptr_r_l),y
+	sta ft_spill
+.bd0
+	cpy #7
+	bcc .bd
+	ldy #7
+	lda (gptr_l),y
+	jsr do_shift
+	ldy #0
+	ora (tmp2),y
+	sta (tmp2),y
+	lda ft_right
+	beq .bd_cb
+	ora (tmp0),y
+	sta (tmp0),y
+	sta ft_spill
+.bd_cb
+	lda pr_setcol
+	beq .bps_col2
+	jsr color_below
+	jmp .bps_col2
+.bps_col2
+	lda pr_setcol
+	beq .bps_adv
+	lda ft_spill
+	beq .bps_adv
+	lda pr_col
+	cmp #39
+	bcs .bps_adv
+	lda ft_color
+	ldy #1
+	sta (aux_l),y
+.bps_adv
+	jmp bmp_advance
+
+do_shift
+	ldx #0
+	stx ft_right
+do_shift_j
+	jmp shift0
+
+shift0
+	rts
+shift1
+	lsr
+	ror ft_right
+	rts
+shift2
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	rts
+shift3
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	rts
+shift4
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	rts
+shift5
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	rts
+shift6
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	rts
+shift7
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	lsr
+	ror ft_right
+	rts
+
+shift_lo
+	!byte <shift0, <shift1, <shift2, <shift3
+	!byte <shift4, <shift5, <shift6, <shift7
+shift_hi
+	!byte >shift0, >shift1, >shift2, >shift3
+	!byte >shift4, >shift5, >shift6, >shift7
+
+; Ink already in cell below; set colour on that row when needed.
+color_below
 	lda aux_h
 	pha
 	lda aux_l
@@ -1387,50 +1610,34 @@ bmp_put_scr
 	clc
 	adc #40
 	sta aux_l
-	bcc .bps_dh
+	bcc .cb_a
 	inc aux_h
-.bps_dh
+.cb_a
+	ldy #0
 	lda ft_color
 	sta (aux_l),y
+	lda ft_spill
+	beq .cb_d
+	lda pr_col
+	cmp #39
+	bcs .cb_d
+	iny
+	lda ft_color
+	sta (aux_l),y
+.cb_d
 	pla
 	sta aux_l
 	pla
 	sta aux_h
-.bps_h
-	lsr ft_mask_d
-	bne .bps_src
-	lda ft_cell
-	cmp #39
-	bcs .bps_src
-	inc ft_cell
-	lda ptr_l
-	clc
-	adc #8
-	sta ptr_l
-	bcc .bps_nh
-	inc ptr_h
-.bps_nh
-	inc aux_l
-	bne .bps_ah
-	inc aux_h
-.bps_ah
-	ldy #0
-	lda ft_color
-	sta (aux_l),y
-	lda #$80
-	sta ft_mask_d
-.bps_src
-	lsr ft_mask_s
-	dex
-	beq .bps_adv
-	jmp .bps_col
-.bps_adv
+	rts
+
+bmp_advance
 	lda glyph_w
 	ldx pr_mono
-	bne .bps_gap
+	bne .ba_g
 	clc
 	adc #FONT_GAP
-.bps_gap
+.ba_g
 	clc
 	adc pr_shift
 	sta pr_shift
@@ -1445,16 +1652,87 @@ bmp_put_scr
 	sta pr_shift
 	rts
 
-glyph_byte
-	lda $ffff,y				; patched by font_set_src
+; ptr/aux follow pr_col/pr_row. Step +8 when the column advances.
+bmp_sync_ptr
+	lda pr_row
+	cmp ft_row
+	bne .sp_re
+	lda pr_col
+	cmp ft_cell
+	beq sync_ptr_r
+	bcc .sp_re
+.sp_fw
+	inc ft_cell
+	lda ptr_l
+	clc
+	adc #8
+	sta ptr_l
+	bcc .sp_p
+	inc ptr_h
+.sp_p
+	lda pr_setcol
+	beq .sp_a
+	inc aux_l
+	bne .sp_a
+	inc aux_h
+.sp_a
+	lda pr_col
+	cmp ft_cell
+	bne .sp_fw
+	jmp sync_ptr_r
+.sp_re
+	lda pr_col
+	ldx pr_row
+	jsr bmp_cell_addr
+	lda pr_col
+	sta ft_cell
+	lda pr_row
+	sta ft_row
+sync_ptr_r
+	clc
+	lda ptr_l
+	adc #<320
+	sta tmp2
+	lda ptr_h
+	adc #>320
+	sta tmp3
+	lda pr_col
+	cmp #39
+	bcc .spr_ok
+	lda #<ft_sink
+	sta ptr_r_l
+	sta tmp0
+	lda #>ft_sink
+	sta ptr_r_h
+	sta tmp1
+	rts
+.spr_ok
+	lda ptr_l
+	clc
+	adc #8
+	sta ptr_r_l
+	lda ptr_h
+	adc #0
+	sta ptr_r_h
+	clc
+	lda ptr_r_l
+	adc #<320
+	sta tmp0
+	lda ptr_r_h
+	adc #>320
+	sta tmp1
 	rts
 
-; A = !scr byte → patch glyph_byte to menufont_udgs + index*8
-font_set_src
-	jsr scr_to_font
-	ldx #0
-	stx ft_hi
-	stx ft_lc
+glyph_lda
+	lda $ffff,y
+	rts
+
+; ft_idx → gptr (left-justified cache, or raw font if mono) + ft_lc
+font_set_gptr
+	lda #0
+	sta ft_hi
+	sta ft_lc
+	lda ft_idx
 	tay
 	lda pr_drop
 	beq .fss
@@ -1470,22 +1748,83 @@ font_set_src
 	asl
 	rol ft_hi
 	asl
-	rol ft_hi				; index*8
+	rol ft_hi
 	clc
+	ldx pr_mono
+	bne .fss_raw
+	adc #<glyph_lj
+	sta gptr_l
+	lda ft_hi
+	adc #>glyph_lj
+	sta gptr_h
+	rts
+.fss_raw
 	adc #<menufont_udgs
-	sta glyph_byte + 1
+	sta gptr_l
 	lda ft_hi
 	adc #>menufont_udgs
-	sta glyph_byte + 2
+	sta gptr_h
 	rts
 
-; Occupancy of glyph_byte → glyph_lead, glyph_w
+init_font_tabs
+	lda #<menufont_udgs
+	sta glyph_lda + 1
+	lda #>menufont_udgs
+	sta glyph_lda + 2
+	lda #<glyph_lj
+	sta gptr_l
+	lda #>glyph_lj
+	sta gptr_h
+	ldx #0
+.ift
+	stx ft_idx
+	jsr font_scan
+	ldx ft_idx
+	lda glyph_w
+	sta glyph_w_tab,x
+	ldy #0
+.ift_c
+	jsr glyph_lda
+	ldx glyph_lead
+	beq .ift_s
+.ift_a
+	asl
+	dex
+	bne .ift_a
+.ift_s
+	sta (gptr_l),y
+	iny
+	cpy #8
+	bne .ift_c
+	lda gptr_l
+	clc
+	adc #8
+	sta gptr_l
+	bcc .ift_g
+	inc gptr_h
+.ift_g
+	lda glyph_lda + 1
+	clc
+	adc #8
+	sta glyph_lda + 1
+	bcc .ift1
+	inc glyph_lda + 2
+.ift1
+	ldx ft_idx
+	inx
+	cpx #96
+	bne .ift
+	lda #$ff
+	sta ft_row
+	rts
+
+; Occupancy of glyph_lda → glyph_lead, glyph_w (0 = empty / space)
 font_scan
 	lda #0
 	sta ft_occ
 	ldy #7
 .fs_or
-	jsr glyph_byte
+	jsr glyph_lda
 	ora ft_occ
 	sta ft_occ
 	dey
@@ -1494,7 +1833,6 @@ font_scan
 	bne .fs_ink
 	lda #0
 	sta glyph_lead
-	lda #SPACE_W
 	sta glyph_w
 	rts
 .fs_ink
@@ -1558,13 +1896,21 @@ str_pix_len
 .spl
 	lda (ui_str_l),y
 	beq .spl_d
-	tya
-	pha
-	jsr font_set_src
-	jsr font_scan
-	jsr pix_add_glyph
-	pla
-	tay
+	sty ft_src
+	jsr scr_to_font
+	tax
+	lda glyph_w_tab,x
+	bne .spl_a
+	lda #SPACE_W
+.spl_a
+	clc
+	adc #FONT_GAP
+	adc pr_len
+	sta pr_len
+	bcc .spl_n
+	inc pr_len_h
+.spl_n
+	ldy ft_src
 	iny
 	bne .spl
 .spl_d
@@ -1585,19 +1931,27 @@ marked_str_pix_len
 	lda pr_mono
 	eor #1
 	sta pr_mono
-	beq .mspl_s				; left mono
+	beq .mspl_s
 	jsr pix_snap_len
 	jmp .mspl_s
 .mspl_ch
-	lda pr_mono
+	ldx pr_mono
 	bne .mspl_8
-	tya
-	pha
-	jsr font_set_src
-	jsr font_scan
-	jsr pix_add_glyph
-	pla
-	tay
+	sty ft_src
+	jsr scr_to_font
+	tax
+	lda glyph_w_tab,x
+	bne .mspl_a
+	lda #SPACE_W
+.mspl_a
+	clc
+	adc #FONT_GAP
+	adc pr_len
+	sta pr_len
+	bcc .mspl_c
+	inc pr_len_h
+.mspl_c
+	ldy ft_src
 	jmp .mspl_s
 .mspl_8
 	lda pr_len
@@ -1629,17 +1983,6 @@ pix_snap_len
 	bcc .psn_r
 	inc pr_len_h
 .psn_r
-	rts
-
-pix_add_glyph
-	lda glyph_w
-	clc
-	adc #FONT_GAP
-	adc pr_len
-	sta pr_len
-	bcc .pag_r
-	inc pr_len_h
-.pag_r
 	rts
 
 ; Advance ui_str past current NUL-terminated string.
@@ -1674,7 +2017,6 @@ menu_blank
 
 ; Reveal after paint. $d021 from clear_bg (story pages use STORY_BG).
 menu_unblank
-	jsr wait_frame
 	lda #MENU_BORDER
 	sta $d020
 	lda clear_bg
@@ -1733,7 +2075,7 @@ wait_any_key
 	lda $dc01
 	cmp #$ff
 	bne .wau
-	ldx #5
+	ldx #2
 .wau_s
 	jsr wait_frame
 	lda #0
@@ -1841,23 +2183,32 @@ pr_col		!byte 0
 pr_shift	!byte 0
 pr_mono		!byte 0
 pr_drop		!byte 0
+pr_setcol	!byte 1				; 0 = ink only (story panel precoloured)
+pr_si		!byte 0
 pr_len		!byte 0
 pr_len_h	!byte 0
 glyph_lead	!byte 0
 glyph_w		!byte 0
-ft_mask_d	!byte 0
-ft_mask_s	!byte 0
 ft_cell		!byte 0
+ft_row		!byte $ff
 ft_color	!byte 0
 ft_occ		!byte 0
 ft_hi		!byte 0
 ft_lc		!byte 0
+ft_idx		!byte 0
+ft_src		!byte 0
+ft_left		!byte 0
+ft_right	!byte 0
+ft_spill	!byte 0
 pix_max_l	!byte 0
 pix_max_h	!byte 0
 txt_ptr_l	!byte 0
 txt_ptr_h	!byte 0
 cell_bg		!byte 0
 clear_bg	!byte COL_MAIN
+glyph_w_tab	!fill 96, 0
+glyph_lj	!fill 768, 0			; lead-justified copies of menufont_udgs
+ft_sink		!fill 8, 0			; dummy right-cell when col=39
 
 str_hint	!scr "W/S move  A/D adjust  Return select",0
 str_new_game	!scr "New Game",0

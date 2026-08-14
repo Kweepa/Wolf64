@@ -35,6 +35,8 @@ setup_player_tile
 	lda #0
 	sta dda_last_x
 	sta dda_last_y
+	lda #$ff
+	sta door_cx
 	rts
 
 ; Pipelined: setup → cast cols 1..38 → paint back → $d018 swap
@@ -408,6 +410,7 @@ hit_wall
 ; wallz 8.8 → half_h in 1..MAX_HALF_H (256-entry heightab, idx = wallz>>5)
 ; Scale $1800 = 3/4 of former $2000 (squarer tiles)
 ; wallz>=$2000 → (wallz>>5) high != 0; 8-bit idx would wrap into near heights
+; heightab[0] = MAX_HALF_H covers wallz < 32 (old $1800/z subtract always clamped 75)
 calc_half_h
 	lda wallz_h
 	sta tmp1
@@ -425,46 +428,10 @@ calc_half_h
 	ldx tmp1
 	bne .far1				; wallz >= $2000 → half_h = 1
 	tax
-	beq .near				; wallz < 32: close, spend on divide
 	lda heightab,x
 	sta half_h
 	rts
 .far1
 	lda #1
-	sta half_h
-	rts
-.near
-	lda wallz_l
-	ora wallz_h
-	bne +
-	lda #MAX_HALF_H
-	sta half_h
-	rts
-+
-	lda #0
-	sta tmp0
-	lda #$00
-	sta tmp2
-	lda #$18
-	sta tmp3
-.sublp
-	sec
-	lda tmp2
-	sbc wallz_l
-	tax
-	lda tmp3
-	sbc wallz_h
-	bcc .divdone
-	stx tmp2
-	sta tmp3
-	inc tmp0
-	lda tmp0
-	cmp #MAX_HALF_H
-	bcc .sublp
-.divdone
-	lda tmp0
-	bne +
-	lda #1
-+
 	sta half_h
 	rts

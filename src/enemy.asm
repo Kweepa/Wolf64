@@ -702,15 +702,6 @@ enemies_draw
 	bne +
 	rts
 +
-	; identity order tokens (vis_slot/vis_depth/vis_kind stay fixed)
-	ldx #0
-.ed_ord
-	txa
-	sta vis_order,x
-	inx
-	cpx vis_count
-	bcc .ed_ord
-
 	; depths for visible → vis_depth[stable index]
 	ldy #0
 .ed_dep
@@ -731,9 +722,27 @@ enemies_draw
 	cpy vis_count
 	bcc .ed_dep
 
+	jsr vis_compact_behind
+	lda vis_count
+	bne +
+	rts
++
+	; identity order tokens (vis_slot/vis_depth/vis_kind stay fixed)
+	ldx #0
+.ed_ord
+	txa
+	sta vis_order,x
+	inx
+	cpx vis_count
+	bcc .ed_ord
+
+	lda vis_count
+	cmp #2
+	bcc .ed_draw_setup
 	jsr enemy_sort_depth
 
 	; draw far → near via sorted tokens
+.ed_draw_setup
 	lda #0
 	sta vis_i
 .ed_draw
@@ -950,6 +959,41 @@ neg_aux
 	lda #0
 	sbc aux_h
 	sta aux_h
+	rts
+
+; Drop vis_depth=$ffff (behind camera) so sort/draw n is on-camera.
+; Packs vis_slot/kind/depth/perp in place; X = new count.
+vis_compact_behind
+	ldx #0
+	ldy #0
+.vcb_lp
+	cpy vis_count
+	bcs .vcb_done
+	lda vis_depth_h,y
+	cmp #$ff
+	bne .vcb_keep
+	lda vis_depth_l,y
+	cmp #$ff
+	beq .vcb_skip
+.vcb_keep
+	lda vis_slot,y
+	sta vis_slot,x
+	lda vis_kind,y
+	sta vis_kind,x
+	lda vis_depth_l,y
+	sta vis_depth_l,x
+	lda vis_depth_h,y
+	sta vis_depth_h,x
+	lda vis_perp_l,y
+	sta vis_perp_l,x
+	lda vis_perp_h,y
+	sta vis_perp_h,x
+	inx
+.vcb_skip
+	iny
+	bne .vcb_lp
+.vcb_done
+	stx vis_count
 	rts
 
 ; Insertion sort vis_order by vis_depth descending (far first).

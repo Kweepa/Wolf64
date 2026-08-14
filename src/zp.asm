@@ -66,6 +66,10 @@ smc_last_page	= $38		; last patched texture id
 smc_last_h	= $39		; last patched half_h
 dda_last_x	= $c6		; previous column xstep (0 = none)
 dda_last_y	= $c7		; previous column ystep
+door_cx		= $c8		; last door cell X ($ff = empty)
+door_cy		= $c9
+door_corient	= $ca
+door_cpos	= $cb
 
 move_dx_l	= $3d
 move_dx_h	= $3e

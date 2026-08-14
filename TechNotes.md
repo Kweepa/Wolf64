@@ -157,7 +157,7 @@ HUD screen nibbles go to the **front** matrix (`set_scr_front` after `swap_view`
 
 Per frame: `setup_player_tile` → cast cols 1..38 → paint 1..38 → `enemies_draw` → `swap_view`. Cast cannot split setup×38 then march×38: tile-pointer SMC is per-column.
 
-**March (`cast_march`).** `Y=0` for `lda (tile_l),y` for the whole ray. `door_try_x` / `door_try_y` restore `Y=0` on the continue (pass) path. X-grid miss loops with `dex / bne .inner`; Y-grid miss is `dex / beq .miss / jmp .inner` (relative branch too far). If `xstep`/`ystep` match the previous column (`dda_last_x/y`, ZP `$c6/$c7`; 0 = none), skip the six INC/DEC / ADC/SBC opcode patches.
+**March (`cast_march`).** `Y=0` for `lda (tile_l),y` for the whole ray. `door_try_x` / `door_try_y` restore `Y=0` on the continue (pass) path. X-grid miss loops with `dex / bne .inner`; Y-grid miss is `dex / beq .miss / jmp .inner` (relative branch too far). If `xstep`/`ystep` match the previous column (`dda_last_x/y`, ZP `$c6/$c7`; 0 = none), skip the six INC/DEC / ADC/SBC opcode patches. Same door cell: `door_cell_get` caches orient+pos (`door_cx` `$ff` in `setup_player_tile`); closed-door fill is one slot/infer per frame. Infer peeks N/S as `tile_* ± 64`. `calc_half_h` uses `heightab[wallz>>5]` including idx 0 (75) — no `$1800/z` subtract for `wallz < 32`.
 
 **Map.** `map_to_tile`: `tile = map_row[mapy] + mapx`. `map_row_lo/hi` in `tab` (`MAP + y*64`, 64×64).
 
@@ -165,7 +165,7 @@ Per frame: `setup_player_tile` → cast cols 1..38 → paint 1..38 → `enemies_
 
 **Hit.** `hit_wall` loads `aux` from `sdx` or `sdy` once (U `fixcos` mul then fish `fishtab[col]`); one `ldx col` for the column stores.
 
-**Sprites.** `enemy_calc_spr_h` = `(3/2)*half_h` clamped to `ENEMY_MAX_H` (48). Draw path: one `e_dx` = sprite−player, `enemy_side_from_delta`, FOV cull, then `project_col_from_side` (16/8 or 8/8 `div_q40` in `items_draw.asm`; no per-pixel subtract-up-to-40). Off-screen sprites skip `atan2` / `pick_frm`. `neg_e_delta` then `enemy_atan2` for octant. `enemy_paint_col` splits even/odd rows with `lsr / bcs`; `e_hitscan` patched once per column.
+**Sprites.** `enemy_calc_spr_h` = `(3/2)*half_h` clamped to `ENEMY_MAX_H` (48). Draw path: one `e_dx` = sprite−player, `enemy_side_from_delta`, FOV cull, then `project_col_from_side` (16/8 or 8/8 `div_q40` in `items_draw.asm`; no per-pixel subtract-up-to-40). Off-screen sprites skip `atan2` / `pick_frm`. `neg_e_delta` then `enemy_atan2` for octant. `enemy_paint_col` splits even/odd rows with `lsr / bcs`; `e_hitscan` patched once per column. After depth, `vis_compact_behind` drops `$ffff` (behind camera) before sort; `enemy_sort_depth` skipped when `vis_count < 2`. Item AABB (`items_cull_near`) walks `tile_*` +1 / +64 after one `map_to_tile`.
 
 ## VICE snapshot dump (`tools/vsf_dump.py`)
 

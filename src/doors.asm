@@ -58,7 +58,7 @@ door_pos_at
 	rts
 
 ; A = orient for (mapx,mapy): slot value or inferred
-; Clobbers: tmp0/tmp1/tmp2/tmp3, tile_*, Y
+; Clobbers: tmp0/tmp1, Y. tile_* must point at the door cell (N/S = ±64).
 door_orient_at
 	ldy #0
 .doa_lp
@@ -79,26 +79,55 @@ door_orient_at
 	; fall through — infer from N/S walls
 door_infer_orient
 	; solids N and S → mid-X doorway; else mid-Y
-	lda mapx
-	sta tmp0
-	lda mapy
+	; tile_* is the door; neighbors are ±64 (map row stride)
+	ldy #0
 	sec
-	sbc #1
+	lda tile_l
+	sbc #64
+	sta tmp0
+	lda tile_h
+	sbc #0
 	sta tmp1
-	jsr door_tile_at
+	lda (tmp0),y
 	cmp #T_FLOOR
 	bcs .dio_midy
-	lda mapy
 	clc
-	adc #1
+	lda tile_l
+	adc #64
+	sta tmp0
+	lda tile_h
+	adc #0
 	sta tmp1
-	jsr door_tile_at
+	lda (tmp0),y
 	cmp #T_FLOOR
 	bcs .dio_midy
 	lda #DO_MIDX
 	rts
 .dio_midy
 	lda #DO_MIDY
+	rts
+
+; Fill same-cell cache; A = orient. On hit skip slot scans.
+; Clobbers: tmp0/tmp1, Y (pos scan on miss)
+door_cell_get
+	lda mapx
+	cmp door_cx
+	bne .dcg_fill
+	lda mapy
+	cmp door_cy
+	bne .dcg_fill
+	lda door_corient
+	rts
+.dcg_fill
+	lda mapx
+	sta door_cx
+	lda mapy
+	sta door_cy
+	jsr door_orient_at
+	sta door_corient
+	jsr door_pos_at
+	sta door_cpos
+	lda door_corient
 	rts
 
 ; A = door tile 15..17 → A = TEX_* (table indexed by tile)
@@ -497,7 +526,7 @@ door_try_x
 	sta door_savetl
 	lda tile_h
 	sta door_saveth
-	jsr door_orient_at
+	jsr door_cell_get
 	cmp #DO_MIDX
 	bne .dtx_pass
 	; wallz = sdx + ddx/2
@@ -534,7 +563,7 @@ door_try_x
 	ldy fracy
 	jsr door_u_combine			; A = along_frac
 	sta tmp2
-	jsr door_pos_at
+	lda door_cpos
 	sta tmp3
 	lda tmp2
 	cmp tmp3
@@ -576,7 +605,7 @@ door_try_y
 	sta door_savetl
 	lda tile_h
 	sta door_saveth
-	jsr door_orient_at
+	jsr door_cell_get
 	cmp #DO_MIDY
 	bne .dty_pass
 	lda ddy_h
@@ -611,7 +640,7 @@ door_try_y
 	ldy fracx
 	jsr door_u_combine
 	sta tmp2
-	jsr door_pos_at
+	lda door_cpos
 	sta tmp3
 	lda tmp2
 	cmp tmp3

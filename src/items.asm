@@ -263,16 +263,18 @@ items_cull_near
 	lda #0
 	sta tmp4				; scratch index
 
-	lda e_dy_l
-.ic_y
-	sta tmp3				; y
 	lda e_dx_l
-.ic_x
-	sta tmp2				; x
 	sta tmp0
-	lda tmp3
+	sta tmp2				; x
+	lda e_dy_l
 	sta tmp1
+	sta tmp3				; y
 	jsr map_to_tile
+	lda tile_l
+	sta e_acc_l				; row base (x0)
+	lda tile_h
+	sta e_acc_h
+.ic_x
 	ldy #0
 	lda (tile_l),y
 	jsr item_tile_frm
@@ -298,15 +300,27 @@ items_cull_near
 	lda tmp2
 	cmp e_dx_h
 	bcs .ic_ynext
-	clc
-	adc #1
+	inc tmp2
+	inc tile_l
+	bne .ic_x
+	inc tile_h
 	jmp .ic_x
 .ic_ynext
 	lda tmp3
 	cmp e_dy_h
 	bcs .ic_done
+	inc tmp3
 	clc
-	adc #1
-	jmp .ic_y
+	lda e_acc_l
+	adc #64
+	sta e_acc_l
+	sta tile_l
+	lda e_acc_h
+	adc #0
+	sta e_acc_h
+	sta tile_h
+	lda e_dx_l
+	sta tmp2
+	jmp .ic_x
 .ic_done
 	rts

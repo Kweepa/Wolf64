@@ -198,31 +198,7 @@ item_draw_one
 	bpl +
 	jmp .ido_rts
 +
-
-	ldy playera
-	lda sintab,y
-	sta e_mul
-	lda e_dx_l
-	sta aux_l
-	lda e_dx_h
-	sta aux_h
-	jsr enemy_mul_s16x8
-	sta e_side_l
-	stx e_side_h
-	ldy playera
-	lda costab,y
-	sta e_mul
-	lda e_dy_l
-	sta aux_l
-	lda e_dy_h
-	sta aux_h
-	jsr enemy_mul_s16x8
-	clc
-	adc e_side_l
-	sta e_side_l
-	txa
-	adc e_side_h
-	sta e_side_h
+	jsr enemy_side_from_delta
 
 	lda e_side_l
 	sta tmp0
@@ -260,7 +236,7 @@ item_draw_one
 	beq +
 	bcs .ido_rts
 +
-	jsr item_project_col
+	jsr project_col_from_side
 	jmp .ido_sized
 .ido_rts
 	rts
@@ -459,63 +435,71 @@ item_draw_one
 	inc e_sx
 	jmp .ido_cloop
 
-item_project_col
-	lda #20
-	sta e_col_cx
-	lda item_perp_h
-	cmp #$ff
-	bne .ipj_ok
-	rts
-.ipj_ok
-	lsr
-	sta tmp3
-	lda item_perp_l
-	ror
-	sta tmp2
-	lsr tmp3
-	ror tmp2
+; tmp0:tmp1 / tmp2:tmp3 → tmp4 = min(quot, 40). Unsigned. tmp5 preserved.
+div_q40
 	lda tmp2
 	ora tmp3
 	bne +
-	lda #1
-	sta tmp2
+	lda #40
+	sta tmp4
+	rts
 +
-	lda #0
-	sta tmp5
-	lda e_side_l
-	sta aux_l
-	lda e_side_h
-	sta aux_h
-	bpl .ipj_mul
-	inc tmp5
-	jsr neg_aux
-.ipj_mul
-	ldy aux_l
-	lda #20
-	jsr mul_8x8
-	stx tmp0
-	sta tmp1
-	lda aux_h
-	beq .ipj_div
-	tay
-	lda #20
-	jsr mul_8x8
-	txa
-	clc
-	adc tmp1
-	sta tmp1
-.ipj_div
+	lda tmp3
+	bne .d16
+	lda tmp1
+	bne .d168
 	lda #0
 	sta tmp4
-.ipj_dloop
+	lda tmp0
+	beq .out
+.d88
+	cmp tmp2
+	bcc .out
+	sbc tmp2
+	inc tmp4
+	ldx tmp4
+	cpx #40
+	bcc .d88
+.out
+	rts
+.d168
+	ldx #16
+	lda #0
+.d168l
+	asl tmp0
+	rol tmp1
+	rol
+	bcs .d168s
+	cmp tmp2
+	bcc .d168n
+.d168s
+	sbc tmp2
+	inc tmp0
+.d168n
+	dex
+	bne .d168l
+	lda tmp1
+	bne .sat
+	lda tmp0
+	cmp #41
+	bcc .d168o
+.sat
+	lda #40
+.d168o
+	sta tmp4
+	rts
+.d16
+	lda #0
+	sta tmp4
+.d16l
 	lda tmp1
 	cmp tmp3
-	bcc .ipj_ddone
-	bne .ipj_dsub
+	bcc .out
+	bne .d16s
 	lda tmp0
 	cmp tmp2
-	bcc .ipj_ddone
-.ipj_dsub
+	bcc .out
+.d16s
 	sec
 	lda tmp0
 	sbc tmp2
@@ -526,22 +510,51 @@ item_project_col
 	inc tmp4
 	lda tmp4
 	cmp #40
-	bcc .ipj_dloop
-.ipj_ddone
+	bcc .d16l
+	rts
+
+; e_col_cx = 20 ± min(30, |side|*20 / perp_mid). In: e_side, tmp2:tmp3 = perp>>2
+project_col_from_side
+	lda #0
+	sta tmp5
+	lda e_side_l
+	sta aux_l
+	lda e_side_h
+	sta aux_h
+	bpl .mul
+	inc tmp5
+	jsr neg_aux
+.mul
+	ldy aux_l
+	lda #20
+	jsr mul_8x8
+	stx tmp0
+	sta tmp1
+	lda aux_h
+	beq .div
+	tay
+	lda #20
+	jsr mul_8x8
+	txa
+	clc
+	adc tmp1
+	sta tmp1
+.div
+	jsr div_q40
 	lda tmp4
 	cmp #30
 	bcc +
 	lda #30
-+
 	sta tmp4
++
 	lda tmp5
-	bne .ipj_add
+	bne .add
 	sec
 	lda #20
 	sbc tmp4
 	sta e_col_cx
 	rts
-.ipj_add
+.add
 	clc
 	lda #20
 	adc tmp4

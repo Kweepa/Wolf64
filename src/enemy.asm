@@ -1062,47 +1062,23 @@ enemy_draw_one
 	adc half_h
 	sta e_bot
 
-	; view 0..7: (atan2(to_player) - facing) → octant
+	; enemy − player once: side / FOV / project, then negate for atan2
 	ldx enemy_idx
-	; vector enemy → player
 	sec
-	lda playerx_l
-	sbc enemy_xl,x
+	lda enemy_xl,x
+	sbc playerx_l
 	sta e_dx_l
-	lda playerx_h
-	sbc enemy_xh,x
+	lda enemy_xh,x
+	sbc playerx_h
 	sta e_dx_h
 	sec
-	lda playery_l
-	sbc enemy_yl,x
+	lda enemy_yl,x
+	sbc playery_l
 	sta e_dy_l
-	lda playery_h
-	sbc enemy_yh,x
+	lda enemy_yh,x
+	sbc playery_h
 	sta e_dy_h
-	jsr enemy_atan2			; A = angle toward player
-	sta tmp0
-	ldx enemy_idx
-	lda enemy_facing,x
-	tay
-	lda enemy_face_ang,y
-	sec
-	sbc tmp0
-	clc
-	adc #16				; round to nearest octant
-	lsr
-	lsr
-	lsr
-	lsr
-	lsr					; /32
-	and #7
-	sta e_view
-
-	jsr enemy_pick_frm
-
-.edo_side
-	; screen center from side transform
-	jsr enemy_calc_side
-	; FOV cull: |side_mid| > perp_mid (perp>>2) → outside ~45°
+	jsr enemy_side_from_delta
 	lda e_side_l
 	sta tmp0
 	lda e_side_h
@@ -1140,7 +1116,26 @@ enemy_draw_one
 	beq +
 	bcs .edo_rts_fov
 +
-	jsr enemy_project_col
+	jsr project_col_from_side
+	jsr neg_e_delta
+	jsr enemy_atan2			; A = angle toward player
+	sta tmp0
+	ldx enemy_idx
+	lda enemy_facing,x
+	tay
+	lda enemy_face_ang,y
+	sec
+	sbc tmp0
+	clc
+	adc #16				; round to nearest octant
+	lsr
+	lsr
+	lsr
+	lsr
+	lsr					; /32
+	and #7
+	sta e_view
+	jsr enemy_pick_frm
 	jmp .edo_sized
 .edo_rts_fov
 	rts
@@ -1473,23 +1468,25 @@ enemy_atan2
 	lda #64					; N
 	rts
 
-; side_mid = mid(dx*sin) + mid(dy*cos) — same mid units as depth before ×4
-enemy_calc_side
-	ldx enemy_idx
+neg_e_delta
 	sec
-	lda enemy_xl,x
-	sbc playerx_l
+	lda #0
+	sbc e_dx_l
 	sta e_dx_l
-	lda enemy_xh,x
-	sbc playerx_h
+	lda #0
+	sbc e_dx_h
 	sta e_dx_h
 	sec
-	lda enemy_yl,x
-	sbc playery_l
+	lda #0
+	sbc e_dy_l
 	sta e_dy_l
-	lda enemy_yh,x
-	sbc playery_h
+	lda #0
+	sbc e_dy_h
 	sta e_dy_h
+	rts
+
+; side_mid = mid(dx*sin) + mid(dy*cos). e_dx/e_dy = sprite − player.
+enemy_side_from_delta
 	ldy playera
 	lda sintab,y
 	sta e_mul
@@ -1514,104 +1511,6 @@ enemy_calc_side
 	txa
 	adc e_side_h
 	sta e_side_h
-	rts
-
-; e_col_cx = 20 - (side_mid * 20) / perp_mid  (unbiased vis_perp, not vis_depth)
-enemy_project_col
-	lda #20
-	sta e_col_cx
-	ldx vis_tok
-	lda vis_perp_h,x
-	cmp #$ff
-	bne .epj_ok
-	rts
-.epj_ok
-	; perp_mid = perp >> 2
-	lsr
-	sta tmp3
-	lda vis_perp_l,x
-	ror
-	sta tmp2
-	lsr tmp3
-	ror tmp2
-	lda tmp2
-	ora tmp3
-	bne +
-	lda #1
-	sta tmp2
-+
-	; |side_mid| in aux; tmp5 = 1 if side was negative
-	lda #0
-	sta tmp5
-	lda e_side_l
-	sta aux_l
-	lda e_side_h
-	sta aux_h
-	bpl .epj_mul
-	inc tmp5
-	jsr neg_aux
-.epj_mul
-	; product = |side| * 20 → tmp0:tmp1
-	ldy aux_l
-	lda #20
-	jsr mul_8x8				; X=lo A=hi of side_l*20
-	stx tmp0
-	sta tmp1
-	lda aux_h
-	beq .epj_div
-	tay
-	lda #20
-	jsr mul_8x8				; X=lo of side_h*20 → add to tmp1
-	txa
-	clc
-	adc tmp1
-	sta tmp1
-.epj_div
-	; tmp0:tmp1 / tmp2:tmp3 → tmp4 (quot 0..40)
-	lda #0
-	sta tmp4
-.epj_dloop
-	lda tmp1
-	cmp tmp3
-	bcc .epj_ddone
-	bne .epj_dsub
-	lda tmp0
-	cmp tmp2
-	bcc .epj_ddone
-.epj_dsub
-	sec
-	lda tmp0
-	sbc tmp2
-	sta tmp0
-	lda tmp1
-	sbc tmp3
-	sta tmp1
-	inc tmp4
-	lda tmp4
-	cmp #40
-	bcc .epj_dloop
-.epj_ddone
-	lda tmp4
-	cmp #30
-	bcc +
-	lda #30
-+
-	sta tmp4
-	; col = 20 - signed(side)*20/z
-	; +side (geometric right / south when facing E) → lower column:
-	; angtab left = −angle = south when facing east.
-	lda tmp5
-	bne .epj_add				; side was − → 20+quot
-	sec
-	lda #20
-	sbc tmp4
-	jmp .epj_set
-.epj_add
-	clc
-	lda #20
-	adc tmp4
-.epj_set
-	sta e_col_cx
 	rts
 
 ; Paint one masked column in chunky rows (two nibbles per character cell).

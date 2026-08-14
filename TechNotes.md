@@ -165,7 +165,7 @@ Per frame: `setup_player_tile` → cast cols 1..38 → paint 1..38 → `enemies_
 
 **Hit.** `hit_wall` loads `aux` from `sdx` or `sdy` once (U `fixcos` mul then fish `fishtab[col]`); one `ldx col` for the column stores.
 
-**Sprites.** `enemy_calc_spr_h` = `(3/2)*half_h` clamped to `ENEMY_MAX_H` (48) — same coarseness as `heightab[wallz>>5]`; a 256-byte `$2400/z` table did not fit locode or the enemy block. `enemy_paint_col` splits even/odd chunky rows with `lsr / bcs` (no `php/plp`). `e_hitscan` is patched once per column (`NOP NOP NOP` vs `JMP` over the `col_enemy` write).
+**Sprites.** `enemy_calc_spr_h` = `(3/2)*half_h` clamped to `ENEMY_MAX_H` (48). Draw path: one `e_dx` = sprite−player, `enemy_side_from_delta`, FOV cull, then `project_col_from_side` (16/8 or 8/8 `div_q40` in `items_draw.asm`; no per-pixel subtract-up-to-40). Off-screen sprites skip `atan2` / `pick_frm`. `neg_e_delta` then `enemy_atan2` for octant. `enemy_paint_col` splits even/odd rows with `lsr / bcs`; `e_hitscan` patched once per column.
 
 ## VICE snapshot dump (`tools/vsf_dump.py`)
 

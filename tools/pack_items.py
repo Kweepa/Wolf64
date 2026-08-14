@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pack_enemies import frame_indices, opaque_bbox, pack_columns  # noqa: E402
 from process_items_c64 import OUT_COLS, OUT_ROWS  # noqa: E402
 
-# Sheet order from process_items_c64 detect_boxes (row-major, 5×4; last cell empty).
+# Sheet order from process_items_c64 detect_boxes (row-major, 5×4).
 ITEM_FRAMES: list[str] = [
     "table_chairs",
     "chandelier",
@@ -46,6 +46,7 @@ ITEM_FRAMES: list[str] = [
     "well",
     "flag",
     "puddle",
+    "bed",
 ]
 
 CEILING_ITEMS = frozenset(

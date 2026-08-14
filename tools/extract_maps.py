@@ -56,6 +56,7 @@ T_HANGED = 28
 T_WELL = 29
 T_FLAG = 30
 T_PUDDLE = 31
+T_BED = 32
 T_PILLAR = 33
 T_TABLE = 34
 T_LAMP = 35
@@ -148,7 +149,7 @@ STATIC_MAP = {
     19: T_BLOOD,  # skeleton relax
     20: T_GOLD_KEY,
     21: T_SILVER_KEY,
-    22: None,
+    22: T_BED,
     23: None,
     24: T_FOOD,
     25: T_FIRSTAID,
@@ -179,7 +180,7 @@ STATIC_MAP = {
 
 def is_spawn_item_tile(tile: int) -> bool:
     """Tiles that map AABB cull/pickup treat as world items (cross/chalice skipped)."""
-    if T_AMMO <= tile <= T_PUDDLE:
+    if T_AMMO <= tile <= T_BED:
         return tile not in (T_CROSS, T_CHALICE)
     return T_PILLAR <= tile <= T_CAGE
 

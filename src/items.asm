@@ -14,6 +14,7 @@ T_HANGED	= 28
 T_WELL		= 29
 T_FLAG		= 30
 T_PUDDLE	= 31
+T_BED		= 32
 T_PILLAR	= 33
 T_TABLE		= 34
 T_LAMP		= 35
@@ -23,11 +24,11 @@ T_DOGFOOD	= 38
 T_CEIL_LIGHT	= 39
 T_CAGE		= 40
 
-; tile 19..31 → frame ($ff = skip)
+; tile 19..32 → frame ($ff = skip)
 item_frm_19
 	!byte IF_AMMO_CLIP, IF_FIRSTAID, IF_FOOD, IF_KEY_GOLD, IF_KEY_SILVER
 	!byte $ff, $ff, IF_MACHINEGUN, IF_CHAINGUN
-	!byte IF_HANGED_MAN, IF_WELL, IF_FLAG, IF_PUDDLE
+	!byte IF_HANGED_MAN, IF_WELL, IF_FLAG, IF_PUDDLE, IF_BED
 ; tile 33..40 → frame
 item_frm_33
 	!byte IF_URN, IF_TABLE_CHAIRS, IF_CHANDELIER, IF_GIBS, IF_TREE
@@ -37,10 +38,8 @@ item_frm_33
 item_tile_frm
 	cmp #T_AMMO
 	bcc .itf_no
-	cmp #T_PUDDLE + 1
+	cmp #T_BED + 1
 	bcc .itf_pick
-	cmp #T_PILLAR
-	bcc .itf_no
 	cmp #T_CAGE + 1
 	bcs .itf_no
 	sec

@@ -412,7 +412,6 @@ menu_select
 	ldy #>credits_text
 	jsr show_text_screen
 .ms_ret
-	jsr clear_screen
 	jsr draw_menu
 .ms_st
 	clc
@@ -447,6 +446,7 @@ menu_sizes
 
 ; --- drawing ---------------------------------------------------------------
 draw_menu
+	jsr menu_blank
 	jsr clear_screen
 
 	ldx menu_id
@@ -475,7 +475,8 @@ draw_menu
 	lda #<str_hint
 	ldy #>str_hint
 	ldx #HINT_ROW
-	jmp print_centered
+	jsr print_centered
+	jmp menu_unblank
 
 ; Title two lines above the box
 draw_section_title
@@ -655,6 +656,7 @@ show_story_screen
 	rts
 
 .sts_body
+	jsr menu_blank
 	jsr clear_screen
 	jsr calc_text_box
 	jsr apply_story_layout
@@ -680,6 +682,7 @@ show_story_screen
 	cpx menu_size
 	bcc .st_l
 .st_wait
+	jsr menu_unblank
 	jsr wait_any_key
 	rts
 
@@ -785,7 +788,7 @@ init_menu_vic
 	sta $dd00
 	lda $d011
 	and #%10000111			; clear ECM/BMM/DEN/RSEL
-	ora #%00111011			; hires bitmap + enable + 25 rows
+	ora #%00101011			; hires bitmap + 25 rows, DEN off until first draw
 	sta $d011
 	lda $d016
 	and #%11100111			; hires (not MCM), 40 cols
@@ -795,9 +798,7 @@ init_menu_vic
 	sta $d018
 	lda #0
 	sta $d015
-	lda #MENU_BORDER
 	sta $d020
-	lda #COL_MAIN
 	sta $d021
 	rts
 
@@ -1303,6 +1304,31 @@ str_skip
 	bcc .ssk_c
 	inc ui_str_h
 .ssk_c
+	rts
+
+; Hide full redraws: interior becomes black border; logo sprites off.
+menu_blank
+	lda $d011
+	and #%11101111				; DEN off
+	sta $d011
+	lda #0
+	sta $d020
+	sta $d021
+	sta $d015
+	rts
+
+; Reveal after paint. $d021 from clear_bg (story pages use STORY_BG).
+menu_unblank
+	jsr wait_frame
+	lda #MENU_BORDER
+	sta $d020
+	lda clear_bg
+	sta $d021
+	lda $d011
+	ora #%00010000				; DEN on
+	sta $d011
+	lda #%01111111
+	sta $d015
 	rts
 
 wait_raster

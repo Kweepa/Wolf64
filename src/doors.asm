@@ -566,6 +566,7 @@ door_try_x
 	lda door_saveth
 	sta tile_h
 	ldx door_savex
+	ldy #0
 	clc
 	rts
 
@@ -642,6 +643,7 @@ door_try_y
 	lda door_saveth
 	sta tile_h
 	ldx door_savex
+	ldy #0
 	clc
 	rts
 

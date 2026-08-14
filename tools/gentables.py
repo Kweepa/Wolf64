@@ -78,6 +78,10 @@ def main() -> None:
         bchunk("sintab", sintab),
         "costab = sintab + 64\n",
         bchunk("heightab", heightab),
+        bchunk("map_row_lo", [(0xEF00 + y * 64) & 255 for y in range(64)]),
+        bchunk("map_row_hi", [(0xEF00 + y * 64) >> 8 for y in range(64)]),
+        bchunk("tex_base_lo", [(0x4800 + i * 128) & 255 for i in range(16)]),
+        bchunk("tex_base_hi", [(0x4800 + i * 128) >> 8 for i in range(16)]),
     ]
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("".join(parts), encoding="utf-8")

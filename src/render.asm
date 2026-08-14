@@ -7,34 +7,31 @@ FLOOR_COLOR	= $cc
 
 ; A = texture id. Patch table: count, then (addr_lo, addr_hi, byte_off)*
 ; addr points at LDA abs,x operand lo; written as TEXTURES+id*128+byte_off.
+; ph_h_done[half_h] skips re-patch when this tex already hit that height.
 patch_painter_tex
 	cmp smc_last_page
-	bne .do
+	bne .newtex
 	ldx half_h
-	cpx smc_last_h
-	beq .out
-.do
+	lda ph_h_done,x
+	bne .out
+	beq .do
+.newtex
 	sta smc_last_page
-	sta tmp3
-	ldx half_h
-	stx smc_last_h
-
+	ldx #MAX_HALF_H
 	lda #0
-	sta tex_ptr_h
-	lda tmp3
-	sta tex_ptr_l
-	ldx #7
-.mul128
-	asl tex_ptr_l
-	rol tex_ptr_h
+-
+	sta ph_h_done,x
 	dex
-	bne .mul128
-	clc
-	lda tex_ptr_l
-	adc #<TEXTURES
+	bne -
+.do
+	ldx half_h
+	lda #1
+	sta ph_h_done,x
+
+	ldy smc_last_page
+	lda tex_base_lo,y
 	sta tex_ptr_l
-	lda tex_ptr_h
-	adc #>TEXTURES
+	lda tex_base_hi,y
 	sta tex_ptr_h
 
 	ldx half_h
@@ -47,20 +44,19 @@ patch_painter_tex
 	beq .out
 	sta tmp2
 	iny
+	sty tmp4
 .loop
+	ldy tmp4
 	lda (tmp0),y
 	sta move_dx_l
 	iny
 	lda (tmp0),y
 	sta move_dx_h
 	iny
-	lda (tmp0),y
-	sta tmp3				; byte_off
+	lda (tmp0),y				; byte_off
 	iny
-	tya
-	pha
+	sty tmp4
 	clc
-	lda tmp3
 	adc tex_ptr_l
 	ldy #0
 	sta (move_dx_l),y
@@ -68,8 +64,6 @@ patch_painter_tex
 	adc #0
 	iny
 	sta (move_dx_l),y
-	pla
-	tay
 	dec tmp2
 	bne .loop
 .out
@@ -84,6 +78,7 @@ paint_column
 	jmp draw_sky_floor
 
 .have_tex
+	sta tmp3
 	lda col_half_h,x
 	bne +
 	lda #1
@@ -97,7 +92,7 @@ paint_column
 	lda col_texx,x
 	sta texx
 
-	lda col_texid,x
+	lda tmp3
 	jsr patch_painter_tex
 
 	lda texx

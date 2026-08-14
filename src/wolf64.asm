@@ -4,9 +4,9 @@
 !to "game_image.prg", cbm
 
 ; --- build flags (SquareDoom-style) ---------------------------------------
-PROFILE		= 0				; stage buckets on bitmap row 0
+PROFILE		= 0				; locode too tight with buckets; F via DBG_FPS
 PROF_SPLIT	= 0				; 1 = per-col R/D (~80 CIA samples; +~20ms)
-DBG_FPS		= 0				; F ≈ frame ms (cols 0–2)
+DBG_FPS		= 1				; F ≈ frame ms (cols 0–2)
 DBG_NO_DETECT	= 0				; 1 = enemies never spot player (patrol preview)
 MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 
@@ -367,8 +367,10 @@ end_sfx = *
 	!error "SFX overlaps ENEMY_BASE; end=$", end_sfx
 }
 
+; Painter SMC: which half_h already patched for smc_last_page
+ph_h_done	= end_sfx			; [1..MAX_HALF_H]
 ; Column depth/hit buffers relocated off boot page (room for REBOOT_STUB)
-col_wallz_h	= end_sfx
+col_wallz_h	= ph_h_done + MAX_HALF_H + 1
 col_enemy	= col_wallz_h + 40
 ; Per-frame item scratch + vis depth/order — SFX→enemy gap
 item_x		= col_enemy + 40

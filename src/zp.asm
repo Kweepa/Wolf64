@@ -62,8 +62,10 @@ scr_front_l	= $34		; visible matrix base (HUD) — must be contiguous word
 scr_front_h	= $35
 tex_ptr_l	= $36
 tex_ptr_h	= $37
-smc_last_page	= $38		; last patched texture page
+smc_last_page	= $38		; last patched texture id
 smc_last_h	= $39		; last patched half_h
+dda_last_x	= $c6		; previous column xstep (0 = none)
+dda_last_y	= $c7		; previous column ystep
 
 move_dx_l	= $3d
 move_dx_h	= $3e

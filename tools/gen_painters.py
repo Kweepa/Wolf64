@@ -118,10 +118,12 @@ def emit_unrolled(code: list[str]) -> None:
 
 			if kt == "sky":
 				code.append("\tlda #$b0")
-				code.append("\tsta tmp0")
+				if kb == "wall":
+					code.append("\tsta tmp0")
 			elif kt == "floor":
 				code.append("\tlda #$c0")
-				code.append("\tsta tmp0")
+				if kb == "wall":
+					code.append("\tsta tmp0")
 			else:
 				tr = tex_row(vt, h)
 				tex_lda(tr >> 1)
@@ -136,10 +138,8 @@ def emit_unrolled(code: list[str]) -> None:
 				code.append("\tsta tmp0")
 
 			if kb == "sky":
-				code.append("\tlda tmp0")
 				code.append("\tora #$0b")
 			elif kb == "floor":
-				code.append("\tlda tmp0")
 				code.append("\tora #$0c")
 			else:
 				tr = tex_row(vb, h)
@@ -196,9 +196,11 @@ def emit_near(code: list[str]) -> None:
 		"\tlda tex_ptr_l",
 		"\tadc tmp2",
 		"\tsta .pn_ld+1\t\t\t; stripe base once/column",
+		"\tsta .pn_ld2+1",
 		"\tlda tex_ptr_h",
 		"\tadc #0",
 		"\tsta .pn_ld+2",
+		"\tsta .pn_ld2+2",
 		"",
 		"\tlda half_h",
 		"\tsec",
@@ -217,7 +219,25 @@ def emit_near(code: list[str]) -> None:
 		f"\tlda #{n_cells}",
 		"\tsta tmp2\t\t\t\t; cell countdown (X used by sample)",
 		".pn_cell",
-		"\tjsr .pn_sample",
+		"\tlda tmp4",
+		"\tlsr",
+		"\ttax",
+		".pn_ld",
+		"\tlda $ffff,x",
+		"\tsta tmp1",
+		"\tlda tmp4",
+		"\tand #1",
+		"\tbne .pn_odd1",
+		"\tlda tmp1",
+		"\tlsr",
+		"\tlsr",
+		"\tlsr",
+		"\tlsr",
+		"\tjmp .pn_hi",
+		".pn_odd1",
+		"\tlda tmp1",
+		"\tand #$0f",
+		".pn_hi",
 		"\tasl",
 		"\tasl",
 		"\tasl",
@@ -235,7 +255,25 @@ def emit_near(code: list[str]) -> None:
 		".pn_s1",
 		"\tsta tmp5",
 		".pn_b",
-		"\tjsr .pn_sample",
+		"\tlda tmp4",
+		"\tlsr",
+		"\ttax",
+		".pn_ld2",
+		"\tlda $ffff,x",
+		"\tsta tmp1",
+		"\tlda tmp4",
+		"\tand #1",
+		"\tbne .pn_odd2",
+		"\tlda tmp1",
+		"\tlsr",
+		"\tlsr",
+		"\tlsr",
+		"\tlsr",
+		"\tjmp .pn_lo",
+		".pn_odd2",
+		"\tlda tmp1",
+		"\tand #$0f",
+		".pn_lo",
 		"\tora tmp0",
 		".pn_sta",
 		"\tsta $ffff,y\t\t\t; Y=column",
@@ -260,28 +298,6 @@ def emit_near(code: list[str]) -> None:
 		".pn_next",
 		"\tdec tmp2",
 		"\tbne .pn_cell",
-		"\trts",
-		"",
-		"; tmp4 → A color nibble. Keeps Y. Clobbers X,tmp1.",
-		".pn_sample",
-		"\tlda tmp4",
-		"\tlsr",
-		"\ttax",
-		".pn_ld",
-		"\tlda $ffff,x",
-		"\tsta tmp1",
-		"\tlda tmp4",
-		"\tand #1",
-		"\tbne .pn_odd",
-		"\tlda tmp1",
-		"\tlsr",
-		"\tlsr",
-		"\tlsr",
-		"\tlsr",
-		"\trts",
-		".pn_odd",
-		"\tlda tmp1",
-		"\tand #$0f",
 		"\trts",
 		"",
 		"near_tex0",

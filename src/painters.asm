@@ -30,7 +30,6 @@ smc_h01_1
 	lda TEXTURES + 4,x
 	and #$f0
 	sta tmp0
-	lda tmp0
 	ora #$0c
 	sta (view_row12),y
 	lda #$cc
@@ -143,7 +142,6 @@ smc_h03_5
 	asl
 	asl
 	sta tmp0
-	lda tmp0
 	ora #$0c
 	sta (view_row13),y
 	lda #$cc
@@ -295,7 +293,6 @@ smc_h05_8
 	lda TEXTURES + 7,x
 	and #$f0
 	sta tmp0
-	lda tmp0
 	ora #$0c
 	sta (view_row14),y
 	lda #$cc
@@ -470,7 +467,6 @@ smc_h07_10
 	lda TEXTURES + 7,x
 	and #$f0
 	sta tmp0
-	lda tmp0
 	ora #$0c
 	sta (view_row15),y
 	lda #$cc
@@ -622,7 +618,6 @@ smc_h09_13
 	asl
 	asl
 	sta tmp0
-	lda tmp0
 	ora #$0c
 	sta (view_row16),y
 	lda #$cc
@@ -871,7 +866,6 @@ smc_h11_17
 	asl
 	asl
 	sta tmp0
-	lda tmp0
 	ora #$0c
 	sta (view_row17),y
 	lda #$cc
@@ -1165,7 +1159,6 @@ smc_h13_21
 	asl
 	asl
 	sta tmp0
-	lda tmp0
 	ora #$0c
 	sta (view_row18),y
 	lda #$cc
@@ -1506,7 +1499,6 @@ smc_h15_25
 	asl
 	asl
 	sta tmp0
-	lda tmp0
 	ora #$0c
 	sta (view_row19),y
 	lda #$cc
@@ -1918,7 +1910,6 @@ smc_h17_29
 	asl
 	asl
 	sta tmp0
-	lda tmp0
 	ora #$0c
 	sta (view_row20),y
 	lda #$cc
@@ -2350,7 +2341,6 @@ smc_h19_33
 	asl
 	asl
 	sta tmp0
-	lda tmp0
 	ora #$0c
 	sta (view_row21),y
 	rts
@@ -9710,9 +9700,11 @@ painter_near
 	lda tex_ptr_l
 	adc tmp2
 	sta .pn_ld+1			; stripe base once/column
+	sta .pn_ld2+1
 	lda tex_ptr_h
 	adc #0
 	sta .pn_ld+2
+	sta .pn_ld2+2
 
 	lda half_h
 	sec
@@ -9731,7 +9723,25 @@ painter_near
 	lda #20
 	sta tmp2				; cell countdown (X used by sample)
 .pn_cell
-	jsr .pn_sample
+	lda tmp4
+	lsr
+	tax
+.pn_ld
+	lda $ffff,x
+	sta tmp1
+	lda tmp4
+	and #1
+	bne .pn_odd1
+	lda tmp1
+	lsr
+	lsr
+	lsr
+	lsr
+	jmp .pn_hi
+.pn_odd1
+	lda tmp1
+	and #$0f
+.pn_hi
 	asl
 	asl
 	asl
@@ -9749,7 +9759,25 @@ painter_near
 .pn_s1
 	sta tmp5
 .pn_b
-	jsr .pn_sample
+	lda tmp4
+	lsr
+	tax
+.pn_ld2
+	lda $ffff,x
+	sta tmp1
+	lda tmp4
+	and #1
+	bne .pn_odd2
+	lda tmp1
+	lsr
+	lsr
+	lsr
+	lsr
+	jmp .pn_lo
+.pn_odd2
+	lda tmp1
+	and #$0f
+.pn_lo
 	ora tmp0
 .pn_sta
 	sta $ffff,y			; Y=column
@@ -9774,28 +9802,6 @@ painter_near
 .pn_next
 	dec tmp2
 	bne .pn_cell
-	rts
-
-; tmp4 → A color nibble. Keeps Y. Clobbers X,tmp1.
-.pn_sample
-	lda tmp4
-	lsr
-	tax
-.pn_ld
-	lda $ffff,x
-	sta tmp1
-	lda tmp4
-	and #1
-	bne .pn_odd
-	lda tmp1
-	lsr
-	lsr
-	lsr
-	lsr
-	rts
-.pn_odd
-	lda tmp1
-	and #$0f
 	rts
 
 near_tex0

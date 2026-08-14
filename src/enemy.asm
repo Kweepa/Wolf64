@@ -1004,40 +1004,18 @@ enemy_sort_depth
 .es_done
 	rts
 
-; wallz → e_spr_h = $2400/wallz (≡ 3/2 · $1800/wallz), 1..ENEMY_MAX_H
-; Finer than (3*half_h)/2 which inherits heightab's wallz>>5 steps.
+; wallz → e_spr_h = $2400/wallz ≡ (3/2)·half_h (calc_half_h just ran)
 enemy_calc_spr_h
-	lda wallz_l
-	ora wallz_h
-	bne +
-	lda #ENEMY_MAX_H
-	sta e_spr_h
-	rts
-+
-	lda #0
-	sta tmp0
-	lda #$00
-	sta tmp2
-	lda #$24
-	sta tmp3				; dividend $2400
-.ecsh_lp
-	sec
-	lda tmp2
-	sbc wallz_l
-	tax
-	lda tmp3
-	sbc wallz_h
-	bcc .ecsh_done
-	stx tmp2
-	sta tmp3
-	inc tmp0
-	lda tmp0
-	cmp #ENEMY_MAX_H
-	bcc .ecsh_lp
-.ecsh_done
-	lda tmp0
+	lda half_h
+	lsr
+	clc
+	adc half_h
 	bne +
 	lda #1
++
+	cmp #ENEMY_MAX_H + 1
+	bcc +
+	lda #ENEMY_MAX_H
 +
 	sta e_spr_h
 	rts
@@ -1688,6 +1666,21 @@ enemy_paint_col
 	iny
 	bne .epc_unp
 .epc_draw
+	lda e_hitscan
+	bne .epc_hiton
+	lda #$4c				; JMP .epc_nobuf
+	sta .epc_hitop
+	lda #<.epc_nobuf
+	sta .epc_hitop+1
+	lda #>.epc_nobuf
+	sta .epc_hitop+2
+	jmp .epc_vstep
+.epc_hiton
+	lda #$ea				; NOP NOP NOP — fall into col_enemy write
+	sta .epc_hitop
+	sta .epc_hitop+1
+	sta .epc_hitop+2
+.epc_vstep
 	ldx e_spr_h
 	lda enemy_vstep_lo,x
 	sta e_step_l
@@ -1737,8 +1730,10 @@ enemy_paint_col
 	beq .epc_nr				; 0 = transparent
 	sta tmp4
 	; hit buffer: nearest opaque writer for this column
-	lda e_hitscan
-	beq .epc_nobuf
+.epc_hitop
+	nop
+	nop
+	nop
 	lda enemy_idx
 	ldy col
 	sta col_enemy,y
@@ -1746,7 +1741,7 @@ enemy_paint_col
 	; cell = v >> 1 → view_row pointer
 	lda e_row
 	lsr					; A=cell, C=1 if bottom nibble
-	php
+	bcs .epc_lo
 	asl
 	tax
 	lda view_row0,x
@@ -1754,9 +1749,6 @@ enemy_paint_col
 	lda view_row0+1,x
 	sta tmp1
 	ldy col
-	plp
-	bcs .epc_lo
-	; top half → high nibble
 	lda tmp4
 	asl
 	asl
@@ -1769,6 +1761,13 @@ enemy_paint_col
 	sta (tmp0),y
 	jmp .epc_nr
 .epc_lo
+	asl
+	tax
+	lda view_row0,x
+	sta tmp0
+	lda view_row0+1,x
+	sta tmp1
+	ldy col
 	lda (tmp0),y
 	and #$f0
 	ora tmp4

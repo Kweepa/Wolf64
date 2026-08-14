@@ -60,8 +60,8 @@ IOINIT/CIA). **LOCODE** overwrites the menu at `$0900`. Boot then jumps to
 | `itm` | `$5880` | world item gfx (4bpp frames + LUTs, to `$6000`) |
 | `bmp` | `$6000` | MCM bitmap |
 | `sqt` | `$3800` | Judd square tables (2K; replaces menufont) |
-| `paint` | `$8000` | wall height painters |
-| `sfx` | `$B8F2` | PC sounds + freq |
+| `paint` | `$8000` | wall height painters (`PAINTERS_SIZE` = `$38FB`) |
+| `sfx` | `$B8FB` | PC sounds + freq (`PAINTERS + PAINTERS_SIZE`) |
 | `tab` | `$0400` | `tables.asm` (DEN blank — not visible) |
 | `col` | `$D800` | colour RAM |
 
@@ -71,7 +71,7 @@ overlays the boot footprint** (`$0801`…`$08BF`). **`$08C0`** holds a 3-byte
 in the enemy block so locode stays under SQTAB); **game over** (lives expired)
 blacks the screen and jumps there to LOAD `wolf64` and re-enter the menu.
 Deaths with lives remaining set `level_want=1` and restart the level. **`$08FF`**
-is `difficulty`. `col_wallz_h` / `col_enemy` live after `end_sfx`.
+is `difficulty`. After `end_sfx`: `ph_h_done` (painter height flags, `MAX_HALF_H+1`), then `col_wallz_h` / `col_enemy`, then item/vis/cold-enemy SoA → `<$C000`.
 
 `LoadPrg` / `LoadLevel` stay resident in locode for **in-play level advance**
 without reloading code or assets. Future overflow code may ship as `hicode`.
@@ -125,11 +125,13 @@ hot per-frame tables that an IRQ might need.
 
 ## Screen double-buffer (`$4000` / `$4400`)
 
-Painters write colour nibbles straight into the **back** video matrix via ZP `view_row0..23` (`sta (view_rowN),y`, Y=column). After paint, `swap_view` flips `$d018` between `%00001000` (matrix `$4000`) and `%00011000` (matrix `$4400`) inside a `$35` window. Shared multicolour bitmap at `$6000` is not flipped. No transposed FRAMEBUF / blit pass.
+Painters write colour nibbles straight into the **back** video matrix via ZP `view_row0..23` (`sta (view_rowN),y`, Y=column). `init_vic` / level restart call `set_view_rows` once (`view_row0` → matrix row 3 so cells 2..21 land on screen rows 5..24). After paint, `swap_view` flips `$d018` between `%00001000` (matrix `$4000`) and `%00011000` (matrix `$4400`) inside a `$35` window, then `eor #$04` on the 24 `view_row*` **high** bytes (`SCREEN` vs `SCREEN_B`). Shared multicolour bitmap at `$6000` is not flipped. No transposed FRAMEBUF / blit pass.
 
 ## Profiler HUD (SquareDoom CIA2 cascade)
 
-`PROFILE=1` / `DBG_FPS=1` in `src/wolf64.asm`. CIA2 TA/TB cascaded ϕ2 clock (`src/profil.asm`). Bitmap row 0 shows approx **ms** (same `(cycles>>8)>>2` as SquareDoom):
+`PROFILE=1` / `DBG_FPS=1` in `src/wolf64.asm`. CIA2 TA/TB cascaded ϕ2 clock (`src/profil.asm`). Bitmap row 0 shows approx **ms** (same `(cycles>>8)>>2` as SquareDoom).
+
+**`PROFILE=1` does not fit locode** (BSS + gated bodies push `end_locode` past SQTAB `$3800`). Ship with **`DBG_FPS=1`** (cols 0–2 = **F** only). Do not move Judd tables to make the full HUD fit. `PROF_SPLIT=1` is extra code and ~20ms of CIA samples — leave off.
 
 Pipelined render stores per-column `col_texid` / `col_half_h` / `col_texx`, then paints the back matrix.
 Default **`PROF_SPLIT=0`**: stage-boundary buckets only.  
@@ -150,6 +152,20 @@ Default **`PROF_SPLIT=0`**: stage-boundary buckets only.
 **L** times the single `enemy_los_rr` grant (`check_sight` / chase LOS / `enemy_shoot`) via nested CIA sample — also counted inside **U**.
 
 HUD screen nibbles go to the **front** matrix (`set_scr_front` after `swap_view`). CIA2 reads and `$d800` colour writes go through `$35` windows (`prof_read_casc` / `prof_print`). Does not touch `$dd00` (VIC bank).
+
+## DDA / paint / sprites (speed)
+
+Per frame: `setup_player_tile` → cast cols 1..38 → paint 1..38 → `enemies_draw` → `swap_view`. Cast cannot split setup×38 then march×38: tile-pointer SMC is per-column.
+
+**March (`cast_march`).** `Y=0` for `lda (tile_l),y` for the whole ray. `door_try_x` / `door_try_y` restore `Y=0` on the continue (pass) path. X-grid miss loops with `dex / bne .inner`; Y-grid miss is `dex / beq .miss / jmp .inner` (relative branch too far). If `xstep`/`ystep` match the previous column (`dda_last_x/y`, ZP `$c6/$c7`; 0 = none), skip the six INC/DEC / ADC/SBC opcode patches.
+
+**Map.** `map_to_tile`: `tile = map_row[mapy] + mapx`. `map_row_lo/hi` in `tab` (`MAP + y*64`, 64×64).
+
+**Wall paint.** `tex_base_lo/hi` in `tab` (`TEXTURES + id*128`, 16 textures) — no ×128 shift loop. `ph_h_done[half_h]` (after `end_sfx`) skips re-patching LDA operands when this texture already hit that height this stretch; texture change clears flags 1..`MAX_HALF_H`. Patch list walk uses ZP `tmp4`, not `pha/pla`. Heights 1..50 unrolled; 51..75 share Bresenham `painter_near` with inlined texel sample (two `LDA abs,x` sites patched per column). Solid sky/floor cells are `lda #$bb/#$cc` runs; horizon blends `ora` without a redundant `lda tmp0`.
+
+**Hit.** `hit_wall` loads `aux` from `sdx` or `sdy` once (U `fixcos` mul then fish `fishtab[col]`); one `ldx col` for the column stores.
+
+**Sprites.** `enemy_calc_spr_h` = `(3/2)*half_h` clamped to `ENEMY_MAX_H` (48) — same coarseness as `heightab[wallz>>5]`; a 256-byte `$2400/z` table did not fit locode or the enemy block. `enemy_paint_col` splits even/odd chunky rows with `lsr / bcs` (no `php/plp`). `e_hitscan` is patched once per column (`NOP NOP NOP` vs `JMP` over the `col_enemy` write).
 
 ## VICE snapshot dump (`tools/vsf_dump.py`)
 

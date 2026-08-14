@@ -32,6 +32,9 @@ setup_player_tile
 	lda playery_h
 	sta plr_mapy
 	sta mapy
+	lda #0
+	sta dda_last_x
+	sta dda_last_y
 	rts
 
 ; Pipelined: setup → cast cols 1..38 → paint back → $d018 swap
@@ -57,9 +60,7 @@ render_frame
 	jsr prof_add_bucket
 }
 }
-	jsr set_view_rows
-	; Painters under $A000 are plain RAM at the $01=$34 gameplay default
-	; (see TechNotes.md). IRQ banks I/O in itself; no paint flip needed.
+	; view_row* flipped in swap_view (eor #$04)
 	lda #COL_FIRST
 	sta col
 .paint_loop
@@ -143,7 +144,18 @@ cast_column
 	jsr calc_sdy
 
 .patch
-	; SquareDoom: patch ±X/±Y tile advances once per column (no sign tests in march)
+	; SquareDoom: patch ±X/±Y once per column; skip if signs match last ray
+	lda xstep
+	cmp dda_last_x
+	bne .smc_do
+	lda ystep
+	cmp dda_last_y
+	beq .smc_ok
+.smc_do
+	lda xstep
+	sta dda_last_x
+	lda ystep
+	sta dda_last_y
 	ldx #$e6				; INC zp
 	lda xstep
 	bpl +
@@ -168,6 +180,7 @@ cast_column
 	ldx #$c6				; DEC mapy
 +
 	stx .smc_mapy
+.smc_ok
 
 	lda mapx
 	sta tmp0
@@ -190,11 +203,12 @@ cast_column
 	rts
 
 ; Inner DDA + hit_wall / miss (expects tile_*, ddx/ddy/sdx/sdy, SMC patched)
+; Y stays 0 for lda (tile_l),y — door_try_* restores Y=0 on the continue path
 cast_march
 	ldx #MAX_DDA				; step budget in X
+	ldy #0
 
 .inner
-	ldy #0					; door_* helpers clobber Y
 	lda sdx_h
 	cmp sdy_h
 	bcc .adv_x
@@ -239,8 +253,8 @@ cast_march
 	sta sdx_h
 	bcs .miss
 	dex
+	bne .inner
 	beq .miss
-	jmp .inner
 
 .adv_y
 .smc_y_clc
@@ -283,7 +297,7 @@ cast_march
 	bcs .miss				; 16-bit wrap → bogus near wallz / huge column
 	dex
 	beq .miss
-	jmp .inner
+	jmp .inner				; Y-miss is >127 bytes from .inner
 
 .miss
 	ldx col
@@ -309,28 +323,14 @@ fold_angle
 	rts
 
 map_to_tile
-	; tile = MAP + mapy*64 + mapx
-	lda #0
-	sta tile_l
-	lda tmp1
-	sta tile_h
-	lsr tile_h
-	ror tile_l
-	lsr tile_h
-	ror tile_l
+	; tile = MAP + mapy*64 + mapx  (map_row_* = MAP + y*64)
+	ldy tmp1
+	lda map_row_lo,y
 	clc
-	lda tile_l
 	adc tmp0
 	sta tile_l
-	lda tile_h
+	lda map_row_hi,y
 	adc #0
-	sta tile_h
-	clc
-	lda tile_l
-	adc #<MAP
-	sta tile_l
-	lda tile_h
-	adc #>MAP
 	sta tile_h
 	rts
 
@@ -343,10 +343,7 @@ hit_wall
 	lda #T_ELEVATOR
 	sta tex_id
 +
-	ldx col
-	sta col_texid,x
-
-	; Wall U (The Keep hitcommon): face frac from s×fixcos ± player frac
+	; Wall U + fish share aux = sdx (side=0) or sdy (side=1)
 	lda side
 	bne .u_y
 	lda sdx_l
@@ -389,34 +386,19 @@ hit_wall
 	and #15
 	sta texx
 
-	; Fish-eye: wallz = mid(s × fish)
-	lda side
-	bne .z_y
-	lda sdx_l
-	sta aux_l
-	lda sdx_h
-	sta aux_h
-	jmp .z_mul
-.z_y
-	lda sdy_l
-	sta aux_l
-	lda sdy_h
-	sta aux_h
-.z_mul
 	ldx col
 	lda fishtab,x
 	jsr mul_16x8
 	sta wallz_l
 	stx wallz_h
+	jsr calc_half_h
 	ldx col
+	lda tex_id
+	sta col_texid,x
 	lda wallz_l
 	sta col_wallz_l,x
 	lda wallz_h
 	sta col_wallz_h,x
-
-	; half_h: wallz>>5 → heightab; wallz<32 (close) → exact $1800/wallz
-	jsr calc_half_h
-	ldx col
 	lda half_h
 	sta col_half_h,x
 	lda texx

@@ -74,16 +74,25 @@ swap_view
 	sta $d018
 	lda #0
 	sta view_back
-	lda #$34
-	sta $01
-	rts
+	beq .io_out
 .show_a
 	lda #D018_SCR_A
 	sta $d018
 	lda #1
 	sta view_back
+.io_out
 	lda #$34
 	sta $01
+	; SCREEN vs SCREEN_B differ by $04 in the high byte
+	ldx #1
+-
+	lda view_row0,x
+	eor #$04
+	sta view_row0,x
+	inx
+	inx
+	cpx #49
+	bcc -
 	rts
 
 ; Front matrix hi after swap (opposite of next back)

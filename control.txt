@@ -1,13 +1,12 @@
-^W^....... ^Forward^
-^S^....... ^Backward^
-^A^....... ^Strafe Left^
-^D^....... ^Strafe Right^
-^J^....... ^Turn Left^
-^L^....... ^Turn Right^
-^Space^... ^Fire^
-^1^-^4^..... ^Change weapon^
+^W.......^ Forward
+^S.......^ Backward
+^A.......^ Strafe Left
+^D.......^ Strafe Right
+^J.......^ Turn Left
+^L.......^ Turn Right
+^Space...^ Fire
+^1-4.....^ Change weapon
 
-^Walk into doors to open them.
-Walk into secret walls to push
-them.
-Walk over items to pick them up.^
+Walk into doors to open them.
+Walk into secret walls to push them.
+Walk over items to pick them up.

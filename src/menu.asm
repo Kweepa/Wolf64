@@ -37,7 +37,9 @@ STORY_BG	= 12			; grey screen around story panel
 STORY_BOX	= 1			; white story panel
 STORY_TEXT	= 0			; black story text
 STORY_GREY_TOP	= BRAND_KEEP_ROWS + 1	; grey starts one row below brand
-MARK_CARET	= $1e			; !scr "^" — white span toggle, not drawn
+MARK_CARET	= $1e			; !scr "^" — toggle monospaced span, not drawn
+FONT_GAP	= 1			; pixels after each glyph
+SPACE_W		= 4			; empty-glyph / space width
 
 NM_BACK		= 256 - 66
 NM_START	= 256 - 10
@@ -499,7 +501,8 @@ draw_section_title
 ; box_top, box_left, box_width from menu strings
 calc_box
 	lda #0
-	sta tmp2				; max len
+	sta pix_max_l
+	sta pix_max_h
 	ldx #0
 .cb_i
 	stx tmp4
@@ -514,19 +517,41 @@ calc_box
 	sta ui_str_l
 	lda menu_str_hi,y
 	sta ui_str_h
-	jsr str_len
-	cmp tmp2
+	jsr str_pix_len
+	lda pr_len_h
+	cmp pix_max_h
 	bcc .cb_n
-	sta tmp2
+	bne .cb_u
+	lda pr_len
+	cmp pix_max_l
+	bcc .cb_n
+.cb_u
+	lda pr_len
+	sta pix_max_l
+	lda pr_len_h
+	sta pix_max_h
 .cb_n
 	ldx tmp4
 	inx
 	cpx menu_size
 	bcc .cb_i
+	; text_cells = ceil(max_pix / 8)
+	lda pix_max_l
+	clc
+	adc #7
+	sta pix_max_l
+	lda pix_max_h
+	adc #0
+	lsr
+	ror pix_max_l
+	lsr
+	ror pix_max_l
+	lsr
+	ror pix_max_l
 	; Center option *text* on screen; pistol sits left with CURSOR_GAP.
 	lda #40
 	sec
-	sbc tmp2				; max_len
+	sbc pix_max_l			; text_cells
 	lsr
 	sta tmp3				; text column
 	sec
@@ -536,7 +561,7 @@ calc_box
 	clc
 	adc #1					; nudge box one column right
 	sta box_left
-	lda tmp2
+	lda pix_max_l
 	clc
 	adc #1 + CURSOR_GAP			; cursor + gap
 	adc #BOX_PAD
@@ -597,6 +622,9 @@ draw_menu_item
 	clc
 	adc #BOX_PAD
 	sta pr_col
+	lda #0
+	sta pr_shift
+	sta pr_drop
 	lda #CURSOR_CH
 	jsr bmp_put_scr
 .di_g
@@ -619,17 +647,14 @@ draw_menu_item
 	jmp print_at
 
 ; A/Y = text blob: body lines\0..., empty\0 ends.
-; Brand bar + dark-blue box; ^text^ = white (spans may cross lines). Any key returns.
+; Brand bar + dark-blue box; ^text^ = monospaced. Any key returns.
 show_text_screen
 	sta txt_ptr_l
 	sty txt_ptr_h
 	lda #COL_BOX
 	sta cell_bg
-	lda #TEXT_COL
-	sta mark_col_a
-	sta ui_text_col			; ^ spans persist across lines
 	lda #HILITE_COL
-	sta mark_col_b
+	sta ui_text_col
 	jmp .sts_body
 
 ; Read This! / endings: grey surround, white panel, black text. Restores COL_MAIN.
@@ -642,17 +667,11 @@ show_story_screen
 	lda #STORY_BOX
 	sta cell_bg
 	lda #STORY_TEXT
-	sta mark_col_a
-	sta mark_col_b
 	sta ui_text_col
 	jsr .sts_body
 	lda #COL_MAIN
 	sta clear_bg
 	sta $d021
-	lda #TEXT_COL
-	sta mark_col_a
-	lda #HILITE_COL
-	sta mark_col_b
 	rts
 
 .sts_body
@@ -693,16 +712,26 @@ calc_text_box
 	lda txt_ptr_h
 	sta ui_str_h
 	lda #0
-	sta tmp2				; max visible len
+	sta pix_max_l
+	sta pix_max_h
 	sta tmp4				; line count
 .ct_l
 	ldy #0
 	lda (ui_str_l),y
 	beq .ct_done
-	jsr marked_str_len
-	cmp tmp2
+	jsr marked_str_pix_len
+	lda pr_len_h
+	cmp pix_max_h
 	bcc .ct_n
-	sta tmp2
+	bne .ct_u
+	lda pr_len
+	cmp pix_max_l
+	bcc .ct_n
+.ct_u
+	lda pr_len
+	sta pix_max_l
+	lda pr_len_h
+	sta pix_max_h
 .ct_n
 	jsr str_skip
 	inc tmp4
@@ -710,10 +739,24 @@ calc_text_box
 .ct_done
 	lda tmp4
 	sta menu_size
-	lda tmp2
+	; text_cells = ceil(max_pix / 8)
+	lda pix_max_l
+	clc
+	adc #7
+	sta pix_max_l
+	lda pix_max_h
+	adc #0
+	lsr
+	ror pix_max_l
+	lsr
+	ror pix_max_l
+	lsr
+	ror pix_max_l
+	lda pix_max_l
 	clc
 	adc #BOX_PAD
 	adc #BOX_PAD
+	adc #1					; extra cell; last glyph can spill
 	sta box_width
 	lda #40
 	sec
@@ -1139,103 +1182,339 @@ print_centered
 	sta ui_str_l
 	sty ui_str_h
 	stx pr_row
-	jsr str_len
-	lsr
-	sta pr_len
-	lda #20
+	jsr str_pix_len
+	lda #<320
 	sec
 	sbc pr_len
+	sta pix_max_l
+	lda #>320
+	sbc pr_len_h
 	bcs .pc
 	lda #0
-.pc
+	sta pr_shift
+	sta pr_mono
+	sta pr_col
+	lda #1
+	sta pr_drop
 	ldx pr_row
+	jmp print_go
+.pc
+	lsr
+	ror pix_max_l
+	lda pix_max_l
+	tax
+	and #7
+	sta pr_shift
+	txa
+	lsr
+	lsr
+	lsr
+	ldx pr_row
+	sta pr_col
+	stx pr_row
+	lda #0
+	sta pr_mono
+	lda #1
+	sta pr_drop
+	jmp print_go
+
 print_at
 	sta pr_col
 	stx pr_row
+	lda #0
+	sta pr_shift
+	sta pr_mono
+	sta pr_drop
+print_go
 	ldy #0
 .pa
 	lda (ui_str_l),y
 	beq .pa_d
-	sty tmp1
+	tya
+	pha
+	lda (ui_str_l),y
 	jsr bmp_put_scr
-	inc pr_col
-	ldy tmp1
+	pla
+	tay
 	iny
 	bne .pa
 .pa_d
 	rts
 
-; mark_col_a/b via ^; A=col X=row. Leaves ui_text_col so spans can cross lines.
+; ^ toggles monospaced; A=col X=row.
 print_marked
 	sta pr_col
 	stx pr_row
+	lda #0
+	sta pr_shift
+	sta pr_mono
+	lda #1
+	sta pr_drop
 	ldy #0
 .pm
 	lda (ui_str_l),y
 	beq .pm_d
 	cmp #MARK_CARET
 	bne .pm_ch
-	lda ui_text_col
-	cmp mark_col_a
-	bne .pm_to_a
-	lda mark_col_b
-	jmp .pm_set
-.pm_to_a
-	lda mark_col_a
-.pm_set
-	sta ui_text_col
+	lda pr_mono
+	eor #1
+	sta pr_mono
+	beq .pm_sk				; left mono
+	lda pr_shift
+	beq .pm_sk
+	inc pr_col				; snap to next cell
+	lda #0
+	sta pr_shift
+.pm_sk
 	iny
 	bne .pm
 .pm_ch
-	sty tmp1
+	tya
+	pha
+	lda (ui_str_l),y
 	jsr bmp_put_scr
-	inc pr_col
-	ldy tmp1
+	pla
+	tay
 	iny
 	bne .pm
 .pm_d
 	rts
 
-; A = !scr byte → blit at pr_col/pr_row with ui_text_col / cell_bg
+; A = !scr byte → scan blank columns, shift, OR into bitmap at pr_col/pr_shift.
 bmp_put_scr
 	cmp #MARK_CARET
-	beq .bps_rts
-	jsr scr_to_font
-	sta tmp0				; font index 0..95
+	bne .bps_go
+	rts
+.bps_go
+	jsr font_set_src
+	lda pr_mono
+	bne .bps_mono
+	jsr font_scan
+	jmp .bps_gotw
+.bps_mono
 	lda #0
-	sta tmp5
-	lda tmp0
-	asl
-	rol tmp5
-	asl
-	rol tmp5
-	asl
-	rol tmp5				; index*8
-	clc
-	adc #<menufont_udgs
-	sta .bps_src + 1
-	lda tmp5
-	adc #>menufont_udgs
-	sta .bps_src + 2
+	sta glyph_lead
+	lda #8
+	sta glyph_w
+.bps_gotw
 	lda pr_col
 	ldx pr_row
 	jsr bmp_cell_addr
-	ldy #0
-.bps_src
-	lda $ffff,y				; patched
-	sta (ptr_l),y
-	iny
-	cpy #8
-	bne .bps_src
+	lda pr_col
+	sta ft_cell
+	lda #$80
+	ldx pr_shift
+	beq .bps_dm
+.bps_dml
+	lsr
+	dex
+	bne .bps_dml
+.bps_dm
+	sta ft_mask_d
+	lda #$80
+	ldx glyph_lead
+	beq .bps_sm
+.bps_sml
+	lsr
+	dex
+	bne .bps_sml
+.bps_sm
+	sta ft_mask_s
 	lda ui_text_col
 	asl
 	asl
 	asl
 	asl
 	ora cell_bg
+	sta ft_color
 	ldy #0
 	sta (aux_l),y
-.bps_rts
+	ldx glyph_w
+.bps_col
+	ldy #0
+.bps_row
+	lda ft_lc
+	beq .bps_g
+	cpy #0
+	beq .bps_empty			; dest row 0 blank
+	dey
+	jsr glyph_byte
+	iny
+	jmp .bps_and
+.bps_g
+	jsr glyph_byte
+.bps_and
+	and ft_mask_s
+	beq .bps_empty
+	lda (ptr_l),y
+	ora ft_mask_d
+	sta (ptr_l),y
+.bps_empty
+	iny
+	cpy #8
+	bne .bps_row
+	lda ft_lc
+	beq .bps_h
+	lda pr_row
+	cmp #24
+	bcs .bps_h
+	ldy #7
+	jsr glyph_byte
+	and ft_mask_s
+	beq .bps_h
+	lda ptr_h
+	pha
+	lda ptr_l
+	pha
+	clc
+	adc #<320
+	sta ptr_l
+	lda ptr_h
+	adc #>320
+	sta ptr_h
+	ldy #0
+	lda (ptr_l),y
+	ora ft_mask_d
+	sta (ptr_l),y
+	pla
+	sta ptr_l
+	pla
+	sta ptr_h
+	lda aux_h
+	pha
+	lda aux_l
+	pha
+	clc
+	adc #40
+	sta aux_l
+	bcc .bps_dh
+	inc aux_h
+.bps_dh
+	lda ft_color
+	sta (aux_l),y
+	pla
+	sta aux_l
+	pla
+	sta aux_h
+.bps_h
+	lsr ft_mask_d
+	bne .bps_src
+	lda ft_cell
+	cmp #39
+	bcs .bps_src
+	inc ft_cell
+	lda ptr_l
+	clc
+	adc #8
+	sta ptr_l
+	bcc .bps_nh
+	inc ptr_h
+.bps_nh
+	inc aux_l
+	bne .bps_ah
+	inc aux_h
+.bps_ah
+	ldy #0
+	lda ft_color
+	sta (aux_l),y
+	lda #$80
+	sta ft_mask_d
+.bps_src
+	lsr ft_mask_s
+	dex
+	beq .bps_adv
+	jmp .bps_col
+.bps_adv
+	lda glyph_w
+	ldx pr_mono
+	bne .bps_gap
+	clc
+	adc #FONT_GAP
+.bps_gap
+	clc
+	adc pr_shift
+	sta pr_shift
+	lsr
+	lsr
+	lsr
+	clc
+	adc pr_col
+	sta pr_col
+	lda pr_shift
+	and #7
+	sta pr_shift
+	rts
+
+glyph_byte
+	lda $ffff,y				; patched by font_set_src
+	rts
+
+; A = !scr byte → patch glyph_byte to menufont_udgs + index*8
+font_set_src
+	jsr scr_to_font
+	ldx #0
+	stx ft_hi
+	stx ft_lc
+	tay
+	lda pr_drop
+	beq .fss
+	cpy #'a' - ' '
+	bcc .fss
+	cpy #'z' - ' ' + 1
+	bcs .fss
+	inc ft_lc
+.fss
+	tya
+	asl
+	rol ft_hi
+	asl
+	rol ft_hi
+	asl
+	rol ft_hi				; index*8
+	clc
+	adc #<menufont_udgs
+	sta glyph_byte + 1
+	lda ft_hi
+	adc #>menufont_udgs
+	sta glyph_byte + 2
+	rts
+
+; Occupancy of glyph_byte → glyph_lead, glyph_w
+font_scan
+	lda #0
+	sta ft_occ
+	ldy #7
+.fs_or
+	jsr glyph_byte
+	ora ft_occ
+	sta ft_occ
+	dey
+	bpl .fs_or
+	lda ft_occ
+	bne .fs_ink
+	lda #0
+	sta glyph_lead
+	lda #SPACE_W
+	sta glyph_w
+	rts
+.fs_ink
+	ldx #0
+.fs_lead
+	lda ft_occ
+	bmi .fs_gotl
+	asl ft_occ
+	inx
+	cpx #8
+	bcc .fs_lead
+.fs_gotl
+	stx glyph_lead
+	ldx #0
+	lda ft_occ
+.fs_w
+	inx
+	asl
+	bne .fs_w
+	stx glyph_w
 	rts
 
 ; !scr byte → font index (ascii-32). 1..26 = a..z; $20+ = ASCII.
@@ -1270,21 +1549,97 @@ str_len
 	tya
 	rts
 
-; Visible length ignoring ^ markers.
-marked_str_len
+; Pixel width of ui_str (incl. FONT_GAP per char) → pr_len / pr_len_h
+str_pix_len
+	lda #0
+	sta pr_len
+	sta pr_len_h
 	ldy #0
-	ldx #0
-.msl
+.spl
 	lda (ui_str_l),y
-	beq .msl_d
-	cmp #MARK_CARET
-	beq .msl_s
-	inx
-.msl_s
+	beq .spl_d
+	tya
+	pha
+	jsr font_set_src
+	jsr font_scan
+	jsr pix_add_glyph
+	pla
+	tay
 	iny
-	bne .msl
-.msl_d
-	txa
+	bne .spl
+.spl_d
+	rts
+
+; Visible pixel width ignoring ^ markers → pr_len / pr_len_h
+marked_str_pix_len
+	lda #0
+	sta pr_len
+	sta pr_len_h
+	sta pr_mono
+	ldy #0
+.mspl
+	lda (ui_str_l),y
+	beq .mspl_d
+	cmp #MARK_CARET
+	bne .mspl_ch
+	lda pr_mono
+	eor #1
+	sta pr_mono
+	beq .mspl_s				; left mono
+	jsr pix_snap_len
+	jmp .mspl_s
+.mspl_ch
+	lda pr_mono
+	bne .mspl_8
+	tya
+	pha
+	jsr font_set_src
+	jsr font_scan
+	jsr pix_add_glyph
+	pla
+	tay
+	jmp .mspl_s
+.mspl_8
+	lda pr_len
+	clc
+	adc #8
+	sta pr_len
+	bcc .mspl_s
+	inc pr_len_h
+.mspl_s
+	iny
+	bne .mspl
+.mspl_d
+	lda #0
+	sta pr_mono
+	rts
+
+; Round pr_len up to a multiple of 8 (cell snap before mono).
+pix_snap_len
+	lda pr_len
+	and #7
+	beq .psn_r
+	sta ft_hi
+	lda #8
+	sec
+	sbc ft_hi
+	clc
+	adc pr_len
+	sta pr_len
+	bcc .psn_r
+	inc pr_len_h
+.psn_r
+	rts
+
+pix_add_glyph
+	lda glyph_w
+	clc
+	adc #FONT_GAP
+	adc pr_len
+	sta pr_len
+	bcc .pag_r
+	inc pr_len_h
+.pag_r
 	rts
 
 ; Advance ui_str past current NUL-terminated string.
@@ -1483,13 +1838,26 @@ ui_pressed	!byte 0
 ui_text_col	!byte 0
 pr_row		!byte 0
 pr_col		!byte 0
+pr_shift	!byte 0
+pr_mono		!byte 0
+pr_drop		!byte 0
 pr_len		!byte 0
+pr_len_h	!byte 0
+glyph_lead	!byte 0
+glyph_w		!byte 0
+ft_mask_d	!byte 0
+ft_mask_s	!byte 0
+ft_cell		!byte 0
+ft_color	!byte 0
+ft_occ		!byte 0
+ft_hi		!byte 0
+ft_lc		!byte 0
+pix_max_l	!byte 0
+pix_max_h	!byte 0
 txt_ptr_l	!byte 0
 txt_ptr_h	!byte 0
 cell_bg		!byte 0
 clear_bg	!byte COL_MAIN
-mark_col_a	!byte TEXT_COL
-mark_col_b	!byte HILITE_COL
 
 str_hint	!scr "W/S move  A/D adjust  Return select",0
 str_new_game	!scr "New Game",0

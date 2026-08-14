@@ -391,28 +391,50 @@ player_check_exit
 .pce_rts
 	rts
 
-; level_want: 1=restart 2=next 3=new game — disk reload + re-init
+; level_want: 1=restart 2=next 3=new game 4=secret — disk reload + re-init
 ; Player init after successful load so a failed LoadLevel can restore VIC.
 handle_level_want
 	lda level_want
-	pha					; 1=restart 2=next 3=new game
+	pha					; 1=restart 2=next 3=new 4=secret
 	cmp #2
-	bne .hlw_chknew
+	bne .hlw_chksecret
 	lda level_num
+	cmp #LEVEL_SECRET
+	beq .hlw_from_secret
 	cmp #LEVEL_MAX
 	bne .hlw_adv
 	; episode done — SP reset in reboot_game; skip pla / clear want
+.hlw_epdone
 	lda #SOUND_LEVELDONE
 	jsr play_sound
 	lda #1
 	sta game_complete
 	jmp reboot_to_menu
+.hlw_from_secret
+	ldx secret_from
+	inx
+	cpx #LEVEL_MAX + 1
+	bcs .hlw_epdone
+	stx level_num
+	jsr player_reset_status
+	jmp .hlw_load
 .hlw_adv
 	jsr advance_level			; needs new level_num before FormatDosName
+	jmp .hlw_load
+.hlw_chksecret
+	cmp #4
+	bne .hlw_chknew
+	lda level_num
+	sta secret_from
+	lda #LEVEL_SECRET
+	sta level_num
+	jsr player_reset_status
 	jmp .hlw_load
 .hlw_chknew
 	cmp #3
 	bne .hlw_load
+	lda #0
+	sta secret_from
 	lda #1					; out of lives — back to level 1
 	sta level_num
 .hlw_load
@@ -441,10 +463,10 @@ handle_level_want
 	rts
 .hlw_ok
 	pla
-	cmp #2
-	beq .hlw_done				; advance_level already ran
+	cmp #1
+	beq .hlw_restart
 	cmp #3
-	bne .hlw_restart
+	bne .hlw_done				; 2 or 4: status already reset
 	jsr player_init_game			; fresh game — lives/score/ammo/weapons
 	jsr init_weapon				; ownership reset — back to pistol
 	jmp .hlw_done

@@ -33,7 +33,7 @@ credits_text
 	!byte 0
 
 order_text
-	!scr "Episodes 2 through 6 are not",0
+	!scr "^Episodes 2 through 6 are not",0
 	!scr "available in this shareware",0
 	!scr "version.",0
 	!scr " ",0
@@ -41,7 +41,7 @@ order_text
 	!scr "all six episodes, please call",0
 	!scr "Apogee at",0
 	!scr " ",0
-	!scr "1-800-GAME-123",0
+	!scr "1-800-GAME-123^",0
 	!byte 0
 
 readthis1_text

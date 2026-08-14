@@ -16,6 +16,7 @@ MAP_W = 64
 MAP_H = 64
 PLANE_BYTES = MAP_W * MAP_H * 2
 AREATILE = 107
+ALTELEVATORTILE = 107			# cab floor code 006b → secret exit (WL_DEF.H)
 AMBUSHTILE = 106
 PUSHABLETILE = 98
 EXITTILE = 99
@@ -34,6 +35,7 @@ T_BRICK = 7
 T_BRICK_WREATH = 8
 T_PURPLE = 9
 T_PURPLE_BLOOD = 10
+T_SECRET_ELEVATOR = 11
 T_ELEVATOR = 13
 T_PUSHWALL = 14
 T_DOOR = 15
@@ -106,7 +108,7 @@ WALL_TEXTURE_MAP = {
     19: T_PURPLE,
     20: T_BRICK,  # shield brick -> plain brick
     21: T_ELEVATOR,
-    22: T_ELEVATOR,
+    22: T_SECRET_ELEVATOR,
     23: T_WOOD_HITLER,  # iron cross wood -> wood portrait
     24: T_GREY_BANNER,  # slime accent -> banner family
     25: T_PURPLE_BLOOD,
@@ -497,7 +499,7 @@ def entrance_jamb_texture(walls: list[int], x: int, y: int) -> int:
         if not is_solid_wall_plane(nw):
             continue
         tex = map_wall_texture(nw)
-        if tex == T_ELEVATOR:
+        if tex in (T_ELEVATOR, T_SECRET_ELEVATOR):
             continue
         counts[tex] = counts.get(tex, 0) + 1
     if not counts:
@@ -547,8 +549,16 @@ def convert_level(
                 continue
 
             if w == ELEVATORTILE or w == 22:
-                out[i] = T_ELEVATOR
-                # Pushwall marker on an elevator is degenerate; ignore object.
+                # Secret cab: player stands on ALTELEVATORTILE (107) and uses wall 21.
+                # Wall 22 is unused in shareware but keep as an explicit secret switch.
+                secret = w == 22
+                if not secret:
+                    for dx, dy in DIR_DELTA:
+                        nx, ny = x + dx, y + dy
+                        if in_bounds(nx, ny) and walls[idx(nx, ny)] == ALTELEVATORTILE:
+                            secret = True
+                            break
+                out[i] = T_SECRET_ELEVATOR if secret else T_ELEVATOR
                 continue
 
             # Entrance jamb: blend into neighboring walls (not an exit switch)

@@ -77,9 +77,11 @@ UI_COLR_KEY_SILVER = $d800 + 4 * 40 + 28
 UI_BMP_ROW0	= BITMAP
 UI_BMP_ROW1	= BITMAP + 1 * 320
 UI_BMP_ROW3	= BITMAP + 3 * 320
+T_SECRET_ELEVATOR = 11			; Wolf wall 22; painted as T_ELEVATOR
 T_ELEVATOR	= 13
 T_PUSHWALL	= 14
 T_EXIT		= 145
 T_PUSH_TRAJ	= 146				; +0..3 = N,E,S,W
 DEATH_MS	= 120			; frames≈; counted down with dt_ms sum ~2s feel
 LEVEL_MAX	= 9			; 1..8 maps, 9 = boss (e1mb)
+LEVEL_SECRET	= 10			; e1ms; HUD 10

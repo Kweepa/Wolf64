@@ -338,6 +338,11 @@ hit_wall
 	; Walls beside a door use jamb texture (slot 15)
 	jsr door_jamb_check
 	lda tex_id
+	cmp #T_SECRET_ELEVATOR
+	bne +
+	lda #T_ELEVATOR
+	sta tex_id
++
 	ldx col
 	sta col_texid,x
 

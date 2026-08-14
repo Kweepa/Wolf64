@@ -54,6 +54,7 @@ locode_entry
 	lda #0
 	sta episode
 	sta load_in_play
+	sta secret_from
 	lda #1
 	sta level_num
 	jsr LoadLevel
@@ -213,7 +214,7 @@ death_ms_l	= player_dead + 1
 death_ms_h	= death_ms_l + 1
 hurt_flash	= death_ms_h + 1		; 1=red this frame, 2=clear next
 ui_dirty	= hurt_flash + 1
-level_want	= ui_dirty + 1			; 0=none 1=restart 2=next
+level_want	= ui_dirty + 1			; 0=none 1=restart 2=next 3=new 4=secret
 ai_dx		= level_want + 1
 ai_dy		= ai_dx + 1
 ai_steps	= ai_dy + 1

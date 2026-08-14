@@ -8,7 +8,7 @@
 level_dos_name
 	!text "E1M1"
 
-; FormatDosName — "ENMM" from episode (0→E1) + level_num (1→M1, 9→MB)
+; FormatDosName — "ENMM" from episode (0→E1) + level_num (1→M1, 9→MB, 10→MS)
 FormatDosName
 	lda #'E'
 	sta level_dos_name
@@ -19,7 +19,13 @@ FormatDosName
 	lda #'M'
 	sta level_dos_name + 2
 	lda level_num
-	cmp #9
+	cmp #LEVEL_SECRET
+	bne .fdn_boss
+	lda #'S'
+	sta level_dos_name + 3
+	rts
+.fdn_boss
+	cmp #LEVEL_MAX
 	bne .fdn_digit
 	lda #'B'
 	sta level_dos_name + 3

@@ -36,6 +36,7 @@ COL_LOGO_RED	= 2			; sprite fill under logo
 STORY_BG	= 12			; grey screen around story panel
 STORY_BOX	= 1			; white story panel
 STORY_TEXT	= 0			; black story text
+STORY_GREY_TOP	= BRAND_KEEP_ROWS + 1	; grey starts one row below brand
 MARK_CARET	= $1e			; !scr "^" — white span toggle, not drawn
 
 NM_BACK		= 256 - 66
@@ -653,6 +654,7 @@ show_story_screen
 .sts_body
 	jsr clear_screen
 	jsr calc_text_box
+	jsr apply_story_layout
 	jsr fill_option_box
 	ldx #0
 .st_l
@@ -734,6 +736,40 @@ calc_text_box
 	sta ui_str_l
 	lda txt_ptr_h
 	sta ui_str_h
+	rts
+
+; Story pages: leave one light-blue row under the brand, center panel in grey.
+apply_story_layout
+	lda clear_bg
+	cmp #STORY_BG
+	bne .asl_rts
+	ldx #0
+	lda #COL_MAIN
+.asl_r6
+	sta SCREEN + BRAND_KEEP_ROWS * 40,x
+	inx
+	cpx #40
+	bne .asl_r6
+	lda menu_size
+	clc
+	adc #BOX_VGAP
+	adc #BOX_VGAP
+	sta tmp5				; box height
+	lda #25
+	sec
+	sbc #STORY_GREY_TOP
+	sec
+	sbc tmp5				; spare rows in grey
+	bcc .asl_min
+	lsr
+	clc
+	adc #STORY_GREY_TOP
+	sta box_top
+	rts
+.asl_min
+	lda #STORY_GREY_TOP
+	sta box_top
+.asl_rts
 	rts
 
 ; --- hires bitmap (full menufont) ------------------------------------------

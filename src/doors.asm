@@ -209,8 +209,14 @@ try_open_door
 	jmp try_push_wall
 .tod_elev
 	cmp #T_ELEVATOR
-	bne .tod_door
+	bne .tod_secelev
 	lda #2				; next level
+	sta level_want
+	rts
+.tod_secelev
+	cmp #T_SECRET_ELEVATOR
+	bne .tod_door
+	lda #4				; secret level
 	sta level_want
 	rts
 .tod_door

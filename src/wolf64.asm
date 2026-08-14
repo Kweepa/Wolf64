@@ -61,8 +61,11 @@ locode_entry
 	bcs .le_fail
 	jmp game_start
 .le_fail
-	lda #$35				; keep $d020 = failed load color
+	lda #$35
 	sta $01
+	jsr init_vic
+	lda #$02				; red border = map load failed
+	sta $d020
 .le_hang
 	jmp .le_hang
 
@@ -80,6 +83,7 @@ game_start
 	sei
 	lda #$35
 	sta $01					; I/O in for VIC/SID/CIA init
+	jsr init_vic				; unblank before any further init
 
 	lda #$ff
 	sta $dc02
@@ -97,7 +101,6 @@ game_start
 
 	; KERNAL LOAD clobbered ZP — Judd table hi ptrs (tables LOADed by boot)
 	jsr init_sqtabs
-	jsr init_vic
 	jsr prof_init
 	jsr input_irq_init
 	jsr play_sound_init

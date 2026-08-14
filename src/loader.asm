@@ -83,9 +83,8 @@ load_cia2_quiet
 	rts
 
 ; LoadLevel — IOINIT + blank + LoadPrg.
-; load_in_play=0: cold path (locode_entry) — IOINIT + cli like boot.
-; load_in_play=1: IOINIT (reset IEC bus), init_vic (fix VIC), then
-; keep SEI through $ffd5. KERNAL serial LOAD is polled and needs no IRQ.
+; load_in_play=0: like boot — IOINIT, DEN off, CLI, no CIA2 quiet (quiet+DEN=0
+; stalls KERNAL IEC). load_in_play=1: IOINIT, init_vic (DEN on), CIA2 quiet, SEI.
 ; C=0 ok, C=1 error. Caller must re-init IRQs/ZP (see restart_level).
 LoadLevel
 	sei
@@ -110,15 +109,13 @@ LoadLevel
 	jsr $ff84				; IOINIT — cold only
 	lda #$35
 	sta $01
-	jsr load_cia2_quiet
-.ll_common
-	lda #$35
-	sta $01
+	; Match boot: do not quiesce CIA2. Quiet + DEN=0 stalls KERNAL IEC.
 	jsr blank_screen
+	lda $d011
+	and #%11101111				; DEN off after IOINIT
+	sta $d011
 	lda #$36
 	sta $01
-	lda load_in_play
-	bne .ll_inplay
 	cli
 	jsr FormatDosName
 	lda #4
@@ -126,7 +123,12 @@ LoadLevel
 	ldy #>level_dos_name
 	jmp LoadPrg
 
-.ll_inplay
+.ll_common
+	lda #$35
+	sta $01
+	jsr blank_screen
+	lda #$36
+	sta $01
 	jsr FormatDosName
 	lda #4
 	ldx #<level_dos_name

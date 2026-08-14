@@ -18,6 +18,11 @@ boot_start
 	lda #$36
 	sta $01
 	jsr $ff84				; IOINIT
+	lda $d011
+	and #%11101111				; DEN off — IOINIT restores bank 0
+	sta $d011
+	lda #0
+	sta $d020				; border shows even with DEN=0
 	cli
 
 	; MENU → $0900, run difficulty select
@@ -138,6 +143,6 @@ name_enemy
 	!text "ENEMY"
 
 end_boot = *
-!if end_boot > LOCODE_BASE {
-	!error "Boot overlaps LOCODE_BASE; end=$", end_boot
+!if end_boot > effects_vol {
+	!error "Boot overlaps effects_vol/difficulty; end=$", end_boot
 }

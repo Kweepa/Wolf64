@@ -170,6 +170,9 @@ run_menu
 	jmp .rm_loop
 .rm_done
 	jsr menu_sfx_done
+	lda $d011
+	and #%11101111				; DEN off through boot asset loads
+	sta $d011
 	lda #0
 	sta $d015
 	sta $d020

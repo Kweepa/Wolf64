@@ -11,12 +11,9 @@ init_vic
 	ora #%00000010
 	sta $dd00
 
-	lda $d011
-	and #%10011111
-	ora #%00110000
+	lda #$3b				; DEN + BMM + RSEL + YSCROLL=3 (absolute)
 	sta $d011
-	lda $d016
-	ora #%00011000			; 40 columns + multicolor
+	lda #$18				; 40 columns + multicolor
 	sta $d016
 
 	lda #D018_SCR_A

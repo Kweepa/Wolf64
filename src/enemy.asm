@@ -79,7 +79,11 @@ reboot_game
 	ldx #$ff
 	txs
 	jsr $ff84				; IOINIT
+	lda $d011
+	and #%11101111				; DEN off — IOINIT restores bank 0
+	sta $d011
 	lda #0
+	sta $d015
 	sta $d020
 	sta $d021
 	lda #6

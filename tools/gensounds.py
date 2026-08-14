@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Strip CORE PC-speaker chunks from shareware AUDIOT.WL1 / AUDIOHED.WL1.
-Decimate 3x (keep every 3rd sample) for ~50 Hz playback.
+Decimate 3x (first non-zero in each window) for ~50 Hz playback.
 Emits src/pcsounds.asm + src/pcsfreq.asm (SID Fn hi LUT, NTSC φ2; lo fixed $80).
 """
 from __future__ import annotations
@@ -97,7 +97,12 @@ def extract_pack(
         data = list(chunk[6 : 6 + length])
         if len(data) != length:
             raise SystemExit(f"{name}: truncated PC chunk")
-        samples = data[::DECIMATE]
+        # Stride drops sparse PC-speaker clicks (PUSHWALL is 10 pulses in 82
+        # samples; ::3 kept 3). Keep first non-zero in each window.
+        samples = []
+        for i in range(0, len(data), DECIMATE):
+            group = data[i : i + DECIMATE]
+            samples.append(next((x for x in group if x), 0))
         if len(samples) > 255:
             raise SystemExit(f"{name}: decimated length {len(samples)} > 255")
         body = [len(samples), *samples]

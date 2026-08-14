@@ -10,29 +10,38 @@ T_SILVER_KEY	= 23
 ; 24 cross / 25 chalice — no packed art
 T_MACHINEGUN	= 26
 T_CHAINGUN	= 27
+T_HANGED	= 28
+T_WELL		= 29
+T_FLAG		= 30
+T_PUDDLE	= 31
 T_PILLAR	= 33
 T_TABLE		= 34
 T_LAMP		= 35
 T_BLOOD		= 36
 T_PLANT		= 37
+T_DOGFOOD	= 38
+T_CEIL_LIGHT	= 39
+T_CAGE		= 40
 
-; tile 19..26 → frame ($ff = skip)
+; tile 19..31 → frame ($ff = skip)
 item_frm_19
 	!byte IF_AMMO_CLIP, IF_FIRSTAID, IF_FOOD, IF_KEY_GOLD, IF_KEY_SILVER
 	!byte $ff, $ff, IF_MACHINEGUN, IF_CHAINGUN
-; tile 33..37 → frame
+	!byte IF_HANGED_MAN, IF_WELL, IF_FLAG, IF_PUDDLE
+; tile 33..40 → frame
 item_frm_33
 	!byte IF_URN, IF_TABLE_CHAIRS, IF_CHANDELIER, IF_GIBS, IF_TREE
+	!byte IF_DOG_FOOD, IF_CEILING_LIGHT, IF_SKELETON_CAGE
 
 ; A = map tile → A = frame, or $ff if not a drawable/collectible item
 item_tile_frm
 	cmp #T_AMMO
 	bcc .itf_no
-	cmp #T_CHAINGUN + 1
+	cmp #T_PUDDLE + 1
 	bcc .itf_pick
 	cmp #T_PILLAR
 	bcc .itf_no
-	cmp #T_PLANT + 1
+	cmp #T_CAGE + 1
 	bcs .itf_no
 	sec
 	sbc #T_PILLAR
@@ -98,7 +107,7 @@ item_apply
 	rts
 .ia_food
 	cmp #IF_FOOD
-	bne .ia_aid
+	bne .ia_dog
 	lda player_hp
 	cmp #HP_MAX
 	bcc +
@@ -108,9 +117,21 @@ item_apply
 	jsr play_sound
 	lda #FOOD_HP_AMT
 	jmp item_add_hp
+.ia_dog
+	cmp #IF_DOG_FOOD
+	bne .ia_aid
+	lda player_hp
+	cmp #HP_MAX
+	bcc +
+	jmp .ia_no
++
+	lda #SOUND_HEALTH1
+	jsr play_sound
+	lda #DOGFOOD_HP_AMT
+	jmp item_add_hp
 .ia_aid
 	cmp #IF_FIRSTAID
-	bne .ia_ammo
+	bne .ia_guts
 	lda player_hp
 	cmp #HP_MAX
 	bcc +
@@ -119,6 +140,18 @@ item_apply
 	lda #SOUND_HEALTH2
 	jsr play_sound
 	lda #FIRSTAID_HP_AMT
+	jmp item_add_hp
+.ia_guts
+	cmp #IF_GIBS
+	bne .ia_ammo
+	lda player_hp
+	cmp #GUTS_HP_MAX + 1
+	bcc +
+	jmp .ia_no				; >10% — leave guts
++
+	lda #SOUND_HEALTH1
+	jsr play_sound
+	lda #GUTS_HP_AMT
 	jmp item_add_hp
 .ia_ammo
 	cmp #IF_AMMO_CLIP

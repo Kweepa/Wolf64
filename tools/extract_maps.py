@@ -52,11 +52,18 @@ T_CROSS = 24
 T_CHALICE = 25
 T_MACHINEGUN = 26
 T_CHAINGUN = 27
+T_HANGED = 28
+T_WELL = 29
+T_FLAG = 30
+T_PUDDLE = 31
 T_PILLAR = 33
 T_TABLE = 34
 T_LAMP = 35
 T_BLOOD = 36
 T_PLANT = 37
+T_DOGFOOD = 38
+T_CEIL_LIGHT = 39
+T_CAGE = 40
 T_PLAYER = 49  # +0..3 NESW
 T_GUARD_PATROL = 53
 T_GUARD_AMBUSH = 57
@@ -119,13 +126,13 @@ WALL_TEXTURE_MAP = {
 
 # Object-plane statics: Wolf object id 23+i  ->  our floor id (None = drop)
 STATIC_MAP = {
-    0: None,  # puddle
+    0: T_PUDDLE,
     1: T_PILLAR,  # barrel
     2: T_TABLE,
     3: T_LAMP,
     4: T_LAMP,  # chandelier
-    5: None,  # hanged man
-    6: T_FOOD,  # dog food / alpo
+    5: T_HANGED,
+    6: T_DOGFOOD,
     7: T_PILLAR,
     8: T_PLANT,  # tree
     9: T_BLOOD,  # flat skeleton
@@ -133,11 +140,11 @@ STATIC_MAP = {
     11: T_PLANT,
     12: T_PILLAR,  # urn
     13: T_TABLE,
-    14: T_LAMP,  # ceiling light
+    14: T_CEIL_LIGHT,
     15: None,  # kitchen
     16: T_PILLAR,  # armor
     17: None,  # cage
-    18: T_BLOOD,  # skeleton in cage
+    18: T_CAGE,
     19: T_BLOOD,  # skeleton relax
     20: T_GOLD_KEY,
     21: T_SILVER_KEY,
@@ -155,15 +162,15 @@ STATIC_MAP = {
     33: T_FIRSTAID,  # 1-up
     34: T_BLOOD,  # gibs
     35: T_PILLAR,  # barrel
-    36: None,  # well
-    37: None,  # empty well
+    36: T_WELL,
+    37: T_WELL,  # empty well — same art
     38: T_BLOOD,
-    39: None,  # flag
+    39: T_FLAG,
     40: None,  # apogee
     41: None,
     42: None,
     43: None,
-    44: None,
+    44: None,  # pots (sheet cell is puddle)
     45: None,
     46: None,
     47: None,
@@ -172,9 +179,9 @@ STATIC_MAP = {
 
 def is_spawn_item_tile(tile: int) -> bool:
     """Tiles that map AABB cull/pickup treat as world items (cross/chalice skipped)."""
-    if T_AMMO <= tile <= T_CHAINGUN:
+    if T_AMMO <= tile <= T_PUDDLE:
         return tile not in (T_CROSS, T_CHALICE)
-    return T_PILLAR <= tile <= T_PLANT
+    return T_PILLAR <= tile <= T_CAGE
 
 
 # Runtime enemy pool (must match MAX_ENEMIES in src/mem.asm).

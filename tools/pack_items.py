@@ -45,7 +45,7 @@ ITEM_FRAMES: list[str] = [
     "gibs",
     "well",
     "flag",
-    "pots",
+    "puddle",
 ]
 
 CEILING_ITEMS = frozenset(

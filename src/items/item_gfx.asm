@@ -3,9 +3,9 @@
 ITEM_FRAME_COUNT = 19
 
 item_frm_w
-	!byte 14, 7, 6, 5, 10, 8, 5, 8, 7, 7, 8, 9, 4, 11, 15, 13, 13, 12, 13
+	!byte 14, 7, 6, 5, 10, 8, 5, 8, 7, 7, 8, 9, 4, 11, 15, 13, 13, 12, 8
 item_frm_h
-	!byte 8, 4, 16, 2, 13, 8, 2, 16, 3, 3, 2, 3, 3, 4, 5, 4, 7, 15, 6
+	!byte 8, 4, 16, 2, 13, 8, 2, 16, 3, 3, 2, 3, 3, 4, 5, 4, 7, 15, 2
 item_frm_off_lo
 	!byte 0, 56, 70, 118, 123, 193, 225, 230, 38, 52, 66, 74, 92, 100, 122, 167, 193, 245, 85
 item_frm_off_hi
@@ -31,7 +31,7 @@ IF_CHAINGUN = 14
 IF_GIBS = 15
 IF_WELL = 16
 IF_FLAG = 17
-IF_POTS = 18
+IF_PUDDLE = 18
 
 ; item_gfx_data label lives in wolf64.asm (ITM load → ITEM_SPRITES)
 

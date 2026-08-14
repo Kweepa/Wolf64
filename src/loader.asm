@@ -136,7 +136,7 @@ LoadLevel
 	jmp LoadPrg
 
 ; restart_level — reload current episode/level map and re-init actors
-; Preserves owned_weapons / ammo / score / lives (caller sets HP/keys as needed).
+; Preserves lives; caller resets HP/keys and (on death/new game) ammo/weapons.
 ; LoadLevel IOINITs + KERNAL LOAD clobber ZP/CIA — recover like game_start.
 restart_level
 	lda #1

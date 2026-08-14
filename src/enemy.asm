@@ -291,12 +291,8 @@ eu_state_hi
 	jmp .eu_next
 .eu_dead_unlooted
 	stx enemy_idx
-	lda enemy_xh,x
-	cmp playerx_h
-	bne .eu_du_rts
-	lda enemy_yh,x
-	cmp playery_h
-	bne .eu_du_rts
+	jsr enemy_inside_minactor
+	bcc .eu_du_rts
 	lda enemy_type,x
 	cmp #ET_HANS
 	bne .eu_du_not_hans
@@ -1742,6 +1738,23 @@ epc_nobuf
 	rts
 
 ; ---------------------------------------------------------------------------
+; Wolf KnifeAttack: col_enemy[AIM_COL] only, approx dist < 1 tile, rnd & 15
+; ---------------------------------------------------------------------------
+knife_attack
+	ldx col_enemy + AIM_COL
+	cpx #$ff
+	beq .ka_miss
+	jsr enemy_delta_player
+	jsr enemy_approx_dist		; tmp0/tmp1 8.8
+	lda tmp1
+	bne .ka_miss			; ≥ 1.0 tile
+	jsr rnd8
+	and #15					; Wolf US_RndT >> 4; 0 → miss in damage_actor
+	jmp damage_actor
+.ka_miss
+	rts
+
+; ---------------------------------------------------------------------------
 ; Wolf GunAttack via col_enemy[20/19/21] + DamageActor
 ; ---------------------------------------------------------------------------
 gun_attack
@@ -1755,14 +1768,6 @@ gun_attack
 	cpx #$ff
 	beq .ga_miss
 .ga_got
-	cpx enemy_count
-	bcs .ga_miss
-	lda enemy_flags,x
-	and #EF_ACTIVE
-	beq .ga_miss
-	lda enemy_state,x
-	cmp #ES_DYING
-	bcs .ga_miss			; dying/dead not shootable
 	; Chebyshev tile distance
 	lda enemy_xh,x
 	sec
@@ -1807,14 +1812,6 @@ gun_attack
 	jsr rnd8
 	jsr .div6
 .ga_dmg
-	; A = damage — Wolf÷4 so HP/4 stays in one byte; floor 1 if any damage
-	beq .ga_miss
-	lsr
-	lsr
-	bne +
-	lda #1
-+
-	; A = damage, X = enemy
 	jmp damage_actor
 .ga_miss
 	rts
@@ -1853,8 +1850,25 @@ gun_attack
 	lda tmp3
 	rts
 
-; X = enemy index, A = raw damage (Wolf DamageActor; already ÷4 from gun)
+; X = enemy index, A = Wolf DamageActor amount (÷4 + floor 1 here; 0 / inactive / dying = miss)
 damage_actor
+	beq .da_miss
+	sta tmp2
+	lda enemy_flags,x
+	and #EF_ACTIVE
+	beq .da_miss
+	lda enemy_state,x
+	cmp #ES_DYING
+	bcc .da_ok			; dying/dead not damageable
+.da_miss
+	rts
+.da_ok
+	lda tmp2
+	lsr
+	lsr
+	bne +
+	lda #1
++
 	sta tmp2
 	stx enemy_idx
 	lda enemy_flags,x
@@ -1872,6 +1886,9 @@ damage_actor
 	lda enemy_type,x
 	cmp #ET_HANS
 	beq .da_hit_snd
+	lda enemy_state,x
+	cmp #ES_SHOOT
+	beq .da_hit_snd			; firing: no flinch
 	; pain → then chase (alerted)
 	lda #ES_PAIN
 	sta enemy_state,x
@@ -1931,6 +1948,21 @@ enemy_bite
 ; C=0 if approx dist to player < BITE_RANGE (Doom P_ApproxDistance)
 dog_in_bite_range
 	ldx enemy_idx
+	jsr enemy_delta_player
+	jsr enemy_approx_dist		; → tmp0/tmp1
+	lda tmp1
+	bne .dbr_far
+	lda tmp0
+	cmp #BITE_RANGE
+	bcs .dbr_far
+	clc
+	rts
+.dbr_far
+	sec
+	rts
+
+; X = enemy. e_dx/e_dy = enemy − player (8.8)
+enemy_delta_player
 	sec
 	lda enemy_xl,x
 	sbc playerx_l
@@ -1945,14 +1977,4 @@ dog_in_bite_range
 	lda enemy_yh,x
 	sbc playery_h
 	sta e_dy_h
-	jsr enemy_approx_dist		; → tmp0/tmp1
-	lda tmp1
-	bne .dbr_far
-	lda tmp0
-	cmp #BITE_RANGE
-	bcs .dbr_far
-	clc
-	rts
-.dbr_far
-	sec
 	rts

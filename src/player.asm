@@ -302,13 +302,14 @@ player_border_tick
 .pbt_rts
 	rts
 
-; Once per game — lives/score/ammo/weapons; falls into player_init_level
+; Once per game — lives then loadout; falls into player_init_level
 player_init_game
 	lda #START_LIVES
 	sta player_lives
-	lda #0
-	sta player_score_l
-	sta player_score_h
+	; fall through — ammo + knife/pistol, then HP
+
+; After death restart — default ammo/weapons + full HP; keep lives
+player_init_life
 	lda #START_AMMO
 	ldx difficulty
 	bne +
@@ -319,7 +320,6 @@ player_init_game
 	sta owned_weapons
 	; fall through — full HP, clear keys/death, dirty UI
 
-; After death restart — full HP, clear keys; keep ammo/weapons/score/lives
 player_init_level
 	lda #0
 	sta level_want
@@ -327,7 +327,7 @@ player_init_level
 	sta player_hp
 	; fall through
 
-; Clear keys/death flash; mark full UI dirty (keeps HP/ammo/weapons/score)
+; Clear keys/death flash; mark full UI dirty
 player_reset_status
 	lda #0
 	sta player_keys
@@ -464,14 +464,15 @@ handle_level_want
 .hlw_ok
 	pla
 	cmp #1
-	beq .hlw_restart
+	beq .hlw_life
 	cmp #3
 	bne .hlw_done				; 2 or 4: status already reset
-	jsr player_init_game			; fresh game — lives/score/ammo/weapons
-	jsr init_weapon				; ownership reset — back to pistol
-	jmp .hlw_done
-.hlw_restart
-	jsr player_init_level
+	jsr player_init_game
+	bne .hlw_wpn				; A = UI_DIRTY_ALL
+.hlw_life
+	jsr player_init_life
+.hlw_wpn
+	jsr init_weapon				; pistol sprites; I/O already $35
 .hlw_done
 	lda #0					; successful restart: restore black border
 	sta $d020

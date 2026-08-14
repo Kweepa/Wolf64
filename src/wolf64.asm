@@ -208,9 +208,7 @@ walk_phase	= walk_anim_t + 1		; 0=A, nonzero=B
 player_hp	= walk_phase + 1
 player_ammo	= player_hp + 1
 player_keys	= player_ammo + 1
-player_score_l	= player_keys + 1
-player_score_h	= player_score_l + 1
-player_lives	= player_score_h + 1
+player_lives	= player_keys + 1
 player_dead	= player_lives + 1
 death_ms_l	= player_dead + 1
 death_ms_h	= death_ms_l + 1

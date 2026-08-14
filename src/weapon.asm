@@ -367,14 +367,14 @@ apply_pose
 	lda wpn_sound,x
 	jsr play_sound
 	lda cur_weapon
-	beq .fs_rts
+	beq .fs_knife
 	dec player_ammo
 	lda #UI_DIRTY_AMMO
 	ora ui_dirty
 	sta ui_dirty
 	jmp gun_attack
-.fs_rts
-	rts
+.fs_knife
+	jmp knife_attack
 
 .muzzle_expired
 	lda #0

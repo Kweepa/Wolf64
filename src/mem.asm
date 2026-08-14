@@ -26,8 +26,8 @@ SQTAB2		= SQTAB1 + $200
 SQTAB3		= SQTAB1 + $400
 SQTAB4		= SQTAB1 + $600
 PAINTERS	= $8000
-PAINTERS_SIZE	= $38FB			; painters.bin length (must match build)
-SFX_BASE	= PAINTERS + PAINTERS_SIZE	; $B8F2 — pcsounds + pcsfreq_hi
+PAINTERS_SIZE	= $38DD			; painters.bin length (must match build)
+SFX_BASE	= PAINTERS + PAINTERS_SIZE	; $B8DD — pcsounds + pcsfreq_hi
 ; Item scratch + vis_depth/order live in RAM after end_sfx (see wolf64.asm); must end ≤ ENEMY_BASE
 ENEMY_BASE	= $C000			; contiguous enemy code+gfx+hot SoA
 MAP		= $EF00			; 4K level (under-KERNAL; LoadLevel)

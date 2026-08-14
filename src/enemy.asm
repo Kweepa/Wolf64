@@ -1316,6 +1316,7 @@ enemy_draw_one
 .edo_uready
 	lda #$ff
 	sta e_scol_cache
+	jsr enemy_hitscan_patch
 
 	; for each screen column across billboard width
 	lda #0
@@ -1561,8 +1562,27 @@ enemy_side_from_delta
 	sta e_side_h
 	rts
 
+; Patch hitscan SMC once per sprite (e_hitscan already set).
+enemy_hitscan_patch
+	lda e_hitscan
+	bne .ehp_on
+	lda #$4c				; JMP epc_nobuf
+	sta epc_hitop
+	lda #<epc_nobuf
+	sta epc_hitop+1
+	lda #>epc_nobuf
+	sta epc_hitop+2
+	rts
+.ehp_on
+	lda #$ea				; NOP NOP NOP
+	sta epc_hitop
+	sta epc_hitop+1
+	sta epc_hitop+2
+	rts
+
 ; Paint one masked column in chunky rows (two nibbles per character cell).
 ; e_top/e_bot/e_row are 40×48 chunky V (4..43). Even V = hi nibble, odd = lo.
+; Y = col for the draw loop. Hitscan SMC patched by enemy_hitscan_patch.
 enemy_paint_col
 	lda e_scol
 	cmp e_scol_cache
@@ -1613,21 +1633,6 @@ enemy_paint_col
 	iny
 	bne .epc_unp
 .epc_draw
-	lda e_hitscan
-	bne .epc_hiton
-	lda #$4c				; JMP .epc_nobuf
-	sta .epc_hitop
-	lda #<.epc_nobuf
-	sta .epc_hitop+1
-	lda #>.epc_nobuf
-	sta .epc_hitop+2
-	jmp .epc_vstep
-.epc_hiton
-	lda #$ea				; NOP NOP NOP — fall into col_enemy write
-	sta .epc_hitop
-	sta .epc_hitop+1
-	sta .epc_hitop+2
-.epc_vstep
 	ldx e_spr_h
 	lda enemy_vstep_lo,x
 	sta e_step_l
@@ -1660,6 +1665,7 @@ enemy_paint_col
 	dey
 	bne .epc_skp
 .epc_row0
+	ldy col
 	lda e_top
 	sta e_row
 .epc_row
@@ -1677,25 +1683,29 @@ enemy_paint_col
 	beq .epc_nr				; 0 = transparent
 	sta tmp4
 	; hit buffer: nearest opaque writer for this column
-.epc_hitop
+epc_hitop
 	nop
 	nop
 	nop
 	lda enemy_idx
-	ldy col
 	sta col_enemy,y
-.epc_nobuf
-	; cell = v >> 1 → view_row pointer
+epc_nobuf
 	lda e_row
-	lsr					; A=cell, C=1 if bottom nibble
-	bcs .epc_lo
-	asl
+	and #$fe
 	tax
 	lda view_row0,x
 	sta tmp0
 	lda view_row0+1,x
 	sta tmp1
-	ldy col
+	lda e_row
+	lsr
+	bcc .epc_hi
+	lda (tmp0),y
+	and #$f0
+	ora tmp4
+	sta (tmp0),y
+	bcs .epc_nr				; C=1 from lsr; and/ora/sta preserve C
+.epc_hi
 	lda tmp4
 	asl
 	asl
@@ -1704,19 +1714,6 @@ enemy_paint_col
 	sta tmp4
 	lda (tmp0),y
 	and #$0f
-	ora tmp4
-	sta (tmp0),y
-	jmp .epc_nr
-.epc_lo
-	asl
-	tax
-	lda view_row0,x
-	sta tmp0
-	lda view_row0+1,x
-	sta tmp1
-	ldy col
-	lda (tmp0),y
-	and #$f0
 	ora tmp4
 	sta (tmp0),y
 .epc_nr

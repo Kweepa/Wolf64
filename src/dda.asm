@@ -234,13 +234,7 @@ cast_march
 	cmp #15
 	bcs .ax_door				; 15..17 door
 	sta tex_id
-	lda #0
-	sta side
-	lda sdx_l
-	sta wallz_l
-	lda sdx_h
-	sta wallz_h
-	jmp hit_wall
+	jmp .hit_x
 .ax_door
 	jsr door_try_x
 	bcc .ax_miss
@@ -277,13 +271,7 @@ cast_march
 	cmp #15
 	bcs .ay_door				; 15..17 door
 	sta tex_id
-	lda #1
-	sta side
-	lda sdy_l
-	sta wallz_l
-	lda sdy_h
-	sta wallz_h
-	jmp hit_wall
+	jmp .hit_y
 .ay_door
 	jsr door_try_y
 	bcc .ay_miss
@@ -298,8 +286,7 @@ cast_march
 	sta sdy_h
 	bcs .miss				; 16-bit wrap → bogus near wallz / huge column
 	dex
-	beq .miss
-	jmp .inner				; Y-miss is >127 bytes from .inner
+	bne .inner
 
 .miss
 	ldx col
@@ -312,6 +299,23 @@ cast_march
 	sta col_wallz_l,x
 	sta col_wallz_h,x
 	rts
+
+.hit_x
+	lda #0
+	sta side
+	lda sdx_l
+	sta wallz_l
+	lda sdx_h
+	sta wallz_h
+	jmp hit_wall
+.hit_y
+	lda #1
+	sta side
+	lda sdy_l
+	sta wallz_l
+	lda sdy_h
+	sta wallz_h
+	jmp hit_wall
 
 ; A = angle → 0..64 secant index (Keep-style fold)
 fold_angle
@@ -385,7 +389,6 @@ hit_wall
 	lsr
 	lsr
 	lsr
-	and #15
 	sta texx
 
 	ldx col
@@ -413,6 +416,18 @@ hit_wall
 ; heightab[0] = MAX_HALF_H covers wallz < 32 (old $1800/z subtract always clamped 75)
 calc_half_h
 	lda wallz_h
+	bne .slow
+	lda wallz_l
+	lsr
+	lsr
+	lsr
+	lsr
+	lsr
+	tax
+	lda heightab,x
+	sta half_h
+	rts
+.slow
 	sta tmp1
 	lda wallz_l
 	lsr tmp1

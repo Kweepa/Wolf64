@@ -9728,18 +9728,13 @@ painter_near
 	tax
 .pn_ld
 	lda $ffff,x
-	sta tmp1
-	lda tmp4
-	and #1
-	bne .pn_odd1
-	lda tmp1
+	bcs .pn_odd1
 	lsr
 	lsr
 	lsr
 	lsr
 	jmp .pn_hi
 .pn_odd1
-	lda tmp1
 	and #$0f
 .pn_hi
 	asl
@@ -9753,29 +9748,21 @@ painter_near
 	cmp half_h
 	bcc .pn_s1
 	sbc half_h
-	sta tmp5
 	inc tmp4
-	jmp .pn_b
 .pn_s1
 	sta tmp5
-.pn_b
 	lda tmp4
 	lsr
 	tax
 .pn_ld2
 	lda $ffff,x
-	sta tmp1
-	lda tmp4
-	and #1
-	bne .pn_odd2
-	lda tmp1
+	bcs .pn_odd2
 	lsr
 	lsr
 	lsr
 	lsr
 	jmp .pn_lo
 .pn_odd2
-	lda tmp1
 	and #$0f
 .pn_lo
 	ora tmp0
@@ -9787,9 +9774,7 @@ painter_near
 	cmp half_h
 	bcc .pn_s2
 	sbc half_h
-	sta tmp5
 	inc tmp4
-	jmp .pn_adv
 .pn_s2
 	sta tmp5
 .pn_adv

@@ -574,7 +574,6 @@ door_try_x
 	lsr
 	lsr
 	lsr
-	and #15
 	sta texx
 	lda door_savetl
 	sta tile_l
@@ -651,7 +650,6 @@ door_try_y
 	lsr
 	lsr
 	lsr
-	and #15
 	sta texx
 	lda door_savetl
 	sta tile_l

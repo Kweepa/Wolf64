@@ -1,5 +1,5 @@
 ; Assemble compiled painters to a plain binary at their run address
-!cpu 6502
+!cpu 6510
 !to "painters.bin", plain
 
 TEXTURES	= $4800

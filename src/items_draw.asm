@@ -378,6 +378,7 @@ item_draw_one
 .ido_uready
 	lda #$ff
 	sta e_scol_cache
+	jsr enemy_hitscan_patch
 
 	lda #0
 	sta e_sx

@@ -1,6 +1,7 @@
 ; Wolf64 — fat memory image (split into disk PRGs by tools/mkdisk.py)
 ; DDA: The Keep · multiply: Judd a²−b² · view: TechDesignDoc nibbles
-!cpu 6502
+; !cpu 6510: stable NMOS ops (ALR/LAX/SAX/DCP/…) where they replace two documented ops
+!cpu 6510
 !to "game_image.prg", cbm
 
 ; --- build flags (SquareDoom-style) ---------------------------------------
@@ -24,7 +25,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $5880  world item gfx (disk: itm; to bitmap $6000)
 ; $6000  bitmap (8K, disk: bmp)
 ; $8000  wall painters only (disk: paint)
-; $B8F2  PC SFX (disk: sfx); item/vis scratch + cold enemy SoA after end_sfx → <$C000
+; $B8DD  PC SFX (disk: sfx); item/vis scratch + cold enemy SoA after end_sfx → <$C000
 ; $C000  enemy block — code, AI, gfx, hot pos/facing/flags (disk: enemy)
 ; $0100  vis_slot + vis_perp + enemy_burst; STACK_GUARD=$01D0
 ; $EF00  map (disk: e1m1… via LoadLevel)
@@ -106,9 +107,7 @@ game_start
 	jsr play_sound_init
 	jsr player_init_game
 
-	lda #$ff
-	sta smc_last_page
-	sta smc_last_h
+	jsr init_ph_h_done
 
 	jsr init_weapon			; needs VIC sprites ($d0xx) while I/O in
 	lda #$34
@@ -360,7 +359,7 @@ end_paint = *
 }
 
 ; =========================================================================
-; sfx — PC sounds @ $B8F2 (after painters)
+; sfx — PC sounds @ $B8DD (after painters)
 ; =========================================================================
 *= SFX_BASE
 !source "pcsounds.asm"
@@ -370,8 +369,8 @@ end_sfx = *
 	!error "SFX overlaps ENEMY_BASE; end=$", end_sfx
 }
 
-; Painter SMC: which half_h already patched for smc_last_page
-ph_h_done	= end_sfx			; [1..MAX_HALF_H]
+; Painter SMC: tex id already patched per half_h ($ff = none)
+ph_h_done	= end_sfx			; [0..MAX_HALF_H]
 ; Column depth/hit buffers relocated off boot page (room for REBOOT_STUB)
 col_wallz_h	= ph_h_done + MAX_HALF_H + 1
 col_enemy	= col_wallz_h + 40

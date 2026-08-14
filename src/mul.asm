@@ -43,8 +43,9 @@ mul_16x8
 	sbc (sq3_l),y
 	lda (sq2_l),y
 	sbc (sq4_l),y
-	sta tmp1
 	ldy aux_h
+	beq .hi0
+	sta tmp1
 	sec
 	lda (sq1_l),y
 	sbc (sq3_l),y
@@ -60,6 +61,9 @@ mul_16x8
 	adc #0
 	tax
 	tya
+	rts
+.hi0
+	ldx #0
 	rts
 
 ; mid(ddx * A) → sdx

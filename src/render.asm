@@ -7,34 +7,29 @@ FLOOR_COLOR	= $cc
 
 ; A = texture id. Patch table: count, then (addr_lo, addr_hi, byte_off)*
 ; addr points at LDA abs,x operand lo; written as TEXTURES+id*128+byte_off.
-; ph_h_done[half_h] skips re-patch when this tex already hit that height.
-patch_painter_tex
-	cmp smc_last_page
-	bne .newtex
-	ldx half_h
-	lda ph_h_done,x
-	bne .out
-	beq .do
-.newtex
-	sta smc_last_page
+; ph_h_done[half_h] = tex id already patched for that height ($ff = none).
+; Always set tex_ptr (painter_near samples it); skip only the LDA operand walk.
+init_ph_h_done
 	ldx #MAX_HALF_H
-	lda #0
+	lda #$ff
 -
 	sta ph_h_done,x
 	dex
-	bne -
-.do
-	ldx half_h
-	lda #1
-	sta ph_h_done,x
+	bpl -
+	rts
 
-	ldy smc_last_page
+patch_painter_tex
+	tay
 	lda tex_base_lo,y
 	sta tex_ptr_l
 	lda tex_base_hi,y
 	sta tex_ptr_h
-
 	ldx half_h
+	tya
+	cmp ph_h_done,x
+	beq .out
+	sta ph_h_done,x
+
 	lda ph_patch_lo,x
 	sta tmp0
 	lda ph_patch_hi,x

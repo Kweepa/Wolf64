@@ -825,8 +825,7 @@ select_dodge_dir
 .sdd_diag
 	; NE/SE/NW/SW from toward x,y (same diagonal after later axis swaps)
 	lda ai_dirtry				; E=2 W=6
-	and #4
-	lsr					; 0 or 2
+	asr #4					; ALR: (A&4)>>1 → 0 or 2
 	sta tmp0
 	lda ai_dirtry+1				; N=0 S=4
 	lsr

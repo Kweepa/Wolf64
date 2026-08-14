@@ -158,9 +158,7 @@ restart_level
 	jsr prof_init
 	jsr input_irq_init
 	jsr play_sound_init
-	lda #$ff
-	sta smc_last_page
-	sta smc_last_h
+	jsr init_ph_h_done
 
 	lda #$34
 	sta $01					; I/O out — enemy block spans $D000–$DFFF

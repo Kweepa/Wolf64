@@ -1480,6 +1480,8 @@ enemy_spawn_one
 	sta enemy_state,x
 	jmp .eso_common
 .eso_faced
+	sec
+	sbc #T_GUARD			; NESW in low 2 bits (bases 53,57,.. are 1 mod 4)
 	and #3
 	asl					; map NESW → 8-dir cardinal (0,2,4,6)
 	sta enemy_facing,x

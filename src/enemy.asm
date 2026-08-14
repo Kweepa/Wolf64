@@ -1068,6 +1068,17 @@ enemy_calc_spr_h
 	sta e_spr_h
 	rts
 
+; Floor sprites: freeze half_h at the spr_h clamp so Y stays horizon-anchored
+; (clamped wall edge, not the real floor). Ceiling items skip this.
+sprite_clamp_floor_h
+	lda half_h
+	cmp #ENEMY_MAX_H * 2 / 3 + 1
+	bcc +
+	lda #ENEMY_MAX_H * 2 / 3	; 32 — half_h that produces spr_h = 48
+	sta half_h
++
+	rts
+
 ; X = enemy — project + paint (depth from vis_depth[vis_tok])
 enemy_draw_one
 	stx enemy_idx
@@ -1100,6 +1111,7 @@ enemy_draw_one
 	sta wallz_h
 	jsr calc_half_h
 	jsr enemy_calc_spr_h
+	jsr sprite_clamp_floor_h
 
 	; feet on floor in chunky space (40×48): horizon at v=24
 	; wall floor edge = 24 + half_h; active v = 4..43 (cells 2..21 → screen rows 5..24)

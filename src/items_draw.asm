@@ -282,6 +282,7 @@ item_draw_one
 	ldx e_frm
 	lda item_frm_ceil,x
 	bne .ido_ceil
+	jsr sprite_clamp_floor_h
 	clc
 	lda #24
 	adc half_h
@@ -294,40 +295,38 @@ item_draw_one
 	sta e_top
 	jmp .ido_clip
 .ido_ceil
-	sec
-	lda #24
-	sbc half_h
-	bcs +
-	lda #0
-+
-	sta e_top
+	; e_bot = 24 + paint_h - half_h (borrow → off the top)
+	; e_top may wrap negative; clip treats N as above the view.
 	clc
+	lda #24
 	adc tmp2
+	sec
+	sbc half_h
+	bcc .ido_clip_off
 	sta e_bot
-
+	sec
+	sbc tmp2
+	sta e_top
 .ido_clip
-	lda e_top
-	cmp #44
-	bcc +
-	rts
-+
 	lda e_bot
 	cmp #5
-	bcs +
-	rts
-+
+	bcc .ido_clip_off
 	lda #0
 	sta e_clip_skip
 	lda e_top
+	bmi .ido_clip_up			; wrapped: above v=0
+	cmp #44
+	bcs .ido_clip_off			; fully below view
 	cmp #4
-	bcs +
+	bcs .ido_clip_bot
+.ido_clip_up
 	lda #4
 	sec
-	sbc e_top
+	sbc e_top				; also correct for wrapped e_top
 	sta e_clip_skip
 	lda #4
 	sta e_top
-+
+.ido_clip_bot
 	lda e_bot
 	cmp #44
 	bcc +
@@ -337,6 +336,7 @@ item_draw_one
 	lda e_top
 	cmp e_bot
 	bcc +
+.ido_clip_off
 	rts
 +
 	lda e_scr_w

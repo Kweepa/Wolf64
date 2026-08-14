@@ -11,8 +11,7 @@ control_text
 	!scr "^1-4.....^ Change weapon",0
 	!scr " ",0
 	!scr "Walk into doors to open them.",0
-	!scr "Walk into secret walls to push",0
-	!scr "them.",0
+	!scr "Walk into secret walls to push them.",0
 	!scr "Walk over items to pick them up.",0
 	!byte 0
 
@@ -80,20 +79,19 @@ readthis3_text
 ending1_text
 	!scr "CONGRATULATIONS!",0
 	!scr " ",0
-	!scr "You run out of the castle and",0
-	!scr "hook up with the Underground.",0
-	!scr "They inform you that the rumors",0
-	!scr "were true: some hideous human",0
-	!scr "experiments were seen around",0
-	!scr "Castle Hollehammer. So",0
-	!scr "Operation Eisenfaust is real!",0
+	!scr "You run out of the castle and hook up",0
+	!scr "with the Underground. They inform you",0
+	!scr "that the rumors were true: some hideous",0
+	!scr "human experiments were seen around",0
+	!scr "Castle Hollehammer.",0
+	!scr " ",0
+	!scr "So Operation Eisenfaust is real!",0
 	!byte 0
 
 ending2_text
-	!scr "You must journey there and",0
-	!scr "terminate the maniacal Dr.",0
-	!scr "Schabbs before his undead",0
-	!scr "army marches against humanity!",0
+	!scr "You must journey there and terminate",0
+	!scr "the maniacal Dr. Schabbs before his",0
+	!scr "undead army marches against humanity!",0
 	!scr " ",0
 	!scr "Continue the game in",0
 	!scr "Episode 2: Operation Eisenfaust!",0

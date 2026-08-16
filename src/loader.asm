@@ -117,11 +117,7 @@ LoadLevel
 	lda #$36
 	sta $01
 	cli
-	jsr FormatDosName
-	lda #4
-	ldx #<level_dos_name
-	ldy #>level_dos_name
-	jmp LoadPrg
+	bne .ll_dos				; A = $36
 
 .ll_common
 	lda #$35
@@ -129,6 +125,7 @@ LoadLevel
 	jsr blank_screen
 	lda #$36
 	sta $01
+.ll_dos
 	jsr FormatDosName
 	lda #4
 	ldx #<level_dos_name

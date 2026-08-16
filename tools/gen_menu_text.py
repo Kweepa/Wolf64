@@ -33,8 +33,6 @@ def emit_blob(label: str, path: Path) -> list[str]:
 	out = [f"{label}"]
 	for line in lines:
 		body = line if line.strip() else " "
-		if len(body) > 36:
-			print(f"warning: {path.name}: line len {len(body)} > 36: {body!r}")
 		out.append(f'\t!scr "{esc_scr(body)}",0')
 	out.append("\t!byte 0")
 	out.append("")

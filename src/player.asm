@@ -384,8 +384,6 @@ player_check_exit
 	lda (tile_l),y
 	cmp #T_EXIT
 	bne .pce_rts
-	lda #SOUND_LEVELDONE
-	jsr play_sound
 	lda #2				; next level
 	sta level_want
 .pce_rts
@@ -396,6 +394,15 @@ player_check_exit
 handle_level_want
 	lda level_want
 	pha					; 1=restart 2=next 3=new 4=secret
+	lsr
+	bcs .hlw_gotwant			; odd: restart / new game
+	; 2 or 4: jingle, then hold on last frame until SID is idle
+	lda #SOUND_LEVELDONE
+	jsr play_sound
+-	lda sound_index
+	bpl -
+.hlw_gotwant
+	lda level_want
 	cmp #2
 	bne .hlw_chksecret
 	lda level_num
@@ -405,8 +412,6 @@ handle_level_want
 	bne .hlw_adv
 	; episode done — SP reset in reboot_game; skip pla / clear want
 .hlw_epdone
-	lda #SOUND_LEVELDONE
-	jsr play_sound
 	lda #1
 	sta game_complete
 	jmp reboot_to_menu

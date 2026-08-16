@@ -22,6 +22,10 @@ python tools\gen_menufont.py
 if errorlevel 1 exit /b 1
 python tools\gen_menu_logo.py
 if errorlevel 1 exit /b 1
+python tools\gen_menu_hint_sprites.py
+if errorlevel 1 exit /b 1
+python tools\gen_menu_cursor_sprites.py
+if errorlevel 1 exit /b 1
 python tools\gen_menu_text.py
 if errorlevel 1 exit /b 1
 python tools\gen_painters.py

@@ -64,9 +64,7 @@ items_try_pickup
 	sta tmp0
 	lda playery_h
 	sta tmp1
-	jsr map_to_tile
-	ldy #0
-	lda (tile_l),y
+	jsr door_tile_at
 	jsr item_tile_frm
 	bmi .itp_rts				; not an item / no art
 	jsr item_apply

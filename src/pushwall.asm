@@ -7,9 +7,7 @@ try_push_wall
 	sta tmp0
 	lda mapy
 	sta tmp1
-	jsr map_to_tile
-	ldy #0
-	lda (tile_l),y
+	jsr door_tile_at
 	cmp #T_PUSHWALL
 	beq +
 	rts
@@ -46,9 +44,7 @@ try_push_wall
 	sta tmp0
 	lda tmp3
 	sta tmp1
-	jsr map_to_tile
-	ldy #0
-	lda (tile_l),y
+	jsr door_tile_at
 	cmp #18
 	bcc .no
 

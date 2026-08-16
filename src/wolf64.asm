@@ -7,7 +7,7 @@
 ; --- build flags (SquareDoom-style) ---------------------------------------
 PROFILE		= 0				; locode too tight with buckets; F via DBG_FPS
 PROF_SPLIT	= 0				; 1 = per-col R/D (~80 CIA samples; +~20ms)
-DBG_FPS		= 1				; F ≈ frame ms (cols 0–2)
+DBG_FPS		= 0				; F ≈ frame ms (cols 0–2)
 DBG_NO_DETECT	= 0				; 1 = enemies never spot player (patrol preview)
 MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 
@@ -133,6 +133,8 @@ main_loop
 	jsr player_move
 	jsr items_try_pickup
 	jsr player_check_exit
+	lda level_want
+	bne .ml_render			; freeze: no AI/doors on the exit frame
 !if PROFILE = 1 {
 	jsr prof_reset_frame
 }
@@ -283,7 +285,8 @@ door_savetl	= door_savex + 1
 door_saveth	= door_savetl + 1
 turn_acc_l	= door_saveth + 1
 turn_acc_h	= turn_acc_l + 1
-frame_t0	= turn_acc_h + 1			; 4 bytes
+mouse_x		= turn_acc_h + 1			; last SID POTX ($d419)
+frame_t0	= mouse_x + 1			; 4 bytes
 frame_cy	= frame_t0 + 4
 casc_now	= frame_cy + 4
 end_tape_bss	= casc_now + 4

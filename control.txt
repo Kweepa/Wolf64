@@ -1,11 +1,11 @@
-^W.......^ Forward
-^S.......^ Backward
-^A.......^ Strafe Left
-^D.......^ Strafe Right
-^J.......^ Turn Left
-^L.......^ Turn Right
+^WASD....^ Forward/backward/strafe
+^JL......^ Turn
 ^Space...^ Fire
-^1-4.....^ Change weapon
+^1234....^ Change weapon
+
+If you have a mouse in port 1 and
+you have enabled it in the Options,
+you can turn and shoot with it.
 
 Walk into doors to open them.
 Walk into secret walls to push them.

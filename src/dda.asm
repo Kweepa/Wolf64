@@ -10,9 +10,7 @@ setup_player_tile
 	; 256−frac (not 255−frac): at center $80, both axes must match for L/R symmetry.
 	; frac=0 → 256 wraps to 0 in 8-bit; that makes sdx=0 and pops the view
 	; every E/W tile crossing that lands on $00. Use $FF (≈1 tile) instead.
-	eor #$ff
-	clc
-	adc #1
+	jsr neg_a
 	bne +
 	lda #$ff
 +
@@ -22,9 +20,7 @@ setup_player_tile
 	sta mapx
 	lda playery_l
 	sta fracy
-	eor #$ff
-	clc
-	adc #1
+	jsr neg_a
 	bne +
 	lda #$ff
 +
@@ -80,8 +76,7 @@ render_frame
 	ldy #PROF_OBJDRAW
 	jsr prof_add_bucket
 }
-	jsr swap_view
-	rts
+	jmp swap_view
 
 cast_column
 	; Previous column left mapx/mapy at the hit cell — always restart at player

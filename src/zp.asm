@@ -62,7 +62,7 @@ scr_front_l	= $34		; visible matrix base (HUD) — must be contiguous word
 scr_front_h	= $35
 tex_ptr_l	= $36
 tex_ptr_h	= $37
-; $38/$39 free (were smc_last_page / smc_last_h)
+mouse_en		= $38		; 1 = 1351 Port 1 (menu detect/toggle; survives LOAD)
 dda_last_x	= $c6		; previous column xstep (0 = none)
 dda_last_y	= $c7		; previous column ystep
 door_cx		= $c8		; last door cell X ($ff = empty)

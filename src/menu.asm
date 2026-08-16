@@ -5,6 +5,8 @@
 !cpu 6502
 !to "menu.prg", cbm
 
+MENU_HELP_ENDINGS = 0			; 1 = Read This! shows ending1/2 (spacing)
+
 !source "mem.asm"
 
 ENEMY_STAGING	= PAINTERS
@@ -14,6 +16,7 @@ MENU_SLOTS	= 8
 BOX_PAD		= 2
 BOX_VGAP	= 1			; empty rows inside box top/bottom
 CURSOR_GAP	= 1			; blank cols between pistol and text
+CURSOR_CELLS	= 3			; 24px pistol cursor (was 1 for '@' glyph)
 BAR_TOP		= 2			; leave 2 rows of main bg above bar
 BAR_ROWS	= 3
 BADGE_TOP	= BAR_TOP - 1		; 5-row logo plaque overlaps bar
@@ -21,9 +24,16 @@ BADGE_LEFT	= 8			; (40 - 24) / 2 — 2 cols pad each side of logo
 BRAND_KEEP_ROWS	= 6			; rows 0..5 fixed (bar + badge); skip on repaint
 HINT_ROW	= 23
 HINT_COL	= 0			; black help text
-CURSOR_CH	= '@'			; pistol glyph in menufont
+HINT_GAP	= 8			; px between key sprite and label
+HINT_SPR_Y	= 228			; 21px sprite centered on row 23
+MUX_LOGO_RASTER	= 30
+MUX_HINT_RASTER	= 90
 LOGO_SPR_RAM	= $4800			; 7×64 in VIC bank 1 (menu-only)
 LOGO_SPR_PTR0	= (LOGO_SPR_RAM - SCREEN) / 64
+HINT_SPR_RAM	= LOGO_SPR_RAM + MENU_LOGO_SPR_COUNT * 64
+HINT_SPR_PTR0	= (HINT_SPR_RAM - SCREEN) / 64
+CURSOR_SPR_RAM	= HINT_SPR_RAM + HINT_SPR_COUNT * 64
+CURSOR_SPR_PTR0	= (CURSOR_SPR_RAM - SCREEN) / 64
 
 TEXT_COL	= 12			; grey options
 HILITE_COL	= 1			; white selected / logo ink
@@ -81,6 +91,7 @@ sound_count	= $c2
 sound_max	= $c3
 ps_save_x	= $c4
 ps_save_y	= $c5
+mouse_en	= $38			; match zp.asm — 1351 on/off (survives locode LOAD)
 
 *= LOCODE_BASE
 	jmp run_menu
@@ -111,6 +122,7 @@ copy_enemy
 	rts
 
 run_menu
+	sei
 	jsr init_font_tabs
 	jsr init_menu_vic
 	lda #0
@@ -118,12 +130,19 @@ run_menu
 	sta menu_item
 	sta menu_stack_d
 	sta menu_can_ret
+	sta hint_spr_en
+	sta cursor_spr_en
+	sta menu_mux_phase
+	sta menu_raster_en
 	lda #15
 	sta effects_vol
+	jsr copy_menu_sprites
 	jsr menu_sfx_init
+	jsr detect_mouse
 	jsr clear_screen_all
 	jsr draw_brand
 	jsr sync_vol_strings
+	jsr sync_mouse_string
 	lda game_complete
 	cmp #1
 	bne .rm_menu
@@ -238,7 +257,15 @@ menu_esc
 
 menu_vol_input
 	lda menu_item
-	bne .mvi_o				; only effects row (0); back is 1
+	beq .mvi_vol
+	cmp #1
+	bne .mvi_o
+	lda #UI_RIGHT
+	ora #UI_LEFT
+	and ui_pressed
+	beq .mvi_o
+	jmp mouse_toggle
+.mvi_vol
 	lda #UI_RIGHT
 	and ui_pressed
 	bne .mvi_i
@@ -268,9 +295,65 @@ vol_fx_dec
 	jsr sfx_movegun1
 sync_redraw
 	jsr sync_vol_strings
+	jsr sync_mouse_string
 	ldx menu_item
 	stx tmp4
 	jmp draw_menu_item
+
+; 1351 Port 1: pots not stuck at $00/$FF
+detect_mouse
+	lda #0
+	sta mouse_en
+	ldx #8
+.dm_samp
+	ldy #0
+.dm_wait
+	dey
+	bne .dm_wait
+	lda $d419
+	beq .dm_y
+	cmp #$ff
+	beq .dm_y
+.dm_yes
+	lda #1
+	sta mouse_en
+	rts
+.dm_y
+	lda $d41a
+	beq .dm_next
+	cmp #$ff
+	bne .dm_yes
+.dm_next
+	dex
+	bne .dm_samp
+	rts
+
+mouse_toggle
+	lda mouse_en
+	eor #1
+	sta mouse_en
+	jsr sfx_movegun1
+	jmp sync_redraw
+
+sync_mouse_string
+	ldx #2
+	lda mouse_en
+	bne .sms_on
+.sms_off
+	lda str_moff,x
+	sta str_mouse + 15,x
+	dex
+	bpl .sms_off
+	rts
+.sms_on
+	lda str_mon,x
+	sta str_mouse + 15,x
+	dex
+	bpl .sms_on
+	rts
+
+str_mon		!scr "On "
+str_moff	!scr "Off"
 
 sync_vol_strings
 	lda #<str_fx_vol
@@ -335,8 +418,10 @@ menu_select
 	jsr sfx_shoot
 	lda menu_item
 	sta difficulty
-	lda #0
-	sta $d015
+	jsr menu_raster_off
+	lda $d011
+	and #%11101111				; DEN off — no leftover logo sprites
+	sta $d011
 	jsr clear_screen_all
 	ldx #20
 	jsr wait_frames_x
@@ -345,9 +430,16 @@ menu_select
 .ms_nv
 	lda tmp0
 	bmi .ms_tx
-	; same-menu nop (e.g. sound sliders)
+; same-menu nop (volume) or mouse toggle
 	cmp menu_id
 	bne .ms_ne
+	cmp #3
+	bne .ms_stay
+	lda menu_item
+	cmp #1
+	bne .ms_stay
+	jsr mouse_toggle
+.ms_stay
 	jmp .ms_st
 .ms_ne
 	bcc .ms_po
@@ -403,6 +495,14 @@ menu_select
 	jmp .ms_ret
 .ms_hlp
 	jsr sfx_shoot
+!if MENU_HELP_ENDINGS {
+	lda #<ending1_text
+	ldy #>ending1_text
+	jsr show_story_screen
+	lda #<ending2_text
+	ldy #>ending2_text
+	jsr show_story_screen
+} else {
 	lda #<readthis1_text
 	ldy #>readthis1_text
 	jsr show_story_screen
@@ -415,6 +515,7 @@ menu_select
 	lda #<readthis3_text
 	ldy #>readthis3_text
 	jsr show_story_screen
+}
 	jmp .ms_ret
 .ms_crd
 	jsr sfx_shoot
@@ -444,18 +545,20 @@ quit_to_basic
 	cli
 	jmp ($a002)				; BASIC warm start
 
-; Root→eps/sound/ctrl/help/credits/quit; E1→skill; E2-6→order; skill→start; sound stay/back
+; Root→eps/options/ctrl/help/credits/quit; E1→skill; E2-6→order; skill→start; options stay/back
 next_menu
 	!byte 1, 3, NM_CTRL, NM_HELP, NM_CREDITS, NM_QUIT, 0, 0
 	!byte 2, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_BACK, 0
 	!byte NM_START, NM_START, NM_START, NM_START, NM_BACK, 0, 0, 0
-	!byte 3, NM_BACK, 0, 0, 0, 0, 0, 0
+	!byte 3, 3, NM_BACK, 0, 0, 0, 0, 0
 
 menu_sizes
-	!byte 6, 7, 5, 2
+	!byte 6, 7, 5, 3
 
 ; --- drawing ---------------------------------------------------------------
 draw_menu
+	lda #COL_MAIN
+	sta clear_bg
 	jsr menu_blank
 	jsr clear_screen
 
@@ -478,14 +581,9 @@ draw_menu
 	cpx menu_size
 	bcc .dm_l
 
-	lda #COL_MAIN
-	sta cell_bg
-	lda #HINT_COL
-	sta ui_text_col
-	lda #<str_hint
-	ldy #>str_hint
-	ldx #HINT_ROW
-	jsr print_centered
+	jsr draw_hint
+	lda #1
+	sta cursor_spr_en
 	jmp menu_unblank
 
 ; Title two lines above the box
@@ -505,6 +603,129 @@ draw_section_title
 	tay
 	pla
 	jmp print_centered
+
+; Key sprites + "move / adjust / select" on HINT_ROW.
+draw_hint
+	lda #COL_MAIN
+	sta cell_bg
+	lda #HINT_COL
+	sta ui_text_col
+
+	lda #<str_hint_move
+	ldy #>str_hint_move
+	sta ui_str_l
+	sty ui_str_h
+	jsr str_pix_len
+	lda pr_len
+	sta hint_w0
+
+	lda #<str_hint_adjust
+	ldy #>str_hint_adjust
+	sta ui_str_l
+	sty ui_str_h
+	jsr str_pix_len
+	lda pr_len
+	sta hint_w1
+
+	lda #<str_hint_select
+	ldy #>str_hint_select
+	sta ui_str_l
+	sty ui_str_h
+	jsr str_pix_len
+	lda pr_len
+	sta hint_w2
+
+	; total = 3*24 + 5*HINT_GAP + w0+w1+w2
+	lda #HINT_SPR_W * 3 + HINT_GAP * 5
+	clc
+	adc hint_w0
+	adc hint_w1
+	adc hint_w2
+	sta tmp0
+	lda #<320
+	sec
+	sbc tmp0
+	lsr
+	sta tmp1				; bitmap start x
+
+	clc
+	adc #24				; VIC sprite X origin
+	sta hint_spr_x
+
+	lda tmp1
+	clc
+	adc #HINT_SPR_W
+	adc #HINT_GAP
+	sta hint_tx				; "move" pixel x
+
+	clc
+	adc hint_w0
+	adc #HINT_GAP
+	sta tmp3				; AD bitmap x
+	clc
+	adc #24
+	sta hint_spr_x + 1
+
+	lda tmp3
+	clc
+	adc #HINT_SPR_W
+	adc #HINT_GAP
+	sta hint_tx + 1				; "adjust" pixel x
+
+	clc
+	adc hint_w1
+	adc #HINT_GAP
+	sta tmp3				; RETURN bitmap x
+	clc
+	adc #24
+	sta hint_spr_x + 2
+
+	lda tmp3
+	clc
+	adc #HINT_SPR_W
+	adc #HINT_GAP
+	sta hint_tx + 2				; "select" pixel x
+
+	lda hint_tx
+	sta hint_px
+	lda #<str_hint_move
+	ldy #>str_hint_move
+	jsr hint_print_px
+	lda hint_tx + 1
+	sta hint_px
+	lda #<str_hint_adjust
+	ldy #>str_hint_adjust
+	jsr hint_print_px
+	lda hint_tx + 2
+	sta hint_px
+	lda #<str_hint_select
+	ldy #>str_hint_select
+	jsr hint_print_px
+
+	lda #1
+	sta hint_spr_en
+	rts
+
+; A/Y = string, hint_px = pixel x, HINT_ROW.
+hint_print_px
+	sta ui_str_l
+	sty ui_str_h
+	lda hint_px
+	tax
+	and #7
+	sta pr_shift
+	txa
+	lsr
+	lsr
+	lsr
+	sta pr_col
+	ldx #HINT_ROW
+	stx pr_row
+	lda #0
+	sta pr_mono
+	lda #1
+	sta pr_drop
+	jmp print_go
 
 ; box_top, box_left, box_width from menu strings
 calc_box
@@ -563,7 +784,7 @@ calc_box
 	lsr
 	sta tmp3				; text column
 	sec
-	sbc #1 + CURSOR_GAP			; cursor col
+	sbc #CURSOR_CELLS + CURSOR_GAP		; cursor col
 	sec
 	sbc #BOX_PAD
 	clc
@@ -571,7 +792,7 @@ calc_box
 	sta box_left
 	lda pix_max_l
 	clc
-	adc #1 + CURSOR_GAP			; cursor + gap
+	adc #CURSOR_CELLS + CURSOR_GAP		; cursor + gap
 	adc #BOX_PAD
 	adc #BOX_PAD
 	sta box_width
@@ -606,16 +827,16 @@ draw_menu_item
 	lda #COL_BOX
 	sta cell_bg
 
-	; Always clear pistol cell (needed for selection-only updates)
+	; Blank box row (bitmap OR would smear proportional glyphs on redraw)
 	lda box_left
-	clc
-	adc #BOX_PAD
 	ldx pr_row
 	jsr bmp_cell_addr
 	ldy #0
+.di_clr
 	jsr bmp_blank_cell_y
-	lda #COL_BOX
-	sta (aux_l),y
+	iny
+	cpy box_width
+	bcc .di_clr
 
 	lda tmp4
 	cmp menu_item
@@ -626,15 +847,23 @@ draw_menu_item
 .di_h
 	lda #HILITE_COL
 	sta ui_text_col
+	; Pistol cursor sprites: X = 24 + (box_left+BOX_PAD)*8, Y = 50+row*8
 	lda box_left
 	clc
 	adc #BOX_PAD
-	sta pr_col
-	lda #0
-	sta pr_shift
-	sta pr_drop
-	lda #CURSOR_CH
-	jsr bmp_put_scr
+	asl
+	asl
+	asl
+	clc
+	adc #24
+	sta cursor_spr_x
+	lda pr_row
+	asl
+	asl
+	asl
+	clc
+	adc #50
+	sta cursor_spr_y
 .di_g
 	lda menu_id
 	asl
@@ -650,7 +879,7 @@ draw_menu_item
 	lda box_left
 	clc
 	adc #BOX_PAD
-	adc #1 + CURSOR_GAP
+	adc #CURSOR_CELLS + CURSOR_GAP
 	ldx pr_row
 	jmp print_at
 
@@ -659,6 +888,8 @@ draw_menu_item
 show_text_screen
 	sta txt_ptr_l
 	sty txt_ptr_h
+	lda #COL_MAIN
+	sta clear_bg
 	lda #COL_BOX
 	sta cell_bg
 	lda #HILITE_COL
@@ -685,7 +916,6 @@ show_story_screen
 	sta pr_setcol
 	lda #COL_MAIN
 	sta clear_bg
-	sta $d021
 	rts
 
 .sts_body
@@ -855,8 +1085,10 @@ init_menu_vic
 	sta $d018
 	lda #0
 	sta $d015
-	sta $d020
 	sta $d021
+	sta $d01a				; no leftover VIC IRQs
+	lda #MENU_BORDER
+	sta $d020
 	rts
 
 ; Clear rows BRAND_KEEP_ROWS..24 only — bar/badge stay put.
@@ -1044,63 +1276,178 @@ blit_menu_logo
 	bcc .blr
 	rts
 
-setup_logo_sprites
+copy_menu_sprites
 	ldx #0
-.slc0
+.cms0
 	lda menu_logo_spr,x
 	sta LOGO_SPR_RAM,x
 	inx
-	bne .slc0
+	bne .cms0
 	ldx #0
-.slc1
+.cms1
 	lda menu_logo_spr + $100,x
 	sta LOGO_SPR_RAM + $100,x
 	inx
 	cpx #$c0
-	bne .slc1
+	bne .cms1
+	ldx #0
+.cms2
+	lda menu_hint_spr,x
+	sta HINT_SPR_RAM,x
+	inx
+	bne .cms2
+	ldx #0
+.cms3
+	lda menu_hint_spr + $100,x
+	sta HINT_SPR_RAM + $100,x
+	inx
+	cpx #$80
+	bne .cms3
+	ldx #0
+.cms4
+	lda menu_cursor_spr,x
+	sta CURSOR_SPR_RAM,x
+	inx
+	bne .cms4
+	rts
+
+setup_logo_sprites
+	jsr copy_menu_sprites
+	jsr mux_logo_spr
+	lda #0
+	sta $d01b				; sprites in front of bitmap
+	sta $d017
+	sta $d01d
+	rts
+
+; Raster IRQ A — red logo fill (sprites 0–6).
+mux_logo_spr
 	ldx #0
 	lda #LOGO_SPR_PTR0
-.slp
+.mlp
 	sta SCREEN + $3f8,x
 	clc
 	adc #1
 	inx
 	cpx #MENU_LOGO_SPR_COUNT
-	bne .slp
+	bne .mlp
 	lda #COL_LOGO_RED
 	ldx #0
-.slcol
+.mlcol
 	sta $d027,x
 	inx
 	cpx #MENU_LOGO_SPR_COUNT
-	bne .slcol
+	bne .mlcol
 	ldx #0
 	ldy #0
-.slx
+.mlx
 	lda logo_spr_x,x
 	sta $d000,y
 	iny
 	iny
 	inx
 	cpx #MENU_LOGO_SPR_COUNT
-	bne .slx
+	bne .mlx
 	lda #0
 	sta $d010
 	lda #50 + BADGE_TOP * 8 + MENU_LOGO_PAD_Y + MENU_LOGO_SPR_OFF_Y
 	ldx #0
 	ldy #1
-.sly
+.mly
 	sta $d000,y
 	iny
 	iny
 	inx
 	cpx #MENU_LOGO_SPR_COUNT
-	bne .sly
-	lda #0
-	sta $d01b				; sprites in front of bitmap
-	sta $d017
-	sta $d01d
+	bne .mly
 	lda #%01111111
+	sta $d015
+	rts
+
+; Raster IRQ mid — pistol cursor (4 colour layers, white in front).
+mux_cursor_spr
+	lda cursor_spr_en
+	bne .mc_go
+	rts
+.mc_go
+	ldx #0
+	lda #CURSOR_SPR_PTR0
+.mcp
+	sta SCREEN + $3f8,x
+	clc
+	adc #1
+	inx
+	cpx #CURSOR_SPR_COUNT
+	bne .mcp
+	ldx #0
+.mccol
+	lda cursor_spr_cols,x
+	sta $d027,x
+	inx
+	cpx #CURSOR_SPR_COUNT
+	bne .mccol
+	lda cursor_spr_x
+	sta $d000
+	sta $d002
+	sta $d004
+	sta $d006
+	lda #0
+	sta $d010
+	lda cursor_spr_y
+	sta $d001
+	sta $d003
+	sta $d005
+	sta $d007
+	lda #%00001111
+	sta $d015
+	rts
+
+; Raster IRQ late — WS / AD / RETURN key pairs (white in front of black).
+mux_hint_spr
+	lda hint_spr_en
+	bne .mh_go
+	rts
+.mh_go
+	ldx #0
+	lda #HINT_SPR_PTR0
+.mhp
+	sta SCREEN + $3f8,x
+	clc
+	adc #1
+	inx
+	cpx #HINT_SPR_COUNT
+	bne .mhp
+	lda #HILITE_COL
+	sta $d027
+	sta $d029
+	sta $d02b
+	lda #0
+	sta $d028
+	sta $d02a
+	sta $d02c
+	ldx #0
+	ldy #0
+.mhx
+	lda hint_spr_x,x
+	sta $d000,y
+	sta $d002,y
+	iny
+	iny
+	iny
+	iny
+	inx
+	cpx #3
+	bne .mhx
+	lda #0
+	sta $d010
+	lda #HINT_SPR_Y
+	sta $d001
+	sta $d003
+	sta $d005
+	sta $d007
+	sta $d009
+	sta $d00b
+	lda #%00111111
 	sta $d015
 	rts
 
@@ -1442,8 +1789,7 @@ blit_zdrop
 	sta (ptr_l),y
 	lda (gptr_l),y
 	ldy #0
-	ora (tmp2),y
-	sta (tmp2),y
+	jsr ora_below_l
 	lda pr_setcol
 	beq .zd_a
 	lda #0
@@ -1492,12 +1838,10 @@ blit_drop
 	lda (gptr_l),y
 	jsr do_shift
 	ldy #0
-	ora (tmp2),y
-	sta (tmp2),y
+	jsr ora_below_l
 	lda ft_right
 	beq .bd_cb
-	ora (tmp0),y
-	sta (tmp0),y
+	jsr ora_below_r
 	sta ft_spill
 .bd_cb
 	lda pr_setcol
@@ -1695,19 +2039,27 @@ sync_ptr_r
 	clc
 	lda ptr_l
 	adc #<320
-	sta tmp2
+	sta ft_b_l
+	sta ora_below_l + 1
+	sta ora_below_l + 4
 	lda ptr_h
 	adc #>320
-	sta tmp3
+	sta ft_b_h
+	sta ora_below_l + 2
+	sta ora_below_l + 5
 	lda pr_col
 	cmp #39
 	bcc .spr_ok
 	lda #<ft_sink
 	sta ptr_r_l
-	sta tmp0
+	sta ft_br_l
+	sta ora_below_r + 1
+	sta ora_below_r + 4
 	lda #>ft_sink
 	sta ptr_r_h
-	sta tmp1
+	sta ft_br_h
+	sta ora_below_r + 2
+	sta ora_below_r + 5
 	rts
 .spr_ok
 	lda ptr_l
@@ -1720,10 +2072,24 @@ sync_ptr_r
 	clc
 	lda ptr_r_l
 	adc #<320
-	sta tmp0
+	sta ft_br_l
+	sta ora_below_r + 1
+	sta ora_below_r + 4
 	lda ptr_r_h
 	adc #>320
-	sta tmp1
+	sta ft_br_h
+	sta ora_below_r + 2
+	sta ora_below_r + 5
+	rts
+
+; A = bits, Y = 0. Dest patched to ptr+320 / ptr_r+320 (BSS + abs,y).
+ora_below_l
+	ora $ffff,y
+	sta $ffff,y
+	rts
+ora_below_r
+	ora $ffff,y
+	sta $ffff,y
 	rts
 
 glyph_lda
@@ -2007,15 +2373,23 @@ str_skip
 .ssk_c
 	rts
 
-; Hide full redraws: interior becomes black border; logo sprites off.
+; Hide full redraws: DEN off fills the screen with $d020. Sprites off.
+; Menus/credits: dark-blue border. Story: grey (STORY_BG).
 menu_blank
 	lda $d011
 	and #%11101111				; DEN off
 	sta $d011
-	lda #0
+	lda clear_bg
+	cmp #STORY_BG
+	beq .mb_c
+	lda #MENU_BORDER
+.mb_c
 	sta $d020
 	sta $d021
+	lda #0
 	sta $d015
+	sta hint_spr_en
+	sta cursor_spr_en
 	rts
 
 ; Reveal after paint. $d021 from clear_bg (story pages use STORY_BG).
@@ -2172,6 +2546,18 @@ menu_prev	!byte 0
 menu_size	!byte 0
 menu_stack_d	!byte 0
 menu_can_ret	!byte 0
+hint_spr_en	!byte 0
+cursor_spr_en	!byte 0
+menu_mux_phase	!byte 0
+menu_raster_en	!byte 0
+hint_spr_x	!byte 0, 0, 0
+cursor_spr_x	!byte 0
+cursor_spr_y	!byte 0
+hint_tx		!byte 0, 0, 0
+hint_px		!byte 0
+hint_w0		!byte 0
+hint_w1		!byte 0
+hint_w2		!byte 0
 menu_stk_m	!byte 0, 0, 0
 menu_stk_i	!byte 0, 0, 0
 box_top		!byte 0
@@ -2212,11 +2598,17 @@ clear_bg	!byte COL_MAIN
 glyph_w_tab	!fill 96, 0
 glyph_lj	!fill 768, 0			; lead-justified copies of menufont_udgs
 ft_sink		!fill 8, 0			; dummy right-cell when col=39
+ft_b_l		!byte 0				; ptr+320 (descender cell)
+ft_b_h		!byte 0
+ft_br_l		!byte 0				; ptr_r+320
+ft_br_h		!byte 0
 
-str_hint	!scr "W/S move  A/D adjust  Return select",0
+str_hint_move	!scr "move",0
+str_hint_adjust	!scr "adjust",0
+str_hint_select	!scr "select",0
 str_new_game	!scr "New Game",0
-str_sound	!scr "Sound",0
-str_control	!scr "Control",0
+str_sound	!scr "Options",0
+str_control	!scr "Controls",0
 str_read_this	!scr "Read This!",0
 str_credits	!scr "Credits",0
 str_quit	!scr "Quit",0
@@ -2228,6 +2620,7 @@ str_e4		!scr "A Dark Secret",0
 str_e5		!scr "Trail of the Madman",0
 str_e6		!scr "Confrontation",0
 str_fx_vol	!scr "Effects Volume 15",0
+str_mouse	!scr "Mouse (port 1) Off",0
 str_itytd	!scr "Can I play, Daddy?",0
 str_dhm		!scr "Don't hurt me.",0
 str_hmp		!scr "Bring 'em on!",0
@@ -2236,7 +2629,7 @@ str_uv		!scr "I am Death incarnate!",0
 str_sec_main	!scr "Options",0
 str_sec_new	!scr "Which episode to play?",0
 str_sec_skill	!scr "How tough are you?",0
-str_sec_sound	!scr "Sound",0
+str_sec_sound	!scr "Options",0
 
 section_lo
 	!byte <str_sec_main, <str_sec_new, <str_sec_skill, <str_sec_sound
@@ -2252,7 +2645,7 @@ menu_str_lo
 	!byte <str_e5, <str_e6, <str_back, 0
 	!byte <str_itytd, <str_dhm, <str_hmp, <str_uv
 	!byte <str_back, 0, 0, 0
-	!byte <str_fx_vol, <str_back, 0, 0
+	!byte <str_fx_vol, <str_mouse, <str_back, 0
 	!byte 0, 0, 0, 0
 menu_str_hi
 	!byte >str_new_game, >str_sound, >str_control, >str_read_this
@@ -2261,10 +2654,12 @@ menu_str_hi
 	!byte >str_e5, >str_e6, >str_back, 0
 	!byte >str_itytd, >str_dhm, >str_hmp, >str_uv
 	!byte >str_back, 0, 0, 0
-	!byte >str_fx_vol, >str_back, 0, 0
+	!byte >str_fx_vol, >str_mouse, >str_back, 0
 	!byte 0, 0, 0, 0
 
 !source "menu_logo.asm"
+!source "menu_hint_spr.asm"
+!source "menu_cursor_spr.asm"
 !source "../assets/menufont.asm"
 !source "playsound.asm"
 !source "menu_sfx.asm"

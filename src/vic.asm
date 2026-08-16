@@ -24,10 +24,10 @@ init_vic
 	lda #0
 	sta $d020
 	sta $d021
+	sta $d015
 
 	; Bitmap + screen + colour RAM loaded from disk (SCR/BMP/COL)
-	jsr set_view_rows
-	rts
+	jmp set_view_rows
 
 ; Point view_row0..23 so painters' cells 2..21 = screen rows 5..24.
 ; view_row0 -> matrix row 3; unused row slots 0..1 sit in the UI band.

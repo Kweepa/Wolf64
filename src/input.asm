@@ -12,6 +12,7 @@ SAMPLE_TA_HI	= >$4FFF
 ;   move ½ tile/sec = 4 world/sec → delta_8_8 = (sintab * vel_ms) >> 6
 ; sintab AMP=64; identity: sin=64, dt=1024 → 1024 = 4.0 world.
 ; W/S move, A/D strafe, J/L turn (SquareDoom bindings).
+; 1351 Port 1: POTX delta → playera; left button = FIRE (PB4, same as SPACE).
 
 input_irq_init
 	lda #0
@@ -29,6 +30,8 @@ input_irq_init
 	sta turn_acc_l
 	sta turn_acc_h
 	sta $d01a				; no VIC IRQs
+	lda $d419				; seed so first IRQ delta is 0
+	sta mouse_x
 
 	lda #$7f
 	sta $dc0d				; clear CIA1 IRQ enables
@@ -173,11 +176,40 @@ input_irq
 	sta in_wpn_pistol
 .irq_no2
 	txa
-	and #$10				; SPACE = fire
+	and #$10				; SPACE / 1351 left button (PB4)
 	bne .irq_nospc
 	lda #1
 	sta in_fire
 .irq_nospc
+
+	lda mouse_en
+	beq .irq_rti
+	; 1351 POTX wrap-delta. |dx|<=2 noise; |dx|>=33 = wrap (keep mouse_x, no look)
+	lda $d419
+	tax
+	sec
+	sbc mouse_x
+	stx mouse_x
+	tay
+	bpl .irq_mpos
+	cpy #$fe
+	bcs .irq_rti
+	cpy #$e0
+	bcc .irq_rti
+	tya
+	bcs .irq_mdx
+.irq_mpos
+	cpy #3
+	bcc .irq_rti
+	cpy #33
+	bcs .irq_rti
+	tya
+.irq_mdx
+	cmp #$80				; signed /2 into playera (wraps as angle)
+	ror
+	clc
+	adc playera
+	sta playera
 
 .irq_rti
 	pla
@@ -254,9 +286,7 @@ read_input
 	sta vel_ms
 	jsr turn_deliver
 	eor #$ff
-	clc
-	adc #1
-	clc
+	sec
 	adc playera
 	sta playera
 	jmp .turn_done
@@ -376,9 +406,7 @@ move_add_y
 scale_vel
 	sta tmp2
 	bpl .sv_abs
-	eor #$ff
-	clc
-	adc #1
+	jsr neg_a
 .sv_abs
 	tay
 	lda vel_ms

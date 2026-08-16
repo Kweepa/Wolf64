@@ -1,4 +1,4 @@
-; Sound effects — Wolf PC-speaker envelopes on SID noise (pcsfreq_hi).
+; Sound effects — Wolf PC-speaker envelopes on SID voice 2 pulse (50% duty).
 ; Data: pcsounds.asm + pcsfreq.asm (tools/gensounds.py from AUDIOT.WL1).
 ; Decimated 3x; stepped once per CIA1 Timer A IRQ (~50 Hz).
 ; SID Fn lo fixed at $80 (hi LUT only — saves 256 bytes).
@@ -8,7 +8,7 @@
 SFX_VOL		= $0f				; default if menu skipped
 
 ; ------------------------------------------------------------------
-; play_sound_init — clear SID; voice 3 ready; master volume from menu
+; play_sound_init — clear SID; voice 2 ready; master volume from menu
 ; ------------------------------------------------------------------
 play_sound_init
 	lda #$ff
@@ -23,17 +23,21 @@ play_sound_init
 	sta $d400,x
 	dex
 	bpl .psi_clr
-	jsr sfx_voice3_adsr
+	jsr sfx_voice2_adsr
 	lda effects_vol
 	and #SFX_VOL
 	sta $d418
 	rts
 
-sfx_voice3_adsr
+sfx_voice2_adsr
 	lda #$00
-	sta $d413				; AD: instant
+	sta $d409				; PW lo — 50% duty
+	lda #$08
+	sta $d40a				; PW hi
+	lda #$00
+	sta $d40c				; AD: instant
 	lda #$f0
-	sta $d414				; SR: full sustain, fast release
+	sta $d40d				; SR: full sustain, fast release
 	rts
 
 ; ------------------------------------------------------------------
@@ -78,7 +82,7 @@ play_sound
 
 ; ------------------------------------------------------------------
 ; update_sfx — one PC speaker sample per call (~50 Hz Timer A)
-; Must not touch tmp0–tmp5 / other main-thread ZP. Voice 3 only.
+; Must not touch tmp0–tmp5 / other main-thread ZP. Voice 2 only.
 ; ------------------------------------------------------------------
 update_sfx
 	lda sound_index
@@ -91,23 +95,23 @@ update_sfx
 	lda (sound_ptr_l),y
 	beq .sfx_silent
 	tax
-	jsr sfx_voice3_adsr
+	jsr sfx_voice2_adsr
 	lda #$80
-	sta $d40e
+	sta $d407
 	lda pcsfreq_hi,x
-	sta $d40f
-	lda #$81				; noise + gate
-	sta $d412
+	sta $d408
+	lda #$41				; pulse + gate
+	sta $d40b
 	rts
 
 .sfx_silent
 	lda #0
-	sta $d412
+	sta $d40b
 	rts
 
 .sfx_stop
 	lda #0
-	sta $d412
+	sta $d40b
 	lda #$ff
 	sta sound_index
 	lda #0

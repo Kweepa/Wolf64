@@ -282,8 +282,7 @@ try_open_door
 	lda #DS_OPENING
 	sta door_state,y
 	lda #SOUND_OPENDOOR
-	jsr play_sound
-	rts
+	jmp play_sound
 .tod_hold
 	cmp #DS_OPEN
 	bne .tod_rts
@@ -330,8 +329,7 @@ try_open_door
 	lda tmp2
 	sta door_orient,y
 	lda #SOUND_OPENDOOR
-	jsr play_sound
-	rts
+	jmp play_sound
 
 doors_update
 	ldy #0

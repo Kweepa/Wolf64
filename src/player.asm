@@ -207,9 +207,7 @@ probe_solid
 	sta tmp0
 	lda mapy
 	sta tmp1
-	jsr map_to_tile
-	ldy #0
-	lda (tile_l),y
+	jsr door_tile_at
 	cmp #18				; solid walls + doors < 18
 	bcs .clear
 	cmp #15				; unlocked door
@@ -379,9 +377,7 @@ player_check_exit
 	sta tmp0
 	lda playery_h
 	sta tmp1
-	jsr map_to_tile
-	ldy #0
-	lda (tile_l),y
+	jsr door_tile_at
 	cmp #T_EXIT
 	bne .pce_rts
 	lda #2				; next level

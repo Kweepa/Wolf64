@@ -58,7 +58,7 @@ switch_weapon
 	sta fire_rpt_h
 	sta mg_frame
 	sta wpn_pose
-	jsr setup_weapon
+	jmp setup_weapon
 .sw_done
 	rts
 
@@ -86,8 +86,7 @@ init_weapon
 	lda #$ff
 	sta cur_weapon
 	ldx #WPN_PISTOL
-	jsr switch_weapon
-	rts				; stay hidden until first swap_view
+	jmp switch_weapon		; stay hidden until first swap_view
 
 show_weapon
 	lda #$ff
@@ -470,3 +469,4 @@ update_weapon
 	jmp .muzzle_expired
 .uw_up_rts
 	rts
+

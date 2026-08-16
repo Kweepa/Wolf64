@@ -79,23 +79,15 @@ items_try_pickup
 
 ; A = frame id. C=1 if collected (clear map), C=0 leave tile
 item_apply
+	ldx #KEY_GOLD
 	cmp #IF_KEY_GOLD
-	bne .ia_sil
-	lda player_keys
-	ora #KEY_GOLD
-	sta player_keys
-	lda #UI_DIRTY_KEYS
-	ora ui_dirty
-	sta ui_dirty
-	lda #SOUND_GETKEY
-	jsr play_sound
-	sec
-	rts
-.ia_sil
+	beq .ia_key
 	cmp #IF_KEY_SILVER
 	bne .ia_food
-	lda player_keys
-	ora #KEY_SILVER
+	ldx #KEY_SILVER
+.ia_key
+	txa
+	ora player_keys
 	sta player_keys
 	lda #UI_DIRTY_KEYS
 	ora ui_dirty

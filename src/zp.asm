@@ -69,6 +69,7 @@ door_cx		= $c8		; last door cell X ($ff = empty)
 door_cy		= $c9
 door_corient	= $ca
 door_cpos	= $cb
+dt_rem8		= $cf		; leftover ms toward next enemy dt8 tick
 
 move_dx_l	= $3d
 move_dx_h	= $3e
@@ -160,7 +161,7 @@ in_strafel		= $ab		; A held (strafe left)
 in_strafer		= $ac		; D held (strafe right)
 random8			= $ad		; GetRandom8 state (Deathchase LCG)
 e_hitscan		= $b0		; 1 = write col_enemy while painting
-dt8			= $b1		; dt_ms/8 for enemy state timers
+dt8			= $b1		; complete 8ms ticks this frame (from dt_rem8 accum)
 sound_index		= $b2		; $ff = idle
 sound_ptr_l		= $b3
 sound_ptr_h		= $b4

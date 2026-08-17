@@ -127,6 +127,7 @@ enemies_init
 	sta los_rr
 	sta walk_anim_t
 	sta walk_phase
+	sta dt_rem8
 	; hit buffer overlays boot — must be $FF before first enemies_update
 	ldx #39
 	lda #$ff
@@ -197,12 +198,19 @@ enemies_init
 
 ; ---------------------------------------------------------------------------
 enemies_update
-	; dt in 8ms units for state timers (frames are ~100ms; finer is pointless)
-	lda dt_ms
+	; Accumulate ms into 8ms ticks so SuperCPU frames (dt_ms 1..7) still advance
+	; pain/death/shoot timers (bare >>3 would leave dt8=0 forever).
+	lda dt_rem8
+	clc
+	adc dt_ms
+	sta dt_rem8
 	lsr
 	lsr
-	lsr					; /8
+	lsr
 	sta dt8
+	lda dt_rem8
+	and #7
+	sta dt_rem8
 	; global walk A/B phase (all movers share)
 	lda walk_anim_t
 	clc

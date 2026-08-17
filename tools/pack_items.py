@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pack_enemies import frame_indices, opaque_bbox, pack_columns  # noqa: E402
 from process_items_c64 import OUT_COLS, OUT_ROWS  # noqa: E402
 
-# Sheet order from process_items_c64 detect_boxes (row-major, 5×4).
+# Sheet order from process_items_c64 (row-major, 5×5; last cell empty).
 ITEM_FRAMES: list[str] = [
     "table_chairs",
     "chandelier",
@@ -47,6 +47,10 @@ ITEM_FRAMES: list[str] = [
     "flag",
     "puddle",
     "bed",
+    "cross",
+    "chalice",
+    "bible",
+    "crown",
 ]
 
 CEILING_ITEMS = frozenset(
@@ -114,9 +118,12 @@ def main() -> int:
 
     n = len(ITEM_FRAMES)
     # LUTs reside with the blob at ITEM_SPRITES (5 tables × n bytes).
+    # items_draw.asm is linked after the blob; ACME end_itm <= BITMAP is the
+    # real cap. This check only rejects lut+blob that already fill the region.
     lut_bytes = 5 * n
     total = lut_bytes + len(blob)
-    print(f"\nblob={len(blob)}  luts={lut_bytes}  total={total}  budget={ITEM_BUDGET}")
+    print(f"\nblob={len(blob)}  luts={lut_bytes}  total={total}  region={ITEM_BUDGET}")
+    print(f"remainder for items_draw: {ITEM_BUDGET - total}")
     if total > ITEM_BUDGET:
         raise SystemExit(
             f"item gfx does not fit: {total} bytes > {ITEM_BUDGET} "

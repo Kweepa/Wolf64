@@ -7,30 +7,34 @@ T_FIRSTAID	= 20
 T_FOOD		= 21
 T_GOLD_KEY	= 22
 T_SILVER_KEY	= 23
-; 24 cross / 25 chalice — no packed art
-T_MACHINEGUN	= 26
-T_CHAINGUN	= 27
-T_HANGED	= 28
-T_WELL		= 29
-T_FLAG		= 30
-T_PUDDLE	= 31
-T_BED		= 32
-T_PILLAR	= 33
-T_TABLE		= 34
-T_LAMP		= 35
-T_BLOOD		= 36
-T_PLANT		= 37
-T_DOGFOOD	= 38
-T_CEIL_LIGHT	= 39
-T_CAGE		= 40
+T_CROSS		= 24
+T_CHALICE	= 25
+T_BIBLE		= 26
+T_CROWN		= 27
+T_MACHINEGUN	= 28
+T_CHAINGUN	= 29
+T_HANGED	= 30
+T_WELL		= 31
+T_FLAG		= 32
+T_PUDDLE	= 33
+T_BED		= 34
+T_PILLAR	= 35
+T_TABLE		= 36
+T_LAMP		= 37
+T_BLOOD		= 38
+T_PLANT		= 39
+T_DOGFOOD	= 40
+T_CEIL_LIGHT	= 41
+T_CAGE		= 42
 
-; tile 19..32 → frame ($ff = skip)
+; tile 19..34 → frame
 item_frm_19
 	!byte IF_AMMO_CLIP, IF_FIRSTAID, IF_FOOD, IF_KEY_GOLD, IF_KEY_SILVER
-	!byte $ff, $ff, IF_MACHINEGUN, IF_CHAINGUN
+	!byte IF_CROSS, IF_CHALICE, IF_BIBLE, IF_CROWN
+	!byte IF_MACHINEGUN, IF_CHAINGUN
 	!byte IF_HANGED_MAN, IF_WELL, IF_FLAG, IF_PUDDLE, IF_BED
-; tile 33..40 → frame
-item_frm_33
+; tile 35..42 → frame
+item_frm_35
 	!byte IF_URN, IF_TABLE_CHAIRS, IF_CHANDELIER, IF_GIBS, IF_TREE
 	!byte IF_DOG_FOOD, IF_CEILING_LIGHT, IF_SKELETON_CAGE
 
@@ -45,7 +49,7 @@ item_tile_frm
 	sec
 	sbc #T_PILLAR
 	tay
-	lda item_frm_33,y
+	lda item_frm_35,y
 	rts
 .itf_pick
 	sec
@@ -165,7 +169,9 @@ item_apply
 	jmp item_take_gun
 .ia_cg
 	cmp #IF_CHAINGUN
-	bne .ia_no
+	beq .ia_cg_gun
+	jmp item_try_treasure
+.ia_cg_gun
 	ldx #WPN_CHAINGUN
 	; fall through
 

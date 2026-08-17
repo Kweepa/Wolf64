@@ -59,7 +59,7 @@ prof_init
 	sta dt_ms
 	rts
 
-; frame_cy >> 10 → dt_ms (HUD binary-ms). 0 → 20; saturate at 255.
+; frame_cy >> 10 → dt_ms (HUD binary-ms). 0 stays 0 (no fake step); saturate at 255.
 calc_frame_dt
 	lda frame_cy + 1
 	sta tmp0
@@ -70,10 +70,7 @@ calc_frame_dt
 	ror tmp0
 	tay					; hi after >>2
 	bne .cfd_sat
-	lda tmp0
-	bne .cfd_ok
-	lda #20
-.cfd_ok
+	lda tmp0				; sub-ms → 0 (SuperCPU-safe; was fake 20)
 	sta dt_ms
 	rts
 .cfd_sat
@@ -116,8 +113,10 @@ prof_store_t0
 	sta frame_t0 + 3
 	rts
 
-; Period since last call → frame_cy (countdown timers: t0 − now)
+; Period since last call → frame_cy (countdown timers: t0 − now).
+; Spin until ≥1 binary-ms (1024 φ2) so SuperCPU sub-ms frames still get dt_ms≥1.
 prof_frame_sample
+.pfs_wait
 	jsr prof_read_casc
 	sec
 	lda frame_t0
@@ -132,6 +131,14 @@ prof_frame_sample
 	lda frame_t0 + 3
 	sbc casc_now + 3
 	sta frame_cy + 3
+	lda frame_cy + 1
+	cmp #4				; ≥ $0400 cycles?
+	bcs .pfs_ok
+	lda frame_cy + 2
+	ora frame_cy + 3
+	bne .pfs_ok
+	beq .pfs_wait
+.pfs_ok
 	jmp prof_store_t0
 
 !if PROFILE = 1 {

@@ -48,6 +48,7 @@ CORE = [
     (4, "MOVEGUN2"),
     (5, "MOVEGUN1"),
     (39, "ESCPRESSED"),
+    (35, "BONUS1"),
 ]
 
 # Boot menu only — small table; indices are local to menu.prg

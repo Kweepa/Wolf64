@@ -435,11 +435,11 @@ update_weapon
 	jsr .muzzle_expired
 
 .uw_keys
-	lda key_fire
-	beq .uw_up
+	; Tick fire_rpt every frame (wall dt), not only while key_fire — otherwise
+	; SuperCPU gaps between IRQ samples freeze the cooldown after one shot.
 	lda fire_rpt_l
 	ora fire_rpt_h
-	beq .uw_shot
+	beq .uw_chk
 	sec
 	lda fire_rpt_l
 	sbc dt_ms
@@ -447,7 +447,16 @@ update_weapon
 	lda fire_rpt_h
 	sbc #0
 	sta fire_rpt_h
-	bcs .uw_done
+	bcs .uw_chk
+	lda #0
+	sta fire_rpt_l
+	sta fire_rpt_h
+.uw_chk
+	lda key_fire
+	beq .uw_up
+	lda fire_rpt_l
+	ora fire_rpt_h
+	bne .uw_done
 .uw_shot
 	jsr .fire_shot
 	lda wpn_fire_ms_l
@@ -457,9 +466,6 @@ update_weapon
 .uw_done
 	rts
 .uw_up
-	lda #0
-	sta fire_rpt_l
-	sta fire_rpt_h
 	lda wpn_pose
 	cmp #POSE_FIRE
 	bne .uw_up_rts

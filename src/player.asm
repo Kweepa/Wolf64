@@ -93,7 +93,6 @@ player_move
 	sta mapy
 	jsr probe_solid
 	beq .x_ok
-	jsr try_open_door
 	jmp .try_y
 .x_ok
 	lda tmp2
@@ -114,7 +113,6 @@ player_move
 	sta mapy
 	jsr probe_solid
 	beq .y_ok
-	jsr try_open_door
 	jmp .push
 .y_ok
 	lda tmp2
@@ -122,8 +120,8 @@ player_move
 	lda tmp3
 	sta playery_h
 .push
-	lda #WALL_MARGIN
-	jmp push_walls
+	; Contact open (margin / this-step tile cross) then WALL_MARGIN push
+	jmp player_bump_then_push
 
 ; A = keep-out frac. tmp2 = lo, tmp3 = $100−A; tmp4/5 = tile (probe_solid clobbers tmp0/1).
 push_walls

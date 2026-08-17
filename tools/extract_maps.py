@@ -50,21 +50,23 @@ T_GOLD_KEY = 22
 T_SILVER_KEY = 23
 T_CROSS = 24
 T_CHALICE = 25
-T_MACHINEGUN = 26
-T_CHAINGUN = 27
-T_HANGED = 28
-T_WELL = 29
-T_FLAG = 30
-T_PUDDLE = 31
-T_BED = 32
-T_PILLAR = 33
-T_TABLE = 34
-T_LAMP = 35
-T_BLOOD = 36
-T_PLANT = 37
-T_DOGFOOD = 38
-T_CEIL_LIGHT = 39
-T_CAGE = 40
+T_BIBLE = 26
+T_CROWN = 27
+T_MACHINEGUN = 28
+T_CHAINGUN = 29
+T_HANGED = 30
+T_WELL = 31
+T_FLAG = 32
+T_PUDDLE = 33
+T_BED = 34
+T_PILLAR = 35
+T_TABLE = 36
+T_LAMP = 37
+T_BLOOD = 38
+T_PLANT = 39
+T_DOGFOOD = 40
+T_CEIL_LIGHT = 41
+T_CAGE = 42
 T_PLAYER = 49  # +0..3 NESW
 T_GUARD_PATROL = 53
 T_GUARD_AMBUSH = 57
@@ -158,8 +160,8 @@ STATIC_MAP = {
     28: T_CHAINGUN,
     29: T_CROSS,
     30: T_CHALICE,
-    31: T_CROSS,  # bible -> cross
-    32: T_CHALICE,  # crown -> chalice
+    31: T_BIBLE,
+    32: T_CROWN,
     33: T_FIRSTAID,  # 1-up
     34: T_BLOOD,  # gibs
     35: T_PILLAR,  # barrel
@@ -179,9 +181,9 @@ STATIC_MAP = {
 
 
 def is_spawn_item_tile(tile: int) -> bool:
-    """Tiles that map AABB cull/pickup treat as world items (cross/chalice skipped)."""
+    """Tiles that map AABB cull/pickup treat as world items."""
     if T_AMMO <= tile <= T_BED:
-        return tile not in (T_CROSS, T_CHALICE)
+        return True
     return T_PILLAR <= tile <= T_CAGE
 
 

@@ -7,8 +7,10 @@ Build C64 item atlas from boxed sprites on items_sheet_selected.png.
   3. Scale uniformly so the tallest content height → 16px
   4. Remap to Pepto C64 palette (no floor grey $c; those pixels → light blue $e)
   5. Write textures/items/c64/items_c64_sheet.png (+ named PNGs)
+     — 5×4 boxed items, then cross/chalice/bible/crown on row 5
 
 Hand-drawn marks use C64 light blue (same as dogs_sheet) or white.
+Never overwrites items_c64_sheet_edit.png (hand edits; pack_items reads that).
 """
 
 from __future__ import annotations
@@ -28,8 +30,9 @@ from process_guard_c64 import FLOOR_GREY, opaque_bbox  # noqa: E402
 SRC_COLS = 8
 SRC_CELL = 64
 OUT_COLS = 5
-OUT_ROWS = 4  # 19 boxed sprites; last cell empty
+OUT_ROWS = 5  # 5×5 atlas (row 5 = treasures; last cell empty)
 TARGET_H = 16
+TREASURE_NAMES = ("cross", "chalice", "bible", "crown")
 
 # Same annotation colour as dogs_sheet.png (Pepto light blue).
 MARK_RGB = (107, 94, 181)
@@ -190,6 +193,13 @@ def to_c64(img: Image.Image) -> Image.Image:
     return out
 
 
+def source_cell_rect(name: str) -> tuple[int, int, int, int]:
+    idx = ITEM_NAMES.index(name)
+    col, row = idx % SRC_COLS, idx // SRC_COLS
+    x0, y0 = col * SRC_CELL, row * SRC_CELL
+    return x0, y0, x0 + SRC_CELL, y0 + SRC_CELL
+
+
 def crop_item(src: Image.Image, rect: tuple[int, int, int, int]) -> Image.Image:
     crop = src.crop(rect).convert("RGBA")
     crop = strip_mark_color(crop, MARK_RGB)
@@ -225,7 +235,7 @@ def main() -> int:
 
     boxes = detect_boxes(sel, src)
     print(f"boxed items: {len(boxes)}")
-    if len(boxes) > OUT_COLS * OUT_ROWS:
+    if len(boxes) > OUT_COLS * 4:
         raise ValueError(f"{len(boxes)} items > {OUT_COLS}x{OUT_ROWS} sheet")
 
     contents: list[tuple[str, Image.Image, int]] = []
@@ -246,11 +256,23 @@ def main() -> int:
         im.save(path)
         print(f"  {name:16} src_h={ch:2d} -> {im.size[0]}x{im.size[1]}  {path.name}")
 
+    boxed_names = {name for name, _ in boxes}
+    for name in TREASURE_NAMES:
+        if name in boxed_names:
+            continue
+        content = crop_item(src, source_cell_rect(name))
+        im = process_item(content, scale)
+        finals.append((name, im))
+        path = out_dir / f"{name}.png"
+        im.save(path)
+        print(f"  {name:16} src_h={content.size[1]:2d} -> {im.size[0]}x{im.size[1]}  {path.name}  (row 5)")
+
     max_w = max(im.size[0] for _, im in finals)
     max_h = max(im.size[1] for _, im in finals)
+    rows = (len(finals) + OUT_COLS - 1) // OUT_COLS
     # Floor-align (bottom of cell). Ceiling props (chandelier, ceiling_light,
     # hanged_man, skeleton_cage, …) get a top-align special case later.
-    sheet = Image.new("RGBA", (OUT_COLS * max_w, OUT_ROWS * max_h), (0, 0, 0, 0))
+    sheet = Image.new("RGBA", (OUT_COLS * max_w, rows * max_h), (0, 0, 0, 0))
     for i, (_, im) in enumerate(finals):
         cx = (i % OUT_COLS) * max_w + (max_w - im.size[0]) // 2
         cy = (i // OUT_COLS) * max_h + (max_h - im.size[1])
@@ -258,12 +280,14 @@ def main() -> int:
 
     sheet_path = out_dir / "items_c64_sheet.png"
     sheet.save(sheet_path)
-    print(f"sheet {sheet.size[0]}x{sheet.size[1]} ({OUT_COLS}x{OUT_ROWS} of {max_w}x{max_h}) -> {sheet_path}")
+    print(f"sheet {sheet.size[0]}x{sheet.size[1]} ({OUT_COLS}x{rows} of {max_w}x{max_h}) -> {sheet_path}")
 
     edit_path = out_dir / "items_c64_sheet_edit.png"
-    if not edit_path.is_file() or Image.open(edit_path).size != sheet.size:
+    if not edit_path.is_file():
         sheet.save(edit_path)
         print(f"wrote edit sheet {edit_path.name}")
+    else:
+        print(f"left existing {edit_path.name} untouched")
     return 0
 
 

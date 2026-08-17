@@ -35,6 +35,7 @@ SOUND_PUSHWALL	= 27
 SOUND_MOVEGUN2	= 28
 SOUND_MOVEGUN1	= 29
 SOUND_ESCPRESSED	= 30
+SOUND_BONUS1	= 31
 
 pc_hitwall
 	!byte 3, 131, 142, 134
@@ -118,11 +119,15 @@ pc_movegun1
 	!byte 3, 114, 60, 114
 pc_escpressed
 	!byte 8, 153, 130, 113, 95, 78, 55, 45, 32
+pc_bonus1
+	!byte 40, 61, 53, 49, 46, 45, 51, 57, 64, 71, 74, 73, 69, 58, 41, 33
+	!byte 30, 29, 28, 31, 35, 41, 46, 49, 47, 41, 30, 20, 0, 0, 0, 18
+	!byte 18, 18, 0, 18, 18, 18, 18, 18, 18
 
-; unique sound payload 575 bytes
+; unique sound payload 616 bytes
 sound_priorities
 	!byte 1, 99, 50, 50, 90, 20, 20, 50, 50, 50, 50, 50, 50, 50, 20, 50
-	!byte 50, 50, 50, 50, 49, 90, 80, 80, 85, 85, 99, 50, 1, 1, 10
+	!byte 50, 50, 50, 50, 49, 90, 80, 80, 85, 85, 99, 50, 1, 1, 10, 70
 
 sound_table
 	!word pc_hitwall
@@ -156,3 +161,4 @@ sound_table
 	!word pc_movegun2
 	!word pc_movegun1
 	!word pc_escpressed
+	!word pc_bonus1

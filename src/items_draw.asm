@@ -1,6 +1,25 @@
 ; World item draw — linked at ITEM_SPRITES after gfx blob
 !zone items_draw
 
+; A = frame. C=1 collected (treasure), C=0 leave (unknown / prop)
+item_try_treasure
+	cmp #IF_CROSS
+	beq .itt_yes
+	cmp #IF_CHALICE
+	beq .itt_yes
+	cmp #IF_BIBLE
+	beq .itt_yes
+	cmp #IF_CROWN
+	bne .itt_no
+.itt_yes
+	lda #SOUND_BONUS1
+	jsr play_sound
+	sec
+	rts
+.itt_no
+	clc
+	rts
+
 ; A = signed sintab/costab (−64..64) → (A*3)>>6 tile steps (−3..3)
 item_dir_tiles
 	sta e_acc_l

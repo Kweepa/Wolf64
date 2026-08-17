@@ -16,7 +16,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $0801  disposable boot → low BSS overlay (col_* / LoadPrg scrap)
 ; $08C0  reboot stub (installed at locode_entry); $08FD effects_vol; $08FE game_complete; $08FF difficulty
 ; $0900  locode — game code, no enemy modules (disk: locode); MENU overlay pre-load
-;        col_wallz_h / col_enemy live after end_sfx (not on boot page)
+;        col_wallz_h lives after end_sfx (not on boot page); col_enemy at end_itm
 ; $033C  locode runtime BSS (cassette buffer; not in locode PRG)
 ; $3800  Judd SQTAB (disk: sqt; 2K in locode–screen gap)
 ; $4000  VIC screen A / B ($4400) (disk: scr)
@@ -26,6 +26,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $6000  bitmap (8K, disk: bmp)
 ; $8000  wall painters only (disk: paint)
 ; $B8DD  PC SFX (disk: sfx); item/vis scratch + cold enemy SoA after end_sfx → <$C000
+;        col_enemy lives in itm→bitmap slack (end_itm)
 ; $C000  enemy block — code, AI, gfx, hot pos/facing/flags (disk: enemy)
 ; $0100  vis_slot + vis_perp + enemy_burst; STACK_GUARD=$01D0
 ; $EF00  map (disk: e1m1… via LoadLevel)
@@ -365,6 +366,96 @@ end_paint = *
 *= SFX_BASE
 !source "pcsounds.asm"
 !source "pcsfreq.asm"
+
+; Open only the neighbor we are walking into: wish on that axis, and either
+; already on that keep-out face or this step's dest hi is that neighbor.
+; Loaded with sfx PRG (before BSS overlay).
+player_bump_then_push
+	lda move_dx_h
+	bmi .pbt_west
+	ora move_dx_l
+	beq .pbt_y
+	lda playerx_l
+	cmp #$100 - WALL_MARGIN
+	bcs .pbt_east
+	clc
+	adc move_dx_l
+	lda playerx_h
+	adc move_dx_h
+	cmp playerx_h
+	beq .pbt_y
+.pbt_east
+	lda playerx_h
+	clc
+	adc #1
+	sta mapx
+	lda playery_h
+	sta mapy
+	jsr try_open_door
+	jmp .pbt_y
+.pbt_west
+	lda playerx_l
+	cmp #WALL_MARGIN + 1
+	bcc .pbt_westgo
+	clc
+	adc move_dx_l
+	lda playerx_h
+	adc move_dx_h
+	cmp playerx_h
+	beq .pbt_y
+.pbt_westgo
+	lda playerx_h
+	sec
+	sbc #1
+	sta mapx
+	lda playery_h
+	sta mapy
+	jsr try_open_door
+.pbt_y
+	lda move_dy_h
+	bmi .pbt_north
+	ora move_dy_l
+	beq .pbt_push
+	lda playery_l
+	cmp #$100 - WALL_MARGIN
+	bcs .pbt_south
+	clc
+	adc move_dy_l
+	lda playery_h
+	adc move_dy_h
+	cmp playery_h
+	beq .pbt_push
+.pbt_south
+	lda playerx_h
+	sta mapx
+	lda playery_h
+	clc
+	adc #1
+	sta mapy
+	jsr try_open_door
+	jmp .pbt_push
+.pbt_north
+	lda playery_l
+	cmp #WALL_MARGIN + 1
+	bcc .pbt_northgo
+	clc
+	adc move_dy_l
+	lda playery_h
+	adc move_dy_h
+	cmp playery_h
+	beq .pbt_push
+.pbt_northgo
+	lda playerx_h
+	sta mapx
+	lda playery_h
+	sec
+	sbc #1
+	sta mapy
+	jsr try_open_door
+.pbt_push
+	lda #WALL_MARGIN
+	jmp push_walls
+
 end_sfx = *
 !if end_sfx > ENEMY_BASE {
 	!error "SFX overlaps ENEMY_BASE; end=$", end_sfx
@@ -372,11 +463,10 @@ end_sfx = *
 
 ; Painter SMC: tex id already patched per half_h ($ff = none)
 ph_h_done	= end_sfx			; [0..MAX_HALF_H]
-; Column depth/hit buffers relocated off boot page (room for REBOOT_STUB)
+; Column depth relocated off boot page (room for REBOOT_STUB)
 col_wallz_h	= ph_h_done + MAX_HALF_H + 1
-col_enemy	= col_wallz_h + 40
 ; Per-frame item scratch + vis depth/order — SFX→enemy gap
-item_x		= col_enemy + 40
+item_x		= col_wallz_h + 40
 item_y		= item_x + MAX_VIS
 item_frm	= item_y + MAX_VIS
 vis_depth_l	= item_frm + MAX_VIS
@@ -391,6 +481,11 @@ enemy_state	= enemy_hp + MAX_ENEMIES
 end_item_soa	= enemy_state + MAX_ENEMIES
 !if end_item_soa > ENEMY_BASE {
 	!error "Item/vis/enemy BSS overlaps ENEMY_BASE; end=$", end_item_soa
+}
+; Column hit buffer in itm→bitmap slack (freed SFX gap for BONUS1)
+col_enemy	= end_itm
+!if col_enemy + 40 > BITMAP {
+	!error "col_enemy overlaps BITMAP; end=$", col_enemy + 40
 }
 
 ; Under stack: vis list + perp + burst (packs to STACK_GUARD)

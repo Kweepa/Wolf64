@@ -29,6 +29,7 @@ PAINTERS	= $8000
 PAINTERS_SIZE	= $38DD			; painters.bin length (must match build)
 SFX_BASE	= PAINTERS + PAINTERS_SIZE	; $B8DD — pcsounds + pcsfreq_hi
 ; Item scratch + vis_depth/order live in RAM after end_sfx (see wolf64.asm); must end ≤ ENEMY_BASE
+; col_enemy is 40 bytes at end_itm (itm→bitmap slack)
 ENEMY_BASE	= $C000			; contiguous enemy code+gfx+hot SoA
 MAP		= $EF00			; 4K level (under-KERNAL; LoadLevel)
 ; Cassette buffer — locode runtime BSS (disk LOAD does not use tape buf)

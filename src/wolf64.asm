@@ -23,7 +23,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 ; $4800  textures (disk: tex)
 ; $5000  weapon HUD sprites (disk: wpn; ends at ITEM_SPRITES)
 ; $5880  world item gfx (disk: itm; to bitmap $6000)
-; $6000  bitmap (8K, disk: bmp)
+; $6000  bitmap (8K, disk: bmp); score code in hidden UI tail @ $64B0
 ; $8000  wall painters only (disk: paint)
 ; $B8DD  PC SFX (disk: sfx); item/vis scratch + cold enemy SoA after end_sfx → <$C000
 ;        col_enemy lives in itm→bitmap slack (end_itm)
@@ -236,8 +236,7 @@ ai_dirtry	= ai_old + 1			; 5 bytes
 vis_count	= ai_dirtry + 5
 vis_i		= vis_count + 1
 vis_tok		= vis_i + 1			; stable vis_slot/vis_depth index
-enemy_idx	= vis_tok + 1
-probe_doors_pass = enemy_idx + 1
+probe_doors_pass = vis_tok + 1
 e_dx_l		= probe_doors_pass + 1
 e_dx_h		= e_dx_l + 1
 e_dy_l		= e_dx_h + 1
@@ -290,7 +289,11 @@ mouse_x		= turn_acc_h + 1			; last SID POTX ($d419)
 frame_t0	= mouse_x + 1			; 4 bytes
 frame_cy	= frame_t0 + 4
 casc_now	= frame_cy + 4
-end_tape_bss	= casc_now + 4
+player_score_l	= casc_now + 4			; displayed score / 100
+player_score_h	= player_score_l + 1
+score_1up_l	= player_score_h + 1		; next extra-life threshold (units)
+score_1up_h	= score_1up_l + 1
+end_tape_bss	= score_1up_h + 1
 !if end_tape_bss > TAPE_BSS_END {
 	!error "Tape BSS overflows cassette buffer; end=$", end_tape_bss
 }
@@ -340,9 +343,18 @@ end_itm = *
 
 ; =========================================================================
 ; bmp — full MCM bitmap @ $6000 (UI + viewport pattern)
+; Hidden code @ $64B0: row 3 cols 30–39 + row 4 (400 bytes).
 ; =========================================================================
 *= BITMAP
-!binary "../textures/ui/bitmap.bin", 8000
+!binary "../textures/ui/bitmap.bin", 3 * 320 + 30 * 8
+!source "score.asm"
+end_score = *
+!if end_score > BITMAP + 5 * 320 {
+	!error "Score code overlaps 3D bitmap row 5; end=$", end_score
+}
+!warn "Score code free $", BITMAP + 5 * 320 - end_score, " (end=$", end_score, ")"
+*= BITMAP + 5 * 320
+!binary "../textures/ui/bitmap.bin", 20 * 320, 5 * 320
 ; Profiler hexfont in unused VIC bitmap tail ($7F40..)
 !source "_hexfont.inc"
 end_bmp = *

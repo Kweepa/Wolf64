@@ -30,7 +30,7 @@ credits_text
 	!scr "Kevin Cloud, Bobby Prince,",0
 	!scr "Jay Wilbur, and Jason Blochowiak.",0
 	!scr " ",0
-	!scr "v1.2",0
+	!scr "v1.4",0
 	!byte 0
 
 order_text

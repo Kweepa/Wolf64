@@ -302,6 +302,13 @@ player_border_tick
 player_init_game
 	lda #START_LIVES
 	sta player_lives
+	lda #0
+	sta player_score_l
+	sta player_score_h
+	lda #<SCORE_1UP
+	sta score_1up_l
+	lda #>SCORE_1UP
+	sta score_1up_h
 	; fall through — ammo + knife/pistol, then HP
 
 ; After death restart — default ammo/weapons + full HP; keep lives
@@ -390,7 +397,9 @@ handle_level_want
 	pha					; 1=restart 2=next 3=new 4=secret
 	lsr
 	bcs .hlw_gotwant			; odd: restart / new game
-	; 2 or 4: jingle, then hold on last frame until SID is idle
+	; 2 or 4: 15,000 then jingle, hold until SID idle
+	lda #150
+	jsr score_add_hud_and_redraw
 	lda #SOUND_LEVELDONE
 	jsr play_sound
 -	lda sound_index

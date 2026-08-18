@@ -26,6 +26,7 @@ T_PLANT		= 39
 T_DOGFOOD	= 40
 T_CEIL_LIGHT	= 41
 T_CAGE		= 42
+T_ONEUP		= 43
 
 ; tile 19..34 → frame
 item_frm_19
@@ -33,10 +34,10 @@ item_frm_19
 	!byte IF_CROSS, IF_CHALICE, IF_BIBLE, IF_CROWN
 	!byte IF_MACHINEGUN, IF_CHAINGUN
 	!byte IF_HANGED_MAN, IF_WELL, IF_FLAG, IF_PUDDLE, IF_BED
-; tile 35..42 → frame
+; tile 35..43 → frame
 item_frm_35
 	!byte IF_URN, IF_TABLE_CHAIRS, IF_CHANDELIER, IF_GIBS, IF_TREE
-	!byte IF_DOG_FOOD, IF_CEILING_LIGHT, IF_SKELETON_CAGE
+	!byte IF_DOG_FOOD, IF_CEILING_LIGHT, IF_SKELETON_CAGE, IF_ONEUP
 
 ; A = map tile → A = frame, or $ff if not a drawable/collectible item
 item_tile_frm
@@ -44,7 +45,7 @@ item_tile_frm
 	bcc .itf_no
 	cmp #T_BED + 1
 	bcc .itf_pick
-	cmp #T_CAGE + 1
+	cmp #T_ONEUP + 1
 	bcs .itf_no
 	sec
 	sbc #T_PILLAR
@@ -170,7 +171,7 @@ item_apply
 .ia_cg
 	cmp #IF_CHAINGUN
 	beq .ia_cg_gun
-	jmp item_try_treasure
+	jmp item_try_oneup
 .ia_cg_gun
 	ldx #WPN_CHAINGUN
 	; fall through

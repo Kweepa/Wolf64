@@ -12,4 +12,4 @@ Adrian Carmack, Tom Hall,
 Kevin Cloud, Bobby Prince,
 Jay Wilbur, and Jason Blochowiak.
 
-v1.3
+v1.4

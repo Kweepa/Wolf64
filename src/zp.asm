@@ -69,6 +69,7 @@ door_cx		= $c8		; last door cell X ($ff = empty)
 door_cy		= $c9
 door_corient	= $ca
 door_cpos	= $cb
+enemy_idx	= $cc		; current enemy (was tape BSS; ZP saves ~73 in enemy PRG)
 dt_rem8		= $cf		; leftover ms toward next enemy dt8 tick
 
 move_dx_l	= $3d

@@ -4,14 +4,14 @@
 ; A = frame. C=1 collected (treasure), C=0 leave (unknown / prop)
 item_try_treasure
 	cmp #IF_CROSS
-	beq .itt_yes
-	cmp #IF_CHALICE
-	beq .itt_yes
-	cmp #IF_BIBLE
-	beq .itt_yes
-	cmp #IF_CROWN
-	bne .itt_no
-.itt_yes
+	bcc .itt_no
+	cmp #IF_CROWN + 1
+	bcs .itt_no
+	sec
+	sbc #IF_CROSS
+	tay
+	lda .itt_pts,y
+	jsr score_add
 	lda #SOUND_BONUS1
 	jsr play_sound
 	sec
@@ -19,6 +19,8 @@ item_try_treasure
 .itt_no
 	clc
 	rts
+.itt_pts
+	!byte 1, 5, 10, 50			; cross, chalice, chest, crown
 
 ; A = signed sintab/costab (−64..64) → (A*3)>>6 tile steps (−3..3)
 item_dir_tiles

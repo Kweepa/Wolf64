@@ -67,6 +67,7 @@ T_PLANT = 39
 T_DOGFOOD = 40
 T_CEIL_LIGHT = 41
 T_CAGE = 42
+T_ONEUP = 43
 T_PLAYER = 49  # +0..3 NESW
 T_GUARD_PATROL = 53
 T_GUARD_AMBUSH = 57
@@ -162,7 +163,7 @@ STATIC_MAP = {
     30: T_CHALICE,
     31: T_BIBLE,
     32: T_CROWN,
-    33: T_FIRSTAID,  # 1-up
+    33: T_ONEUP,
     34: T_BLOOD,  # gibs
     35: T_PILLAR,  # barrel
     36: T_WELL,
@@ -184,7 +185,7 @@ def is_spawn_item_tile(tile: int) -> bool:
     """Tiles that map AABB cull/pickup treat as world items."""
     if T_AMMO <= tile <= T_BED:
         return True
-    return T_PILLAR <= tile <= T_CAGE
+    return T_PILLAR <= tile <= T_ONEUP
 
 
 # Runtime enemy pool (must match MAX_ENEMIES in src/mem.asm).

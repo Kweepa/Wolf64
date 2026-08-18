@@ -7,7 +7,7 @@ Build C64 item atlas from boxed sprites on items_sheet_selected.png.
   3. Scale uniformly so the tallest content height → 16px
   4. Remap to Pepto C64 palette (no floor grey $c; those pixels → light blue $e)
   5. Write textures/items/c64/items_c64_sheet.png (+ named PNGs)
-     — 5×4 boxed items, then cross/chalice/bible/crown on row 5
+     — 5×4 boxed items, then cross/chalice/bible/crown/oneup on row 5
 
 Hand-drawn marks use C64 light blue (same as dogs_sheet) or white.
 Never overwrites items_c64_sheet_edit.png (hand edits; pack_items reads that).
@@ -30,9 +30,9 @@ from process_guard_c64 import FLOOR_GREY, opaque_bbox  # noqa: E402
 SRC_COLS = 8
 SRC_CELL = 64
 OUT_COLS = 5
-OUT_ROWS = 5  # 5×5 atlas (row 5 = treasures; last cell empty)
+OUT_ROWS = 5  # 5×5 atlas (row 5 = treasures + extra life)
 TARGET_H = 16
-TREASURE_NAMES = ("cross", "chalice", "bible", "crown")
+TREASURE_NAMES = ("cross", "chalice", "bible", "crown", "oneup")
 
 # Same annotation colour as dogs_sheet.png (Pepto light blue).
 MARK_RGB = (107, 94, 181)

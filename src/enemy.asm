@@ -1918,6 +1918,7 @@ damage_actor
 	sta enemy_state_t,x
 	lda #EF_ACTIVE				; keep drawable; drop walk/ambush
 	sta enemy_flags,x
+	jsr score_add_kill
 	lda enemy_type,x
 	cmp #ET_DOG
 	bne .da_scream

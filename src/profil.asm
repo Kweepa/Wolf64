@@ -441,7 +441,7 @@ prof_print
 	rts
 
 ; ---------------------------------------------------------------------------
-; Status bar from glyph bank rows 3-4. I/O in ($01=$35).
+; Status bar. I/O in ($01=$35).
 ui_update
 	lda ui_dirty
 	bne +
@@ -454,6 +454,11 @@ ui_update
 	lda level_num
 	ldy #2
 	jsr .ui_num
++
+	lda ui_dirty
+	and #UI_DIRTY_SCORE
+	beq +
+	jsr ui_score
 +
 	lda ui_dirty
 	and #UI_DIRTY_LIVES
@@ -517,23 +522,27 @@ ui_update
 	ldx pp_tmp_h
 .un_out
 	pla
-	jsr .ui_dig
+	jsr ui_dig
 	inx
 	dec pp_dig_h
 	bne .un_out
 	rts
 
-; A=digit X=dest col (preserved)
-.ui_dig
+; A=digit X=dest col (preserved). Src: bitmap row 3, cols digit*2 / digit*2+1.
+ui_dig
 	sta tmp4
 	stx tmp5
-	lda #0
+	asl tmp4
+	lda #3
 	ldy #1
 	jsr .ui_blitcell
-	lda #1
+	inc tmp4
+	lda #3
 	ldy #2
 	jsr .ui_blitcell
-	ldx tmp4
+	lda tmp4
+	lsr
+	tax
 	lda UI_ATTR_DIGIT,x
 	ldy tmp5
 	sta SCREEN+40,y
@@ -546,8 +555,8 @@ ui_update
 	ldx tmp5
 	rts
 
-; tmp4=src col, tmp5=dst col, A=src row ofs (0=r3,1=r4), Y=dst row (0..2)
-; Clobbers tmp0-tmp3.
+; tmp4=src col, tmp5=dst col, A=src row (0..4), Y=dst row (0..2)
+; Clobbers tmp0-tmp3. Src col*8 is 16-bit (face bank starts at col 32).
 .ui_blitcell
 	sta tmp3
 	tya
@@ -557,10 +566,14 @@ ui_update
 	asl
 	asl
 	sta tmp0
-	lda #<UI_BMP_ROW3
-	ldx #>UI_BMP_ROW3
+	lda #0
+	rol
+	sta tmp1				; col*8 (cols 32–39 need the high byte)
+	lda #<UI_BMP_ROW0
+	ldx #>UI_BMP_ROW0
 	ldy tmp3
 	beq +
+-
 	clc
 	adc #<$140
 	pha
@@ -568,14 +581,15 @@ ui_update
 	adc #>$140
 	tax
 	pla
+	dey
+	bne -
 +
 	clc
 	adc tmp0
 	sta tmp0
-	bcc +
-	inx
-+
-	stx tmp1
+	txa
+	adc tmp1
+	sta tmp1
 	lda tmp5
 	asl
 	asl
@@ -634,8 +648,8 @@ ui_update
 .uf_got
 	asl
 	clc
-	adc #UI_FACE_TOP0
-	sta pp_dig_h				; top/bot src left
+	adc #UI_FACE_COL0
+	sta pp_dig_h				; src left col
 	lda #0
 	sta pp_dig_t				; 0..5 = dy*2+dx
 .uf_c
@@ -645,38 +659,13 @@ ui_update
 	adc #UI_COL_FACE
 	sta tmp5
 	lda pp_dig_t
-	lsr					; dy
-	cmp #1
-	beq .uf_mid
-	; dy0: src r3 @ top; dy2: src r4 @ top
-	tax					; save dy
-	lda pp_dig_t
 	and #1
 	clc
 	adc pp_dig_h
 	sta tmp4
-	lda #0					; src ofs 0 = row3
-	cpx #0
-	bne +
-	ldy #0
-	beq .uf_do
-+
-	lda #1					; src ofs 1 = row4
-	ldy #2
-	bne .uf_do
-.uf_mid
-	lda pp_dig_h
-	clc
-	adc #UI_FACE_MID0 - UI_FACE_TOP0
-	sta tmp4
 	lda pp_dig_t
-	and #1
-	clc
-	adc tmp4
-	sta tmp4
-	lda #0
-	ldy #1
-.uf_do
+	lsr					; dy = src and dest row
+	tay
 	jsr .ui_blitcell
 	ldx tmp5
 	lda pp_dig_t

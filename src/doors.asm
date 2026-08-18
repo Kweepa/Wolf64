@@ -445,7 +445,7 @@ doors_update
 	sta door_state,y
 	jmp .du_next
 
-; Z=1 if player or any active enemy is on door_x/y for slot Y.
+; Z=1 if player or any living (not dying/dead) active enemy is on door_x/y.
 ; Preserves Y; clobbers A and uses door_savex for X.
 .du_blocker_in
 	lda door_x,y
@@ -463,6 +463,9 @@ doors_update
 	lda enemy_flags,x
 	and #$01				; EF_ACTIVE
 	beq .du_bi_nx
+	lda enemy_state,x
+	cmp #5				; ES_DYING+ — corpses do not pin slots
+	bcs .du_bi_nx
 	lda enemy_xh,x
 	cmp door_x,y
 	bne .du_bi_nx

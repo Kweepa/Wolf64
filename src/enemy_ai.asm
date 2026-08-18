@@ -599,8 +599,7 @@ enemy_chase_one
 	jsr enemy_inside_minactor
 	bcs .ec_do_stand
 .ec_go
-	lda #1
-	sta probe_doors_pass
+	jsr enemy_set_door_pass
 	lda enemy_flags,x
 	and #(EF_ACTIVE | EF_FIRSTATTACK | EF_SHOT_DONE)
 	sta enemy_flags,x
@@ -688,16 +687,7 @@ enemy_chase_one
 	and #EF_MOVING
 	beq .ec_out				; no step → skip push_walls
 	jsr enemy_push_walls
-	ldx enemy_idx
-	lda enemy_xh,x
-	sta mapx
-	sta tmp0
-	lda enemy_yh,x
-	sta mapy
-	sta tmp1
-	jsr door_is_door_xy
-	beq .ec_out
-	jsr try_open_door
+	jsr enemy_try_door_open
 .ec_out
 	lda #0
 	sta probe_doors_pass
@@ -744,8 +734,7 @@ enemy_try_face
 	lda enemy_yh,x
 	adc .etf_dy,y
 	sta mapy
-	lda #1
-	sta probe_doors_pass
+	jsr enemy_set_door_pass
 	jsr probe_solid
 	php
 	lda #0
@@ -1538,6 +1527,7 @@ enemy_spawn_one
 	lda #0
 	sta enemy_state_t,x
 	sta enemy_burst,x
+	sta enemy_vel_rem,x
 	ldy enemy_type,x
 	lda enemy_hp_tab,y
 	sta enemy_hp,x

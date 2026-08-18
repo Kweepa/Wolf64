@@ -144,6 +144,7 @@ enemies_init
 	sta enemy_hp,x
 	sta enemy_type,x
 	sta enemy_burst,x
+	sta enemy_vel_rem,x
 	inx
 	cpx #MAX_ENEMIES
 	bne .ei_clr
@@ -477,19 +478,59 @@ eu_state_hi
 .eu_done
 	rts
 
-; A = speed const → vel_ms = (A * dt_ms) >> 8  (tiles/sec ≈ A*1000/256)
+; A = speed const → vel_ms = (A * dt_ms + rem) >> 8  (tiles/sec ≈ A*1000/256)
+; SuperCPU dt_ms 1..7 would otherwise leave patrol/chase vel_ms=0 forever.
 enemy_speed_vel
 	tay
 	lda dt_ms
 	jsr mul_8x8				; X=lo A=hi
+	sta tmp1
+	stx tmp0
+	ldx enemy_idx
+	clc
+	lda tmp0
+	adc enemy_vel_rem,x
+	sta enemy_vel_rem,x
+	lda tmp1
+	adc #0
 	sta vel_ms
+	rts
+
+; probe_doors_pass = 0 if dog (cannot open / walk closed doors), else 1.
+enemy_set_door_pass
+	ldy #0
+	ldx enemy_idx
+	lda enemy_type,x
+	cmp #ET_DOG
+	beq +
+	iny
++
+	sty probe_doors_pass
+	rts
+
+; Occupying a door cell → try_open_door unless dog.
+enemy_try_door_open
+	ldx enemy_idx
+	lda enemy_xh,x
+	sta mapx
+	sta tmp0
+	lda enemy_yh,x
+	sta mapy
+	sta tmp1
+	jsr door_is_door_xy
+	beq .etdo_rts
+	ldx enemy_idx
+	lda enemy_type,x
+	cmp #ET_DOG
+	beq .etdo_rts
+	jmp try_open_door
+.etdo_rts
 	rts
 
 ; X = enemy index — step along facing, honor turn tiles
 enemy_patrol_one
 	stx enemy_idx
-	lda #1
-	sta probe_doors_pass			; unlocked doors walkable
+	jsr enemy_set_door_pass			; unlocked doors walkable (not dogs)
 	; clear moving until a step succeeds
 	lda enemy_flags,x
 	and #(EF_ACTIVE | EF_AMBUSH)
@@ -578,17 +619,8 @@ enemy_patrol_one
 	and #EF_MOVING
 	beq .ep_turn				; no step → skip push
 	jsr enemy_push_walls
-	; on a door cell → open / hold (not bump-triggered)
-	ldx enemy_idx
-	lda enemy_xh,x
-	sta mapx
-	sta tmp0
-	lda enemy_yh,x
-	sta mapy
-	sta tmp1
-	jsr door_is_door_xy
-	beq .ep_turn
-	jsr try_open_door
+	; on a door cell → open / hold (not bump-triggered; dogs skip)
+	jsr enemy_try_door_open
 .ep_turn
 	; pre-step fracs → tmp0/tmp1; apply T_TURN only on center-cross
 	pla

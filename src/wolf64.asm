@@ -342,10 +342,13 @@ end_itm = *
 ; =========================================================================
 ; bmp — full MCM bitmap @ $6000 (UI + viewport pattern)
 ; Hidden code @ $64B0: row 3 cols 30–39 + row 4 (400 bytes).
+; leftover: enemy_vel_rem (SuperCPU patrol/chase dt remainder).
 ; =========================================================================
 *= BITMAP
 !binary "../textures/ui/bitmap.bin", 3 * 320 + 30 * 8
 !source "score.asm"
+enemy_vel_rem
+!fill MAX_ENEMIES, 0
 end_score = *
 !if end_score > BITMAP + 5 * 320 {
 	!error "Score code overlaps 3D bitmap row 5; end=$", end_score
@@ -518,7 +521,7 @@ end_stack_bss	= enemy_burst + MAX_ENEMIES
 !source "enemy_painters.asm"
 enemy_gfx_data
 !binary "../textures/enemies.bin"
-; Enemy SoA (pos/facing/flags; hp/state/type/burst elsewhere — see wolf64 BSS)
+; Enemy SoA (pos/facing/flags; hp/state/type/burst/vel_rem elsewhere)
 enemy_xh
 !fill MAX_ENEMIES, 0
 enemy_xl

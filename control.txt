@@ -1,5 +1,5 @@
 ^WASD....^ Forward/backward/strafe
-^JL......^ Turn
+^IJKL....^ Forward/backward/turn
 ^Space...^ Fire
 ^1234....^ Change weapon
 

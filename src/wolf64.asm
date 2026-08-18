@@ -208,16 +208,14 @@ item_considered	= enemy_count + 1
 los_rr		= item_considered + 1
 walk_anim_t	= los_rr + 1			; global walk A/B ms accumulator
 walk_phase	= walk_anim_t + 1		; 0=A, nonzero=B
-player_hp	= walk_phase + 1
-player_ammo	= player_hp + 1
+player_ammo	= walk_phase + 1
 player_keys	= player_ammo + 1
 player_lives	= player_keys + 1
 player_dead	= player_lives + 1
 death_ms_l	= player_dead + 1
 death_ms_h	= death_ms_l + 1
 hurt_flash	= death_ms_h + 1		; 1=red this frame, 2=clear next
-ui_dirty	= hurt_flash + 1
-level_want	= ui_dirty + 1			; 0=none 1=restart 2=next 3=new 4=secret
+level_want	= hurt_flash + 1		; 0=none 1=restart 2=next 3=new 4=secret
 ai_dx		= level_want + 1
 ai_dy		= ai_dx + 1
 ai_steps	= ai_dy + 1

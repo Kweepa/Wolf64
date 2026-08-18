@@ -11,7 +11,7 @@ SAMPLE_TA_HI	= >$4FFF
 ;   turn 90°/sec = 64 angle/sec → turn_acc += vel_ms<<6, deliver >>10
 ;   move ½ tile/sec = 4 world/sec → delta_8_8 = (sintab * vel_ms) >> 6
 ; sintab AMP=64; identity: sin=64, dt=1024 → 1024 = 4.0 world.
-; W/S move, A/D strafe, J/L turn (SquareDoom bindings).
+; W/S or I/K move, A/D strafe, J/L turn (SquareDoom + IJKL).
 ; 1351 Port 1: POTX delta → playera; left button = FIRE (PB4, same as SPACE).
 
 input_irq_init
@@ -110,25 +110,30 @@ input_irq
 	sta in_turn_r
 .irq_nol
 
-	; W / A / S / 3 / 4 on PA1 = $FD
-	lda #$fd
+	; W|I / S|K on PA1+PA4 = $ED (OR columns so W+I is not 2× speed)
+	lda #$ed
 	sta $dc00
 	lda $dc01
 	tax
-	and #$02				; W = forward
+	and #$02				; W or I = forward
 	bne .irq_now
 	lda in_fwd
 	jsr .irq_add_ms
 	sta in_fwd
 .irq_now
 	txa
-	and #$20				; S = back
+	and #$20				; S or K = back
 	bne .irq_nos
 	lda in_back
 	jsr .irq_add_ms
 	sta in_back
 .irq_nos
-	txa
+
+	; A / 3 / 4 on PA1 = $FD (not $ED: that would OR A with J, 3 with 9, 4 with 0)
+	lda #$fd
+	sta $dc00
+	lda $dc01
+	tax
 	and #$04				; A = strafe left
 	bne .irq_noa
 	lda in_strafel

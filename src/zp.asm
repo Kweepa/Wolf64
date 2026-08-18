@@ -70,6 +70,8 @@ door_cy		= $c9
 door_corient	= $ca
 door_cpos	= $cb
 enemy_idx	= $cc		; current enemy (was tape BSS; ZP saves ~73 in enemy PRG)
+ui_dirty	= $cd		; HUD dirty flags (was tape BSS; ZP saves locode)
+player_hp	= $ce
 dt_rem8		= $cf		; leftover ms toward next enemy dt8 tick
 
 move_dx_l	= $3d

@@ -2,7 +2,7 @@
 
 control_text
 	!scr "^WASD....^ Forward/backward/strafe",0
-	!scr "^JL......^ Turn",0
+	!scr "^IJKL....^ Forward/backward/turn",0
 	!scr "^Space...^ Fire",0
 	!scr "^1234....^ Change weapon",0
 	!scr " ",0

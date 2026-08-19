@@ -9,6 +9,8 @@ refs/
 *.lbl
 *.o
 *.sym
+*.crt
+tools/disk2easyflash.py
 __pycache__/
 *.pyc
 

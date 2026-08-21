@@ -12,8 +12,9 @@ NEED = ("enemy_install", "locode_entry")
 
 def main() -> None:
 	root = Path(__file__).resolve().parents[1]
-	lbl_path = root / "wolf64.lbl"
-	out_path = root / "src" / "boot_syms.asm"
+	lbl_path = root / "generated" / "wolf64.lbl"
+	out_path = root / "generated" / "src" / "boot_syms.asm"
+	out_path.parent.mkdir(parents=True, exist_ok=True)
 	syms: dict[str, int] = {}
 	for line in lbl_path.read_text(encoding="utf-8", errors="replace").splitlines():
 		m = LBL_RE.match(line.strip())

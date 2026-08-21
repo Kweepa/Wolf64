@@ -168,8 +168,10 @@ def pack_sheet(
 
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
-    out_bin = root / "textures" / "enemies.bin"
-    out_asm = root / "src" / "enemy_gfx.asm"
+    out_bin = root / "generated" / "textures" / "enemies.bin"
+    out_asm = root / "generated" / "src" / "enemy_gfx.asm"
+    out_bin.parent.mkdir(parents=True, exist_ok=True)
+    out_asm.parent.mkdir(parents=True, exist_ok=True)
 
     blob = bytearray()
     widths: list[int] = []

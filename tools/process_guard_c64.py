@@ -125,8 +125,10 @@ def slice_src_cell(sheet: Image.Image, row: int, col: int) -> Image.Image:
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
     src_sheet = root / "textures" / "guards" / "guards_sheet.png"
-    out_dir = root / "textures" / "guards" / "c64_16"
+    out_dir = root / "textures" / "guards" / "c64_16"  # hand-edit target (tracked)
+    gen_dir = root / "generated" / "textures" / "guards" / "c64_16"  # plain sheet dump
     out_dir.mkdir(parents=True, exist_ok=True)
+    gen_dir.mkdir(parents=True, exist_ok=True)
 
     assert len(SELECTED) == OUT_COLS * OUT_ROWS, len(SELECTED)
     if not src_sheet.is_file():
@@ -169,7 +171,7 @@ def main() -> int:
         cx = (i % OUT_COLS) * max_w + (max_w - im.size[0]) // 2
         cy = (i // OUT_COLS) * max_h + (max_h - im.size[1]) // 2
         sheet.paste(im, (cx, cy), im)
-    sheet_path = out_dir / "guards_c64_16_sheet.png"
+    sheet_path = gen_dir / "guards_c64_16_sheet.png"
     sheet.save(sheet_path)
     print(f"sheet {sheet.size[0]}x{sheet.size[1]} -> {sheet_path}")
 

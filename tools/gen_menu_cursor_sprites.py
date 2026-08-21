@@ -8,8 +8,8 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 PNG = ROOT / "textures" / "menu" / "pistolcursor.png"
-OUT = ROOT / "src" / "menu_cursor_spr.asm"
-PREVIEW = ROOT / "assets" / "menu_cursor_preview.png"
+OUT = ROOT / "generated" / "src" / "menu_cursor_spr.asm"
+PREVIEW = ROOT / "generated" / "assets" / "menu_cursor_preview.png"
 
 SPR_W = 24
 SPR_H = 21
@@ -109,8 +109,9 @@ def main() -> None:
 	lines.extend(fmt_bytes(blobs))
 	lines.append("")
 
+	OUT.parent.mkdir(parents=True, exist_ok=True)
 	OUT.write_text("\n".join(lines), encoding="utf-8")
-	PREVIEW.parent.mkdir(exist_ok=True)
+	PREVIEW.parent.mkdir(parents=True, exist_ok=True)
 	preview.save(PREVIEW)
 	print(
 		f"wrote {OUT.relative_to(ROOT)} colours={[by_lum[c] for c in ordered]} "

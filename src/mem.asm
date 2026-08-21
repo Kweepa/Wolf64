@@ -16,7 +16,7 @@ SCREEN_B	= $4400			; matrix B; $43E8–$43FF = sprite ptrs (SCR pads 24B)
 BITMAP		= $6000
 BITMAP_SIZE	= 8000			; VIC bitmap (last 192 of 8K unused)
 BITMAP_END	= BITMAP + BITMAP_SIZE	; $7F40
-TEXTURES	= $4800
+SFX_BASE	= $4800			; pcsounds + pcsfreq_hi (old TEXTURES slot; walls.bin retired)
 WPN_SPRITES	= $5000			; HUD weapons + flashes (34 sprites → $5880)
 ITEM_SPRITES	= $5880			; world item gfx (4bpp + LUTs; to bitmap $6000)
 MAX_VIS		= 48			; enemies + items in one depth-sorted draw list
@@ -25,9 +25,13 @@ SQTAB1		= $3800			; Judd 2K (disk: sqt; locode..screen gap)
 SQTAB2		= SQTAB1 + $200
 SQTAB3		= SQTAB1 + $400
 SQTAB4		= SQTAB1 + $600
-PAINTERS	= $8000
-PAINTERS_SIZE	= $38DD			; painters.bin length (must match build)
-SFX_BASE	= PAINTERS + PAINTERS_SIZE	; $B8DD — pcsounds + pcsfreq_hi
+TEX_LO		= $8000			; 16 rows x 256 (texx*16+id); disk-loaded (tex_lo.bin)
+; TEX_HI is NOT disk-loaded: init_tex_hi (render.asm) builds it once at boot
+; by shifting each TEX_LO byte left 4 bits into this RAM-only block. Fixed
+; address (not PAINTERS + painters.asm's compiled size) so painters.asm can
+; grow or shrink without moving TEX_HI.
+TEX_HI		= TEX_LO + 4096
+PAINTERS	= TEX_HI + 4096
 ; Item scratch + vis_depth/order live in RAM after end_sfx (see wolf64.asm); must end ≤ ENEMY_BASE
 ; col_enemy is 40 bytes at end_itm (itm→bitmap slack)
 ENEMY_BASE	= $C000			; contiguous enemy code+gfx+hot SoA

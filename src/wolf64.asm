@@ -2,7 +2,7 @@
 ; DDA: The Keep · multiply: Judd a²−b² · view: TechDesignDoc nibbles
 ; !cpu 6510: stable NMOS ops (ALR/LAX/SAX/DCP/…) where they replace two documented ops
 !cpu 6510
-!to "game_image.prg", cbm
+!to "../generated/game_image.prg", cbm
 
 ; --- build flags (SquareDoom-style) ---------------------------------------
 PROFILE		= 0				; locode too tight with buckets; F via DBG_FPS
@@ -10,36 +10,39 @@ PROF_SPLIT	= 0				; 1 = per-col R/D (~80 CIA samples; +~20ms)
 DBG_FPS		= 0				; F ≈ frame ms (cols 0–2)
 DBG_NO_DETECT	= 0				; 1 = enemies never spot player (patrol preview)
 MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
+NEAR_LO		= 51				; first looped (Bresenham) height; below this, TEX_HI/TEX_LO, no SMC
 
 ; --- memory map -----------------------------------------------------------
 ; $0400  tables.asm (disk: tab)
 ; $0801  disposable boot → low BSS overlay (col_* / LoadPrg scrap)
 ; $08C0  reboot stub (installed at locode_entry); $08FD effects_vol; $08FE game_complete; $08FF difficulty
 ; $0900  locode — game code, no enemy modules (disk: locode); MENU overlay pre-load
-;        col_wallz_h lives after end_sfx (not on boot page); col_enemy at end_itm
 ; $033C  locode runtime BSS (cassette buffer; not in locode PRG)
 ; $3800  Judd SQTAB (disk: sqt; 2K in locode–screen gap)
 ; $4000  VIC screen A / B ($4400) (disk: scr)
-; $4800  textures (disk: tex)
+; $4800  PC SFX (disk: sfx; old walls.bin slot — texture data moved to TEX_LO/TEX_HI)
 ; $5000  weapon HUD sprites (disk: wpn; ends at ITEM_SPRITES)
-; $5880  world item gfx (disk: itm; to bitmap $6000)
+; $5880  world item gfx (disk: itm; to bitmap $6000); col_enemy in itm→bitmap slack
 ; $6000  bitmap (8K, disk: bmp); score code in hidden UI tail @ $64B0
-; $8000  wall painters only (disk: paint)
-; $B8DD  PC SFX (disk: sfx); item/vis scratch + cold enemy SoA after end_sfx → <$C000
-;        col_enemy lives in itm→bitmap slack (end_itm)
+; $8000  TEX_LO (disk: texlo, 4K) — row*256+texx*16+id, lo nibble pre-masked
+; $9000  TEX_HI (4K, RAM-only, NOT disk-loaded, fixed address) — init_tex_hi
+;        (render.asm, called once from game_start) fills it by shifting
+;        every TEX_LO byte left 4 bits; pure derived data, no PRG bytes here
+; $A000  wall painters only (disk: paint); enemy staged here first (boot.asm)
+;        col_wallz_h + item/vis scratch + cold enemy SoA follow end_paint → <$C000
 ; $C000  enemy block — code, AI, gfx, hot pos/facing/flags (disk: enemy)
 ; $0100  vis_slot + vis_perp + enemy_burst; STACK_GUARD=$01D0
 ; $EF00  map (disk: e1m1… via LoadLevel)
 
 !source "mem.asm"
 !source "zp.asm"
-!source "bss.asm"
+!source "../generated/src/bss.asm"
 
 ; =========================================================================
 ; tab — render tables @ $0400 (fat image starts here)
 ; =========================================================================
 *= TABLES
-!source "tables.asm"
+!source "../generated/src/tables.asm"
 end_tab = *
 !if end_tab > LOADER_BASE {
 	!error "Tables overlap boot/BSS; end=$", end_tab
@@ -103,12 +106,11 @@ game_start
 
 	; KERNAL LOAD clobbered ZP — Judd table hi ptrs (tables LOADed by boot)
 	jsr init_sqtabs
+	jsr init_tex_hi				; TEX_LO is disk-loaded; TEX_HI is derived once, in RAM
 	jsr prof_init
 	jsr input_irq_init
 	jsr play_sound_init
 	jsr player_init_game
-
-	jsr init_ph_h_done
 
 	jsr init_weapon			; needs VIC sprites ($d0xx) while I/O in
 	lda #$34
@@ -181,7 +183,6 @@ main_loop
 !source "player.asm"
 !source "weapon.asm"
 !source "items.asm"
-!source "painter_tables.asm"
 
 ; PROFILE-only BSS stays in locode PRG (won't fit leftover tape slack)
 !if PROFILE = 1 {
@@ -300,85 +301,22 @@ end_tape_bss	= score_1up_h + 1
 ; scr — matrix A @ $4000, 24-byte sprite-ptr pad, matrix B @ $4400
 ; =========================================================================
 *= SCREEN
-!binary "../textures/ui/screen.bin", 2024
+!binary "../generated/textures/ui/screen.bin", 2024
 end_scr = *
 !if end_scr != SCREEN_B + 1000 {
 	!error "SCR must end at SCREEN_B+1000 ($47E8); end=$", end_scr
 }
-!if end_scr > TEXTURES {
-	!error "Screen matrices overlap TEXTURES; end=$", end_scr
+!if end_scr > SFX_BASE {
+	!error "Screen matrices overlap SFX_BASE; end=$", end_scr
 }
 
 ; =========================================================================
-; tex — walls @ $4800
-; =========================================================================
-*= TEXTURES
-!binary "../textures/walls.bin", 2048
-end_tex = *
-
-; =========================================================================
-; wpn — knife/pistol/MG/chaingun HUD sprites
-; =========================================================================
-*= WPN_SPRITES
-!source "weapons/wpn_data.asm"
-end_wpn = *
-!if end_wpn > ITEM_SPRITES {
-	!error "Weapon sprites overlap ITEM_SPRITES; end=$", end_wpn
-}
-
-; =========================================================================
-; itm — world props/pickups (4bpp + LUTs) @ $5880
-; =========================================================================
-*= ITEM_SPRITES
-!source "items/item_gfx.asm"
-item_gfx_data
-!binary "../textures/items.bin"
-!source "items_draw.asm"
-end_itm = *
-!if end_itm > BITMAP {
-	!error "Item gfx overlap BITMAP; end=$", end_itm
-}
-
-; =========================================================================
-; bmp — full MCM bitmap @ $6000 (UI + viewport pattern)
-; Hidden code @ $64B0: row 3 cols 30–39 + row 4 (400 bytes).
-; leftover: enemy_vel_rem (SuperCPU patrol/chase dt remainder).
-; =========================================================================
-*= BITMAP
-!binary "../textures/ui/bitmap.bin", 3 * 320 + 30 * 8
-!source "score.asm"
-enemy_vel_rem
-!fill MAX_ENEMIES, 0
-end_score = *
-!if end_score > BITMAP + 5 * 320 {
-	!error "Score code overlaps 3D bitmap row 5; end=$", end_score
-}
-!warn "Score code free $", BITMAP + 5 * 320 - end_score, " (end=$", end_score, ")"
-*= BITMAP + 5 * 320
-!binary "../textures/ui/bitmap.bin", 20 * 320, 5 * 320
-; Profiler hexfont in unused VIC bitmap tail ($7F40..)
-!source "_hexfont.inc"
-end_bmp = *
-!if end_bmp > PAINTERS {
-	!error "Bitmap+hexfont overlap PAINTERS; end=$", end_bmp
-}
-
-; =========================================================================
-; paint — wall height painters only
-; =========================================================================
-*= PAINTERS
-!binary "painters.bin", PAINTERS_SIZE
-end_paint = *
-!if end_paint != SFX_BASE {
-	!error "painters.bin size drift; end=$", end_paint, " expected SFX_BASE=$", SFX_BASE
-}
-
-; =========================================================================
-; sfx — PC sounds @ $B8DD (after painters)
+; sfx — PC sounds @ $4800 (old walls.bin slot; texture data moved to
+; TEX_LO/TEX_HI, no longer a fixed-format packed table, no SMC needed)
 ; =========================================================================
 *= SFX_BASE
-!source "pcsounds.asm"
-!source "pcsfreq.asm"
+!source "../generated/src/pcsounds.asm"
+!source "../generated/src/pcsfreq.asm"
 
 ; Open only the neighbor we are walking into: wish on that axis, and either
 ; already on that keep-out face or this step's dest hi is that neighbor.
@@ -470,15 +408,90 @@ player_bump_then_push
 	jmp push_walls
 
 end_sfx = *
-!if end_sfx > ENEMY_BASE {
-	!error "SFX overlaps ENEMY_BASE; end=$", end_sfx
+!if end_sfx > WPN_SPRITES {
+	!error "SFX overlaps WPN_SPRITES; end=$", end_sfx
 }
 
-; Painter SMC: tex id already patched per half_h ($ff = none)
-ph_h_done	= end_sfx			; [0..MAX_HALF_H]
+; =========================================================================
+; wpn — knife/pistol/MG/chaingun HUD sprites
+; =========================================================================
+*= WPN_SPRITES
+!source "../generated/src/weapons/wpn_data.asm"
+end_wpn = *
+!if end_wpn > ITEM_SPRITES {
+	!error "Weapon sprites overlap ITEM_SPRITES; end=$", end_wpn
+}
+
+; =========================================================================
+; itm — world props/pickups (4bpp + LUTs) @ $5880
+; =========================================================================
+*= ITEM_SPRITES
+!source "../generated/src/items/item_gfx.asm"
+item_gfx_data
+!binary "../generated/textures/items.bin"
+!source "items_draw.asm"
+end_itm = *
+!if end_itm > BITMAP {
+	!error "Item gfx overlap BITMAP; end=$", end_itm
+}
+
+; =========================================================================
+; bmp — full MCM bitmap @ $6000 (UI + viewport pattern)
+; Hidden code @ $64B0: row 3 cols 30–39 + row 4 (400 bytes).
+; leftover: enemy_vel_rem (SuperCPU patrol/chase dt remainder).
+; =========================================================================
+*= BITMAP
+!binary "../generated/textures/ui/bitmap.bin", 3 * 320 + 30 * 8
+!source "score.asm"
+enemy_vel_rem
+!fill MAX_ENEMIES, 0
+end_score = *
+!if end_score > BITMAP + 5 * 320 {
+	!error "Score code overlaps 3D bitmap row 5; end=$", end_score
+}
+!warn "Score code free $", BITMAP + 5 * 320 - end_score, " (end=$", end_score, ")"
+*= BITMAP + 5 * 320
+!binary "../generated/textures/ui/bitmap.bin", 20 * 320, 5 * 320
+; Profiler hexfont in unused VIC bitmap tail ($7F40..)
+!source "_hexfont.inc"
+end_bmp = *
+!if end_bmp > TEX_LO {
+	!error "Bitmap+hexfont overlap TEX_LO; end=$", end_bmp
+}
+
+; =========================================================================
+; tex_lo — TEX_LO (TechDesignDoc): row*256+texx*16+id, one texel/byte,
+; pre-masked at build time — no AND/shift/SMC needed to sample a texel.
+; =========================================================================
+*= TEX_LO
+!binary "../generated/textures/tex_lo.bin", 4096
+end_tex_lo = *
+!if end_tex_lo != TEX_HI {
+	!error "tex_lo.bin size drift; end=$", end_tex_lo, " expected TEX_HI=$", TEX_HI
+}
+
+; TEX_HI is not disk-loaded — init_tex_hi (render.asm; called once from
+; game_start) fills this RAM-only 4K block: TEX_HI[a] = TEX_LO[a] << 4.
+; Fixed address (TEX_LO + 4096, not derived from painters.asm's compiled
+; size) so painters.asm can grow/shrink without moving TEX_HI. Pure address
+; bookkeeping here — NOT code, nothing is emitted into the PRG for TEX_HI
+; itself, so placing any routine's code at this address would have it
+; overwritten by its own output; init_tex_hi lives in locode (render.asm)
+; instead.
+!if TEX_HI + 4096 != PAINTERS {
+	!error "TEX_HI/PAINTERS mismatch; TEX_HI=$", TEX_HI, " PAINTERS=$", PAINTERS
+}
+
+; =========================================================================
+; paint — wall height painters only
+; =========================================================================
+*= PAINTERS
+!source "../generated/src/painters.asm"
+end_paint = *
+
 ; Column depth relocated off boot page (room for REBOOT_STUB)
-col_wallz_h	= ph_h_done + MAX_HALF_H + 1
-; Per-frame item scratch + vis depth/order — SFX→enemy gap
+col_wallz_h	= end_paint
+; Per-frame item scratch + vis depth/order — paint→enemy gap
 item_x		= col_wallz_h + 40
 item_y		= item_x + MAX_VIS
 item_frm	= item_y + MAX_VIS
@@ -516,11 +529,11 @@ end_stack_bss	= enemy_burst + MAX_ENEMIES
 ; =========================================================================
 *= ENEMY_BASE
 !source "enemy.asm"
-!source "enemy_gfx.asm"
+!source "../generated/src/enemy_gfx.asm"
 !source "enemy_ai.asm"
-!source "enemy_painters.asm"
+!source "../generated/src/enemy_painters.asm"
 enemy_gfx_data
-!binary "../textures/enemies.bin"
+!binary "../generated/textures/enemies.bin"
 ; Enemy SoA (pos/facing/flags; hp/state/type/burst/vel_rem elsewhere)
 enemy_xh
 !fill MAX_ENEMIES, 0

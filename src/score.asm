@@ -1,7 +1,7 @@
 ; Score /100 + HUD draw + extra-life. Linked at SCORE_CODE ($64B0).
 ; Hidden: row 3 cols 30–39 + row 4 must keep screen/colour 0.
 !zone score
-!source "ui_attr.inc"
+!source "../generated/src/ui_attr.inc"
 
 ; ET_GUARD, ET_SS, ET_DOG, ET_HANS
 kill_pts

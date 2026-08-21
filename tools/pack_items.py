@@ -68,8 +68,10 @@ def if_symbol(name: str) -> str:
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
     sheet_path = root / "textures" / "items" / "c64" / "items_c64_sheet_edit.png"
-    out_bin = root / "textures" / "items.bin"
-    out_asm = root / "src" / "items" / "item_gfx.asm"
+    out_bin = root / "generated" / "textures" / "items.bin"
+    out_asm = root / "generated" / "src" / "items" / "item_gfx.asm"
+    out_bin.parent.mkdir(parents=True, exist_ok=True)
+    out_asm.parent.mkdir(parents=True, exist_ok=True)
 
     if not sheet_path.is_file():
         raise FileNotFoundError(sheet_path)

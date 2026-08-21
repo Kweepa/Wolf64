@@ -11,8 +11,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SHAREWARE = ROOT / "shareware"
-OUT_SOUNDS = ROOT / "src" / "pcsounds.asm"
-OUT_FREQ = ROOT / "src" / "pcsfreq.asm"
+OUT_SOUNDS = ROOT / "generated" / "src" / "pcsounds.asm"
+OUT_FREQ = ROOT / "generated" / "src" / "pcsfreq.asm"
 
 # Wolf soundnames index → local CORE slot (order = sound_table)
 CORE = [
@@ -58,7 +58,7 @@ MENU_CORE = [
     (32, "SHOOT"),
     (39, "ESCPRESSED"),
 ]
-OUT_MENU_SOUNDS = ROOT / "src" / "menu_pcsounds.asm"
+OUT_MENU_SOUNDS = ROOT / "generated" / "src" / "menu_pcsounds.asm"
 
 DECIMATE = 3
 PC_BASE_TIMER = 1193181
@@ -148,6 +148,7 @@ def main() -> None:
         "\n"
     )
     sounds_asm, total = extract_pack(offs, aud, CORE, "pcsounds", core_header)
+    OUT_SOUNDS.parent.mkdir(parents=True, exist_ok=True)
     OUT_SOUNDS.write_text(sounds_asm, encoding="utf-8", newline="\n")
 
     menu_header = (

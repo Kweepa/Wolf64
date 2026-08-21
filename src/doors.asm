@@ -571,10 +571,7 @@ door_try_x
 	bcc .dtx_pass
 	sec
 	sbc tmp3
-	lsr
-	lsr
-	lsr
-	lsr
+	and #$f0				; texx kept pre-shifted into the high nibble
 	sta texx
 	lda door_savetl
 	sta tile_l
@@ -647,10 +644,7 @@ door_try_y
 	bcc .dty_pass
 	sec
 	sbc tmp3
-	lsr
-	lsr
-	lsr
-	lsr
+	and #$f0				; texx kept pre-shifted into the high nibble
 	sta texx
 	lda door_savetl
 	sta tile_l

@@ -380,11 +380,8 @@ hit_wall
 	sbc tmp0
 	eor #$ff
 .u_to_texx
-	lsr					; 16-wide texture (Keep used >>5 for 8-wide)
-	lsr
-	lsr
-	lsr
-	sta texx
+	and #$f0				; 16-wide texture: texx kept pre-shifted into the high
+	sta texx				; nibble (paint_column ORs it with tex_id, no runtime shift)
 
 	ldx col
 	lda fishtab,x

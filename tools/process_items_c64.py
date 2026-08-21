@@ -220,8 +220,10 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     src_path = root / "textures" / "items" / "items_sheet.png"
     sel_path = root / "textures" / "items" / "items_sheet_selected.png"
-    out_dir = root / "textures" / "items" / "c64"
+    out_dir = root / "textures" / "items" / "c64"  # hand-edit target (tracked)
+    gen_dir = root / "generated" / "textures" / "items" / "c64"  # plain dumps
     out_dir.mkdir(parents=True, exist_ok=True)
+    gen_dir.mkdir(parents=True, exist_ok=True)
 
     if not src_path.is_file():
         raise FileNotFoundError(src_path)
@@ -252,7 +254,7 @@ def main() -> int:
     for name, content, ch in contents:
         im = process_item(content, scale)
         finals.append((name, im))
-        path = out_dir / f"{name}.png"
+        path = gen_dir / f"{name}.png"
         im.save(path)
         print(f"  {name:16} src_h={ch:2d} -> {im.size[0]}x{im.size[1]}  {path.name}")
 
@@ -263,7 +265,7 @@ def main() -> int:
         content = crop_item(src, source_cell_rect(name))
         im = process_item(content, scale)
         finals.append((name, im))
-        path = out_dir / f"{name}.png"
+        path = gen_dir / f"{name}.png"
         im.save(path)
         print(f"  {name:16} src_h={content.size[1]:2d} -> {im.size[0]}x{im.size[1]}  {path.name}  (row 5)")
 
@@ -278,7 +280,7 @@ def main() -> int:
         cy = (i // OUT_COLS) * max_h + (max_h - im.size[1])
         sheet.paste(im, (cx, cy), im)
 
-    sheet_path = out_dir / "items_c64_sheet.png"
+    sheet_path = gen_dir / "items_c64_sheet.png"
     sheet.save(sheet_path)
     print(f"sheet {sheet.size[0]}x{sheet.size[1]} ({OUT_COLS}x{rows} of {max_w}x{max_h}) -> {sheet_path}")
 

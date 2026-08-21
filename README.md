@@ -16,7 +16,7 @@ make.bat     rem build + launch in VICE
 To pack the disk image into an EasyFlash `.crt` for real hardware or emulation:
 
 1. Download **Disk2Easyflash v1.1** from [milasoft64/Disk2Easyflash-v1](https://github.com/milasoft64/Disk2Easyflash-v1) (file: `v1.1/disk2easyflash_v1.1.py`) or [CSDb](https://csdb.dk/release/?id=260920).
-2. Save it as `tools/disk2easyflash.py`. Keep this file locally for `make-cart.bat`; it is gitignored and not pushed to GitHub.
+2. Save it as `3rdparty/disk2easyflash.py`. Keep this file locally for `make-cart.bat`; the whole `3rdparty/` directory is gitignored and not pushed to GitHub.
 3. Run after building the disk:
 
 ```bat
@@ -28,7 +28,7 @@ Output: `wolf64.crt`.
 
 ### Third-party tool — Disk2Easyflash
 
-`tools/disk2easyflash.py` is **not included** in this repository. Obtain it from upstream:
+`3rdparty/disk2easyflash.py` is **not included** in this repository (kept separate from the project's own `tools/` scripts). Obtain it from upstream:
 
 - **v1.1 (recommended):** [GitHub — milasoft64/Disk2Easyflash-v1](https://github.com/milasoft64/Disk2Easyflash-v1) / [CSDb release](https://csdb.dk/release/?id=260920) — enhancements by MilaSoft
 - **Original logic:** [alexkazik/disk2easyflash](https://github.com/alexkazik/disk2easyflash) — licensed under [0BSD](https://opensource.org/license/0bsd)

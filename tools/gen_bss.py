@@ -44,8 +44,8 @@ lines += [
 	"}",
 	"",
 ]
-Path(__file__).resolve().parent.parent.joinpath("src", "bss.asm").write_text(
-	"\n".join(lines), encoding="utf-8"
-)
+out_path = Path(__file__).resolve().parent.parent / "generated" / "src" / "bss.asm"
+out_path.parent.mkdir(parents=True, exist_ok=True)
+out_path.write_text("\n".join(lines), encoding="utf-8")
 end = 0x801 + sum(s for _, s in low)
 print(f"end_bss=${end:04X} (limit REBOOT_STUB=${REBOOT_STUB:04X}) fit={end <= REBOOT_STUB}")

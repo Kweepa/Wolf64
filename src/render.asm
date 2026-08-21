@@ -1,111 +1,54 @@
 ; Column dispatch — compiled height painters (TechDesignDoc §4)
-; Textures: 16 × 128-byte stripes at TEXTURES ($4800)
+; All heights (1..75): X = texx*16+id, Y = column. Set once here and never
+; touched again by any painter — no runtime texture-id patch anywhere.
 !zone render
 
 SKY_COLOR	= $bb
 FLOOR_COLOR	= $cc
 
-; A = texture id. Patch table: count, then (addr_lo, addr_hi, byte_off)*
-; addr points at LDA abs,x operand lo; written as TEXTURES+id*128+byte_off.
-; ph_h_done[half_h] = tex id already patched for that height ($ff = none).
-; Always set tex_ptr (painter_near samples it); skip only the LDA operand walk.
-init_ph_h_done
-	ldx #MAX_HALF_H
-	lda #$ff
--
-	sta ph_h_done,x
-	dex
-	bpl -
-	rts
-
-patch_painter_tex
-	tay
-	lda tex_base_lo,y
-	sta tex_ptr_l
-	lda tex_base_hi,y
-	sta tex_ptr_h
-	ldx half_h
-	tya
-	cmp ph_h_done,x
-	beq .out
-	sta ph_h_done,x
-
-	lda ph_patch_lo,x
+; One-time boot init: TEX_HI is not disk-loaded (only TEX_LO is). Every byte
+; of TEX_HI is just its TEX_LO counterpart shifted into the high nibble, so
+; build it here instead of shipping/loading a second 4 KB blob.
+init_tex_hi
+	lda #<TEX_LO
 	sta tmp0
-	lda ph_patch_hi,x
+	lda #>TEX_LO
 	sta tmp1
-	ldy #0
-	lda (tmp0),y
-	beq .out
+	lda #<TEX_HI
 	sta tmp2
-	iny
-	sty tmp4
-.loop
-	ldy tmp4
-	lda (tmp0),y
-	sta move_dx_l
-	iny
-	lda (tmp0),y
-	sta move_dx_h
-	iny
-	lda (tmp0),y				; byte_off
-	iny
-	sty tmp4
-	clc
-	adc tex_ptr_l
+	lda #>TEX_HI
+	sta tmp3
+	ldx #16				; 16 pages (4096 bytes)
+.page
 	ldy #0
-	sta (move_dx_l),y
-	lda tex_ptr_h
-	adc #0
+.byte
+	lda (tmp0),y
+	asl
+	asl
+	asl
+	asl
+	sta (tmp2),y
 	iny
-	sta (move_dx_l),y
-	dec tmp2
-	bne .loop
-.out
+	bne .byte
+	inc tmp1
+	inc tmp3
+	dex
+	bne .page
 	rts
 
 ; Paint one column from DDA caches (col_texid / col_half_h / col_texx)
-; Uses view_row* (set_view_rows); Y = column, X = texx*8
+; Uses view_row* (set_view_rows). Y = col throughout, never reloaded — even
+; the sky/floor miss path below inherits it. col_texid's sign picks the path:
+; $80..$ff (only $ff used, miss — tex 0 is gold locked door) vs 0..15 (hit).
 paint_column
-	ldx col
-	lda col_texid,x
-	bpl .have_tex			; $ff = miss (tex 0 is gold locked door)
-	jmp draw_sky_floor
-
-.have_tex
-	sta tmp3
-	lda col_half_h,x
-	bne +
-	lda #1
-+
-	cmp #MAX_HALF_H + 1
-	bcc +
-	lda #MAX_HALF_H
-+
-	sta half_h
-
-	lda col_texx,x
-	sta texx
-
-	lda tmp3
-	jsr patch_painter_tex
-
-	lda texx
-	asl
-	asl
-	asl
-	tax
-	ldy half_h
-	lda painter_lo,y
-	sta .pj+1
-	lda painter_hi,y
-	sta .pj+2
 	ldy col
-.pj	jmp $0000
+	lda col_texid,y
+	bpl .have_tex
 
-; Active cells 2..21 only (top/bottom 2 are static border)
-draw_sky_floor
-	ldy col
+; Miss: sky/floor only. Single caller (falls through here), short — inlined
+; instead of jmp'd to, so the common .have_tex path pays for a branch either
+; way and this path no longer also pays for a jmp. Cells 2..21 only (top/
+; bottom 2 rows are the static border).
 	lda #SKY_COLOR
 	sta (view_row2),y
 	sta (view_row3),y
@@ -129,3 +72,20 @@ draw_sky_floor
 	sta (view_row20),y
 	sta (view_row21),y
 	rts
+
+.have_tex
+	ora col_texx,y				; texx already pre-shifted into the high nibble (dda.asm/doors.asm)
+	tax
+
+	lda col_half_h,y
+	bne +
+	lda #1
++
+	cmp #MAX_HALF_H + 1
+	bcc +
+	lda #MAX_HALF_H
++
+	sta half_h
+	asl					; *2 — painter_tbl (painters.asm) is .word/page-aligned,
+	sta .pj+1				; so only the operand's low byte ever needs patching
+.pj	jmp (painter_tbl)

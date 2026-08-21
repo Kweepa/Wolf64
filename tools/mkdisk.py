@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Build wolf64.d64 from game_image.prg (+ boot.prg) via c1541.
 
-Splits the fat ACME image (load @ TABLES) into tab/locode/tex/wpn/itm/paint/sfx/enemy
+Splits the fat ACME image (load @ TABLES) into
+tab/locode/scr/sfx/wpn/itm/bmp/tex_lo/tex_hi/paint/enemy
 using symbols from wolf64.lbl, adds prebuilt sqtab.prg, stages maps at MAP ($EF00).
 """
 
@@ -26,17 +27,17 @@ SEGMENTS = [
 	("tab", "TABLES", "end_tab"),
 	("locode", "LOCODE_BASE", "end_locode"),
 	("scr", "SCREEN", "end_scr"),
-	("tex", "TEXTURES", "end_tex"),
+	("sfx", "SFX_BASE", "end_sfx"),
 	("wpn", "WPN_SPRITES", "end_wpn"),
 	("itm", "ITEM_SPRITES", "end_itm"),
 	("bmp", "BITMAP", "end_bmp"),
+	("texlo", "TEX_LO", "end_tex_lo"),
 	("paint", "PAINTERS", "end_paint"),
-	("sfx", "SFX_BASE", "end_sfx"),
 	("enemy", "ENEMY_BASE", "end_enemy"),
 ]
 
 COLORRAM_LOAD = 0xD800
-COLORRAM_BIN = Path("textures/ui/colorram.bin")
+COLORRAM_BIN = Path("generated/textures/ui/colorram.bin")
 
 # maps/NN_Wolf1_*.bin → e1mN dos name (boss/secret as e1mb / e1ms)
 MAP_FILES = [
@@ -105,11 +106,11 @@ def stage_map(bin_path: Path, out_path: Path) -> None:
 def main() -> None:
 	ap = argparse.ArgumentParser(description="Build wolf64.d64 via c1541")
 	ap.add_argument("--out", default="wolf64.d64")
-	ap.add_argument("--image", default="game_image.prg", help="fat ACME CBM image")
-	ap.add_argument("--boot", default="boot.prg")
-	ap.add_argument("--menu", default="menu.prg", help="pre-locode MENU overlay @ $0900")
-	ap.add_argument("--sqtab", default="sqtab.prg", help="prebuilt Judd tables @ $3800")
-	ap.add_argument("--labels", default="wolf64.lbl")
+	ap.add_argument("--image", default="generated/game_image.prg", help="fat ACME CBM image")
+	ap.add_argument("--boot", default="generated/boot.prg")
+	ap.add_argument("--menu", default="generated/menu.prg", help="pre-locode MENU overlay @ $0900")
+	ap.add_argument("--sqtab", default="generated/sqtab.prg", help="prebuilt Judd tables @ $3800")
+	ap.add_argument("--labels", default="generated/wolf64.lbl")
 	ap.add_argument("--maps", default="maps")
 	ap.add_argument("--all-maps", action="store_true", help="include all Wolf1 maps")
 	ap.add_argument("--c1541", type=Path, default=None)
@@ -141,18 +142,18 @@ def main() -> None:
 		"end_locode",
 		"SCREEN",
 		"end_scr",
-		"TEXTURES",
-		"end_tex",
+		"SFX_BASE",
+		"end_sfx",
 		"WPN_SPRITES",
 		"end_wpn",
 		"ITEM_SPRITES",
 		"end_itm",
 		"BITMAP",
 		"end_bmp",
+		"TEX_LO",
+		"end_tex_lo",
 		"PAINTERS",
 		"end_paint",
-		"SFX_BASE",
-		"end_sfx",
 		"ENEMY_BASE",
 		"end_enemy",
 	):

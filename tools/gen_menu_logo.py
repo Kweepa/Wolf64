@@ -12,8 +12,8 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 PNG = ROOT / "textures" / "h_wolflogo_twocolour.png"
-OUT = ROOT / "src" / "menu_logo.asm"
-PREVIEW = ROOT / "assets" / "menu_logo_preview.png"
+OUT = ROOT / "generated" / "src" / "menu_logo.asm"
+PREVIEW = ROOT / "generated" / "assets" / "menu_logo_preview.png"
 
 LOGO_W = 160
 LOGO_H = 28
@@ -129,6 +129,7 @@ def main() -> None:
 				pp[x, y] = (136, 0, 0)
 			elif white_g[y][x]:
 				pp[x, y] = (255, 255, 255)
+	PREVIEW.parent.mkdir(parents=True, exist_ok=True)
 	prev.save(PREVIEW)
 
 	lines = [
@@ -147,6 +148,7 @@ def main() -> None:
 	lines.extend(fmt_bytes(sprites))
 	lines.append("")
 
+	OUT.parent.mkdir(parents=True, exist_ok=True)
 	OUT.write_text("\n".join(lines), encoding="utf-8")
 	print(
 		f"wrote {OUT.relative_to(ROOT)} cols={BADGE_COLS} "

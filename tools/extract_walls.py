@@ -4,13 +4,16 @@ Extract / rebuild Wolf64 wall textures.
 
 Default: pull MapFormat walls (IDs 0–15) from shareware VSWAP.WL1,
 downsample each 64×64 VGA page to 16×16, quantize to Pepto C64 palette,
-write textures/walls.bin only (does not touch walls_preview.png).
+write textures/tex_lo.bin only (does not touch walls_preview.png).
 
 Authoring: edit textures/walls_preview.png (64×64 = 4×4 of native 16×16
 texels), then rebuild the engine blob with --from-preview.
 
 Outputs:
-  textures/walls.bin          2 KB engine blob (16 × 128 bytes, 4-bit texels)
+  textures/tex_lo.bin   4 KB engine blob: row*256+texx*16+id, one texel/byte.
+                        TEX_HI is *not* shipped — the engine builds it at
+                        boot by shifting each TEX_LO byte left 4 bits
+                        (tex_hi[addr] = tex_lo[addr]<<4), see init_tex_hi.
 
 Optional (--sheet PATH): write a separate 1:1 64×64 atlas (never auto-writes
 walls_preview.png). Purple / purple_blood use a blue-shadow bias.
@@ -293,29 +296,6 @@ def quantize_blue_stone(rgb: list[tuple[int, int, int]]) -> list[int]:
     return out
 
 
-TEX_STRIDE = 128  # 16 stripes × 8 bytes (checked-in $4800 layout, before map @$5000)
-
-
-def pack_texture(indices: list[int]) -> bytes:
-    """
-    Pack 16×16 C64 indices into a 256-byte page-aligned stripe.
-
-    Bytes 0..127: column-major, two vertical texels per byte
-    (high nibble = even row, low = odd row). Bytes 128..255: pad.
-    """
-    out = bytearray(TEX_STRIDE)
-    o = 0
-    for x in range(TEX_SIZE):
-        for y in range(0, TEX_SIZE, 2):
-            hi = indices[y * TEX_SIZE + x] & 0x0F
-            lo = indices[(y + 1) * TEX_SIZE + x] & 0x0F
-            out[o] = (hi << 4) | lo
-            o += 1
-    return bytes(out)
-
-
-
-
 PREVIEW_SCALE = 1  # walls_preview is 1:1 (64×64 atlas of 16×16 cells)
 
 
@@ -342,6 +322,28 @@ def write_preview_sheet(packed_slots: list[tuple[str, list[int]]], path: Path) -
     return path
 
 
+def pack_tex_lo(packed_slots: list[tuple[str, list[int]]]) -> bytes:
+    """
+    Build TEX_LO: engine reads it with X = texx*16+id, no AND/shift/SMC needed
+    at runtime (see tools/gen_painters.py header for the addressing).
+
+    TEX_LO[row*256 + texx*16 + id] = texel   (hi nibble already 0; texel is 0..15)
+
+    TEX_HI is not shipped: it is texel<<4 of the same data, one nibble-shift
+    per byte, generated once at boot into RAM (init_tex_hi) instead of loaded.
+    """
+    assert len(packed_slots) == NUM_TEXTURES
+    tex_lo = bytearray(TEX_SIZE * 256)
+    for tid, (_name, indices) in enumerate(packed_slots):
+        assert len(indices) == TEX_SIZE * TEX_SIZE
+        for row in range(TEX_SIZE):
+            for texx in range(TEX_SIZE):
+                val = indices[row * TEX_SIZE + texx] & 0x0F
+                addr = row * 256 + texx * 16 + tid
+                tex_lo[addr] = val
+    return bytes(tex_lo)
+
+
 def write_outputs(
     out_dir: Path,
     packed_slots: list[tuple[str, list[int]]],
@@ -349,27 +351,24 @@ def write_outputs(
     labels: list[str] | None = None,
     write_bin: bool = True,
 ) -> Path | None:
-    """Pack 16 index grids into walls.bin. Does not write or overwrite PNGs."""
+    """Build tex_lo.bin (engine format — see pack_tex_lo). TEX_HI is derived
+    from it at boot, not shipped. Does not write or overwrite PNGs."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    blob = bytearray()
 
     for slot, (name, indices) in enumerate(packed_slots):
         assert len(indices) == TEX_SIZE * TEX_SIZE
-        packed = pack_texture(indices)
-        assert len(packed) == TEX_STRIDE
-        blob.extend(packed)
-
         colors = sorted(set(indices))
         prefix = labels[slot] if labels else f"{slot:2} {name:14}"
         print(f"{prefix}  c64={colors}")
 
-    assert len(blob) == NUM_TEXTURES * TEX_STRIDE
     if not write_bin:
         return None
-    bin_path = out_dir / "walls.bin"
-    bin_path.write_bytes(blob)
-    print(f"Wrote {bin_path} ({len(blob)} bytes)")
-    return bin_path
+
+    tex_lo = pack_tex_lo(packed_slots)
+    lo_path = out_dir / "tex_lo.bin"
+    lo_path.write_bytes(tex_lo)
+    print(f"Wrote {lo_path} ({len(tex_lo)} bytes)")
+    return lo_path
 
 
 def cell_rgb_to_indices(cell: Image.Image) -> list[int]:
@@ -462,6 +461,14 @@ def extract(
     write_bin: bool = True,
     sheet_path: Path | None = None,
 ) -> Path | None:
+    preview_default = Path(__file__).resolve().parents[1] / "textures" / "walls_preview.png"
+    if preview_default.is_file():
+        print(
+            f"WARNING: {preview_default} exists and is hand-edited (see its git log) — "
+            "this raw-VSWAP extraction ignores it and will NOT match the shipped textures. "
+            "Use --from-preview instead unless you are intentionally re-bootstrapping the preview.",
+            file=sys.stderr,
+        )
     slots, labels = build_slots_from_vswap(shareware)
     if sheet_path is not None:
         write_preview_sheet(slots, sheet_path)
@@ -472,7 +479,7 @@ def main(argv: list[str]) -> int:
     root = Path(__file__).resolve().parents[1]
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--shareware", type=Path, default=root / "shareware")
-    ap.add_argument("--out", type=Path, default=root / "textures")
+    ap.add_argument("--out", type=Path, default=root / "generated" / "textures")
     ap.add_argument(
         "--from-preview",
         nargs="?",
@@ -497,7 +504,7 @@ def main(argv: list[str]) -> int:
     args = ap.parse_args(argv)
     if args.from_preview is not None:
         preview = (
-            args.out / "walls_preview.png"
+            root / "textures" / "walls_preview.png"
             if args.from_preview == "__default__"
             else Path(args.from_preview)
         )

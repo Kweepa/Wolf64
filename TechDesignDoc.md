@@ -1,5 +1,12 @@
 ## Technical Design Document: 40×48 Textured 3D Raycaster
 Target Hardware: Stock Commodore 64 (1 MHz 6502 CPU, 64 KB RAM, VIC-II, SID)
+
+> **Note:** this document describes an early design pass and likely doesn't
+> match the current implementation in every detail (memory budget, buffer
+> layout, etc.) — for verified, up-to-date specifics see
+> [TechNotes.md](TechNotes.md). Section 4 below (texture rendering) has been
+> rewritten to match the current no-SMC design; the rest is left as originally
+> written.
 ------------------------------
 ## 1. System Architecture & Memory Map
 To maximize available RAM, the standard BASIC and KERNAL ROMs are disabled by writing to the processor port ($0001). This reclaims almost the entire 64 KB physical workspace exclusively for raw machine code, lookup tables, and graphic data.
@@ -45,30 +52,41 @@ The engine processes all rendering data natively into an isolated, virtual Trans
 * This architecture allows the 6502 CPU to utilize linear indexing registers (INY, INX) to write vertical slices at maximum hardware speed without performing any real-time screen coordinate geometry calculations.
 
 ------------------------------
-## 4. Compiled & Self-Modifying Texture Renderers
-To eliminate traditional runtime UV-coordinate texturing math (fractional step additions, masking counters, and bounds Checking), the engine offloads texture interpolation completely into a massive array of 50 distinct, pre-compiled wall-height renderers.
+## 4. Compiled, No-SMC Texture Renderers
+To eliminate traditional runtime UV-coordinate texturing math (fractional step additions, masking counters, and bounds checking), the engine offloads texture interpolation into a family of pre-compiled wall-height renderers — one unrolled routine per height 1–50, plus a shared Bresenham loop for heights 51–75. Earlier iterations of this design selected the active texture via self-modifying code (SMC); the current design instead pre-masks every texture's texel into two lookup tables addressed by a single index, so no renderer instruction is ever patched at runtime.
+
 ## Wall Height Spectrum
 
-* Heights 1–24 (Distant to Mid-Range): Process symmetric columns containing varying distributions of sky, hardcoded wall blocks, and floor.
-* Heights 25–50 (Extreme Close-Ups): Handle clipped textures where the wall spans past the top and bottom monitor boundaries. The code automatically bypasses sky/floor routines and directly executes pre-calculated, scaled skips across the core texel rows.
+* Heights 1–50 (unrolled): each cell's row is known at compile time, so the routine for that height just emits the load/combine/store sequence directly, cell by cell.
+* Heights 51–75 (`painter_near`, shared Bresenham loop): the row isn't known until runtime, so a single shared loop steps the row forward via a Bresenham accumulator (`+8` per chunky row, carry into the row when it overflows the height) instead of unrolling 25 more routines.
 
-## The Blitting Code Paradigm
-Every single block step in a compiled texture renderer macro features hardcoded, optimized texel offset indices:
+## TEX_LO/TEX_HI: Pre-Masked, No-SMC Texel Lookup
+Every texel of every texture is pre-masked at build time into two 4 KB tables, indexed identically:
 
-; Example structural slice of an unrolled textured renderer step
-LDA TextureStripe + TopTexelOffset     ; 3 Bytes - Hardcoded Texel Row 1
-AND #$F0                               ; 2 Bytes - Keep High Nibble
-STA Temp                               ; 2 Bytes - Cache top color
-LDA TextureStripe + BottomTexelOffset  ; 3 Bytes - Hardcoded Texel Row 2
-AND #$0F                               ; 2 Bytes - Keep Low Nibble
-ORA Temp                               ; 2 Bytes - Merge Nibbles
-STA ScreenRAMOffset,X                  ; 3 Bytes - Push directly to view
+* `TEX_LO[row*256 + texx*16 + id]` = the texel value in the *low* nibble (high nibble already zero).
+* `TEX_HI[row*256 + texx*16 + id]` = the same texel value in the *high* nibble (low nibble already zero). `TEX_HI` isn't shipped on disk — it's generated once at boot by shifting every `TEX_LO` byte left 4 bits, saving 4 KB of disk data.
 
-## Self-Modifying Code (SMC) Texture Swapping
-To support up to 16 unique wall textures without duplicating the 16 KB renderer engine for every texture type, the absolute instruction addresses (LDA TextureStripe + Offset) are altered on the fly.
+`X = texx*16 + id` is computed **once per column**, in the raycast/paint dispatch, and never touched again — the same `X` value serves every height, 1 through 75. Combining a top and bottom texel is then just:
 
-* Right before a column is blitted, the engine reads the map cell type.
-* An initialization loop quickly overwrites the high-byte operands of the renderer's LDA instructions with the memory page address of the active texture (e.g., Brick vs. Wood).
+```asm
+lda TEX_HI + row_top*256,x   ; high nibble already masked/positioned
+ora TEX_LO + row_bot*256,x   ; low nibble already masked/positioned
+sta (view_row),y             ; no AND, no shift, no runtime patch
+```
+
+For heights 1–50 `row_top`/`row_bot` are baked into the instruction operands at compile time (per-height unrolling); for the 51–75 shared loop, the row instead lives in the *high byte* of each `LDA`'s own operand, advanced by `INC` whenever the Bresenham accumulator carries — one page (`+256`) per row, since both tables are page-aligned per row.
+
+## Height Dispatch: One Jump Table, One Patched Byte
+Selecting which of the 75 routines runs for a given column's height is the *only* remaining self-modification in the pipeline, and it's minimal: a single `.word` table (`painter_tbl`, one entry per height) is placed at the very start of the painter code region, which is itself page-aligned — so every entry shares the same high byte. Dispatch is then an indirect jump whose operand's low byte alone is patched per column:
+
+```asm
+lda half_h
+asl                    ; *2 -- word-sized entries, page-aligned table
+sta .pj+1              ; only the low byte of the indirect jmp's operand
+.pj jmp (painter_tbl)
+```
+
+No lookup table read-modify-write, no two-byte operand patch — one `sta` per column, and the destination table's own layout guarantees the classic 6502 JMP-indirect page-wrap bug can't occur (offsets are always even, never `$ff`).
 
 ------------------------------
 ## 5. Elimination of Screen-Clearing Overhead

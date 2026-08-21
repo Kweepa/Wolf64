@@ -96,6 +96,7 @@ def process_set(
     name: str,
     src_sheet: Path,
     out_dir: Path,
+    gen_dir: Path,
     selected: list[tuple[str, int, int]],
     out_cols: int,
     out_rows: int,
@@ -105,7 +106,10 @@ def process_set(
     refresh_edit: bool = False,
     extra_allow: set[int] | frozenset[int] | None = None,
 ) -> Path:
+    """out_dir holds the hand-edited *_sheet_edit.png (tracked source, never
+    auto-overwritten from scratch); gen_dir gets the plain *_sheet.png dump."""
     out_dir.mkdir(parents=True, exist_ok=True)
+    gen_dir.mkdir(parents=True, exist_ok=True)
     if not src_sheet.is_file():
         raise FileNotFoundError(src_sheet)
     if len(selected) > out_cols * out_rows:
@@ -157,7 +161,7 @@ def process_set(
         cy = (i // out_cols) * max_h + (max_h - im.size[1]) // 2
         sheet.paste(im, (cx, cy), im)
 
-    sheet_path = out_dir / f"{name}_c64_16_sheet.png"
+    sheet_path = gen_dir / f"{name}_c64_16_sheet.png"
     sheet.save(sheet_path)
     print(f"[{name}] sheet {sheet.size[0]}x{sheet.size[1]} -> {sheet_path}")
 
@@ -198,6 +202,7 @@ def main(argv: list[str]) -> int:
             name="guards",
             src_sheet=root / "textures" / "guards" / "guards_sheet.png",
             out_dir=root / "textures" / "guards" / "c64_16",
+            gen_dir=root / "generated" / "textures" / "guards" / "c64_16",
             selected=GUARD_SELECTED,
             out_cols=GUARD_COLS,
             out_rows=GUARD_ROWS,
@@ -210,6 +215,7 @@ def main(argv: list[str]) -> int:
             name="dogs",
             src_sheet=root / "textures" / "dogs" / "dogs_sheet.png",
             out_dir=root / "textures" / "dogs" / "c64_16",
+            gen_dir=root / "generated" / "textures" / "dogs" / "c64_16",
             selected=DOG_SELECTED,
             out_cols=DOG_COLS,
             out_rows=DOG_ROWS,
@@ -223,6 +229,7 @@ def main(argv: list[str]) -> int:
             name="ss",
             src_sheet=root / "textures" / "ss" / "ss_sheet.png",
             out_dir=root / "textures" / "ss" / "c64_16",
+            gen_dir=root / "generated" / "textures" / "ss" / "c64_16",
             selected=SS_SELECTED,
             out_cols=SS_COLS,
             out_rows=SS_ROWS,
@@ -235,6 +242,7 @@ def main(argv: list[str]) -> int:
             name="hans",
             src_sheet=root / "textures" / "hans" / "hans_sheet.png",
             out_dir=root / "textures" / "hans" / "c64_16",
+            gen_dir=root / "generated" / "textures" / "hans" / "c64_16",
             selected=HANS_SELECTED,
             out_cols=HANS_COLS,
             out_rows=HANS_ROWS,

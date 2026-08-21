@@ -3,7 +3,7 @@
 ; difficulty → $08FF; effects_vol/game_complete → $08FD/$08FE (survive LOCODE overwrite).
 ; Menu SFX: CIA1 Timer A + playsound (MOVEGUN/SHOOT/ESC from AUDIOT).
 !cpu 6502
-!to "menu.prg", cbm
+!to "../generated/menu.prg", cbm
 
 MENU_HELP_ENDINGS = 0			; 1 = Read This! shows ending1/2 (spacing)
 
@@ -2636,7 +2636,7 @@ section_lo
 section_hi
 	!byte >str_sec_main, >str_sec_new, >str_sec_skill, >str_sec_sound
 
-!source "menu_text.asm"
+!source "../generated/src/menu_text.asm"
 
 menu_str_lo
 	!byte <str_new_game, <str_sound, <str_control, <str_read_this
@@ -2657,14 +2657,14 @@ menu_str_hi
 	!byte >str_fx_vol, >str_mouse, >str_back, 0
 	!byte 0, 0, 0, 0
 
-!source "menu_logo.asm"
-!source "menu_hint_spr.asm"
-!source "menu_cursor_spr.asm"
-!source "../assets/menufont.asm"
+!source "../generated/src/menu_logo.asm"
+!source "../generated/src/menu_hint_spr.asm"
+!source "../generated/src/menu_cursor_spr.asm"
+!source "../generated/assets/menufont.asm"
 !source "playsound.asm"
 !source "menu_sfx.asm"
-!source "menu_pcsounds.asm"
-!source "pcsfreq.asm"
+!source "../generated/src/menu_pcsounds.asm"
+!source "../generated/src/pcsfreq.asm"
 
 end_menu = *
 !if end_menu > $4000 {

@@ -60,8 +60,6 @@ side		= $32		; 0=x-hit, 1=y-hit
 view_back	= $33		; 0 = paint SCREEN; 1 = paint SCREEN_B
 scr_front_l	= $34		; visible matrix base (HUD) — must be contiguous word
 scr_front_h	= $35
-tex_ptr_l	= $36
-tex_ptr_h	= $37
 mouse_en		= $38		; 1 = 1351 Port 1 (menu detect/toggle; survives LOAD)
 dda_last_x	= $c6		; previous column xstep (0 = none)
 dda_last_y	= $c7		; previous column ystep

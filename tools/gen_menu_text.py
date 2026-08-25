@@ -38,16 +38,50 @@ def scr_pieces(s: str) -> str:
 	return ",".join(pieces)
 
 
-def emit_blob(label: str, path: Path) -> list[str]:
-	lines = path.read_text(encoding="utf-8").splitlines()
-	while lines and not lines[-1].strip():
-		lines.pop()
+PAGE_BREAK = "^"
+
+
+def page_label(base: str, index: int) -> str:
+	"""credits_text + page 2 -> credits2_text"""
+	if index == 0:
+		return base
+	stem, _, suffix = base.partition("_text")
+	return f"{stem}{index + 1}_text"
+
+
+def split_pages(lines: list[str]) -> list[list[str]]:
+	pages: list[list[str]] = [[]]
+	for line in lines:
+		if line.strip() == PAGE_BREAK:
+			if pages[-1]:
+				pages.append([])
+			continue
+		pages[-1].append(line)
+	while pages and not pages[-1]:
+		pages.pop()
+	return pages if pages else [[]]
+
+
+def emit_page(label: str, lines: list[str]) -> list[str]:
 	out = [f"{label}"]
 	for line in lines:
 		body = line if line.strip() else " "
 		out.append(f"\t!scr {scr_pieces(body)},0")
 	out.append("\t!byte 0")
 	out.append("")
+	return out
+
+
+def emit_blob(label: str, path: Path) -> list[str]:
+	lines = path.read_text(encoding="utf-8").splitlines()
+	while lines and not lines[-1].strip():
+		lines.pop()
+	pages = split_pages(lines)
+	if len(pages) <= 1:
+		return emit_page(label, pages[0] if pages else [])
+	out: list[str] = []
+	for i, page in enumerate(pages):
+		out.extend(emit_page(page_label(label, i), page))
 	return out
 
 

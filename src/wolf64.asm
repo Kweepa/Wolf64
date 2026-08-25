@@ -1,7 +1,7 @@
 ; Wolf64 — fat memory image (split into disk PRGs by tools/mkdisk.py)
 ; DDA: The Keep · multiply: Judd a²−b² · view: TechDesignDoc nibbles
-; !cpu 6510: stable NMOS ops (ALR/LAX/SAX/DCP/…) where they replace two documented ops
-!cpu 6510
+; !cpu 6502: exclude undocumented opcodes for SuperCPU compatibility
+!cpu 6502
 !to "../generated/game_image.prg", cbm
 
 ; --- build flags (SquareDoom-style) ---------------------------------------
@@ -211,7 +211,8 @@ walk_anim_t	= los_rr + 1			; global walk A/B ms accumulator
 walk_phase	= walk_anim_t + 1		; 0=A, nonzero=B
 player_ammo	= walk_phase + 1
 player_keys	= player_ammo + 1
-player_lives	= player_keys + 1
+player_hp	= player_keys + 1
+player_lives	= player_hp + 1
 player_dead	= player_lives + 1
 death_ms_l	= player_dead + 1
 death_ms_h	= death_ms_l + 1

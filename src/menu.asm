@@ -522,6 +522,12 @@ menu_select
 	lda #<credits_text
 	ldy #>credits_text
 	jsr show_text_screen
+	lda #<credits2_text
+	ldy #>credits2_text
+	jsr show_text_screen
+	lda #<credits3_text
+	ldy #>credits3_text
+	jsr show_text_screen
 .ms_ret
 	jsr draw_menu
 .ms_st

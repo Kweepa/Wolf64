@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parents[1] / "src" / "enemy_painters.asm"
+OUT = Path(__file__).resolve().parents[1] / "generated" / "src" / "enemy_painters.asm"
 SRC_H = 16
 MAX_H = 48
 
@@ -30,6 +30,7 @@ def main() -> int:
         "\t!byte " + ", ".join(str((s >> 8) & 0xFF) for s in steps),
         "",
     ]
+    OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Wrote {OUT} ({MAX_H + 1} steps)")
     return 0

@@ -8,10 +8,10 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 PNG = ROOT / "assets" / "menufont.png"
-ASM_OUT = ROOT / "assets" / "menufont.asm"
-CHARSET_OUT = ROOT / "src" / "menufont_charset.asm"
-MAP_OUT = ROOT / "src" / "ecm_map.asm"
-INC_OUT = ROOT / "src" / "menufont_ecm.inc"
+ASM_OUT = ROOT / "generated" / "assets" / "menufont.asm"
+CHARSET_OUT = ROOT / "generated" / "src" / "menufont_charset.asm"
+MAP_OUT = ROOT / "generated" / "src" / "ecm_map.asm"
+INC_OUT = ROOT / "generated" / "src" / "menufont_ecm.inc"
 
 # Option-menu ECM set (≤64). Text screens use hires bitmap + full font.
 ECM_CHARS = " !'(),-./0123456789:?@ABCDEFGHIMNOPQRSTVWabcdefghijklmnoprstuvwy"
@@ -37,6 +37,9 @@ def main() -> None:
 	if im.size != (64, 96):
 		raise SystemExit(f"menufont.png expected 64x96, got {im.size}")
 	px = im.load()
+
+	for out_path in (ASM_OUT, CHARSET_OUT, MAP_OUT, INC_OUT):
+		out_path.parent.mkdir(parents=True, exist_ok=True)
 
 	ascii_glyphs = {
 		32 + i: glyph_from_png(px, i % 8, i // 8) for i in range(96)

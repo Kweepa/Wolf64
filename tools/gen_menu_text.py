@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "src" / "menu_text.asm"
+OUT = ROOT / "generated" / "src" / "menu_text.asm"
 
 # label, source txt (no yellow title — body only)
 SCREENS = (
@@ -21,9 +21,21 @@ SCREENS = (
 )
 
 
-def esc_scr(s: str) -> str:
-	"""Escape for ACME !scr \"...\"."""
-	return s.replace("\\", "\\\\").replace('"', '\\"')
+def scr_pieces(s: str) -> str:
+	"""This ACME build/version doesn't accept \\" (or "" doubling) inside a
+	!scr string — both were tried and rejected with "Garbage data at end of
+	statement". Split on '"' instead and splice in the raw screen-code byte
+	(34, same as ASCII since '"' falls in the space..? unshifted range)."""
+	parts = s.split('"')
+	pieces: list[str] = []
+	for i, part in enumerate(parts):
+		if part:
+			pieces.append(f'"{part}"')
+		if i < len(parts) - 1:
+			pieces.append("34")
+	if not pieces:
+		pieces = ['""']
+	return ",".join(pieces)
 
 
 def emit_blob(label: str, path: Path) -> list[str]:
@@ -33,7 +45,7 @@ def emit_blob(label: str, path: Path) -> list[str]:
 	out = [f"{label}"]
 	for line in lines:
 		body = line if line.strip() else " "
-		out.append(f'\t!scr "{esc_scr(body)}",0')
+		out.append(f"\t!scr {scr_pieces(body)},0")
 	out.append("\t!byte 0")
 	out.append("")
 	return out
@@ -48,6 +60,7 @@ def main() -> None:
 		if not path.is_file():
 			raise SystemExit(f"missing {path}")
 		out.extend(emit_blob(label, path))
+	OUT.parent.mkdir(parents=True, exist_ok=True)
 	OUT.write_text("\n".join(out), encoding="utf-8")
 	print(f"wrote {OUT.relative_to(ROOT)}")
 

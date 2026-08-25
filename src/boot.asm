@@ -3,7 +3,7 @@
 ; Per file: SETNAM / SETLFS / LOAD / CLOSE only.
 ; File-table index in .xi (KERNAL LOAD clobbers ZP — do not keep ptr in $ae/$af).
 !cpu 6502
-!to "boot.prg", cbm
+!to "../generated/boot.prg", cbm
 
 !source "mem.asm"
 
@@ -118,7 +118,7 @@ file_tab
 	!byte 3
 	!text "SCR"
 	!byte 3
-	!text "TEX"
+	!text "SFX"
 	!byte 3
 	!text "WPN"
 	!byte 3
@@ -128,9 +128,9 @@ file_tab
 	!byte 3
 	!text "SQT"
 	!byte 5
+	!text "TEXLO"
+	!byte 5
 	!text "PAINT"
-	!byte 3
-	!text "SFX"
 	!byte 3
 	!text "TAB"
 	!byte 3

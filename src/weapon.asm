@@ -1,7 +1,7 @@
 ; First-person HUD: knife / pistol / machinegun / chaingun
 ; All sprites XY-expanded (2×). Flash: white + 1/2/3 red (pistol/MG/chaingun).
 ; Chaingun flash A/B = distinct blobs; mg_frame selects ptr + XY slots.
-!source "weapons/wpn_tables.asm"
+!source "../generated/src/weapons/wpn_tables.asm"
 !zone weapon
 
 WPN_KNIFE = 0

@@ -25,8 +25,8 @@ from extract_walls import C64_PALETTE  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 TEX = ROOT / "textures" / "weapons"
-OUT_DATA = ROOT / "src" / "weapons" / "wpn_data.asm"
-OUT_TABLES = ROOT / "src" / "weapons" / "wpn_tables.asm"
+OUT_DATA = ROOT / "generated" / "src" / "weapons" / "wpn_data.asm"
+OUT_TABLES = ROOT / "generated" / "src" / "weapons" / "wpn_tables.asm"
 
 SPR_W, SPR_H = 24, 21
 # 2× expand: PNG pixel (px,py) covers 2×2 from sprite origin.
@@ -383,6 +383,7 @@ def main() -> int:
         data_lines.append("")
 
     OUT_DATA.parent.mkdir(parents=True, exist_ok=True)
+    OUT_DATA.parent.mkdir(parents=True, exist_ok=True)
     OUT_DATA.write_text("\n".join(data_lines) + "\n", encoding="utf-8", newline="\n")
 
     def ptr_expr(label: str) -> str:
@@ -466,6 +467,7 @@ def main() -> int:
         bcol(fy),
         "",
     ]
+    OUT_TABLES.parent.mkdir(parents=True, exist_ok=True)
     OUT_TABLES.write_text("\n".join(tbl), encoding="utf-8", newline="\n")
     print(f"wrote {OUT_DATA.relative_to(ROOT)} + {OUT_TABLES.relative_to(ROOT)}")
     return 0

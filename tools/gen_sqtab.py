@@ -75,13 +75,15 @@ def build_sqtab() -> bytes:
 
 
 def main() -> None:
+	default_out = Path(__file__).resolve().parents[1] / "generated" / "sqtab.prg"
 	ap = argparse.ArgumentParser(description="Generate sqtab.prg @ $3800")
-	ap.add_argument("-o", "--output", default="sqtab.prg")
+	ap.add_argument("-o", "--output", default=str(default_out))
 	args = ap.parse_args()
 
 	data = build_sqtab()
 	assert len(data) == SQTAB_SIZE
 	out = Path(args.output)
+	out.parent.mkdir(parents=True, exist_ok=True)
 	out.write_bytes(struct.pack("<H", SQTAB_LOAD) + data)
 	print(f"Wrote {out} ({SQTAB_SIZE} bytes @ ${SQTAB_LOAD:04X})")
 

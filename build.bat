@@ -32,6 +32,8 @@ python tools\gen_menu_text.py
 if errorlevel 1 exit /b 1
 python tools\gen_painters.py
 if errorlevel 1 exit /b 1
+python tools\extract_walls.py --from-preview
+if errorlevel 1 exit /b 1
 python tools\pack_enemies.py
 if errorlevel 1 exit /b 1
 python tools\pack_items.py

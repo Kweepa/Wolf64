@@ -177,15 +177,16 @@ SID writes, so gameplay callers never need a `$35` window for audio.
 
 Boot PRG (`wolf64` on `wolf64.d64`) lives at `$0801`. It loads **MENU** at
 `$0900`, `JSR`s it (difficulty → `$08FF`; shareware always episode 0), then stages
-**ENEMY** and calls MENU`+3` (`copy_enemy`), then loads remaining assets with
-plain KERNAL SETNAM/SETLFS/LOAD (clear `$90`/ST between files; no per-file
-IOINIT/CIA). **LOCODE** overwrites the menu at `$0900`. Boot then jumps to
-`LOCODE_BASE`:
+**ENEMY** at `PAINTERS` (`$A000`) and calls MENU`+3` (`copy_enemy` →
+`copy_block_up`, overlap-safe high→low into `$C000` because staging overlaps
+the destination), then loads remaining assets with plain KERNAL SETNAM/SETLFS/LOAD
+(clear `$90`/ST between files; no per-file IOINIT/CIA). **LOCODE** overwrites
+the menu at `$0900`. Boot then jumps to `LOCODE_BASE`:
 
 | DOS | Load | Contents |
 |-----|------|----------|
 | `menu` | `$0900` | title/menu overlay (text mode + menufont @ `$3800`; disposable) |
-| `enemy` | `$9000`→`$C000` | enemy block (staged at `PAINTERS`, then copied) |
+| `enemy` | `$A000`→`$C000` | enemy block (staged at `PAINTERS`, then `copy_block_up`) |
 | `locode` | `$0900` | game code (no enemy modules; replaces menu) |
 | `scr` | `$4000` | video matrices |
 | `sfx` | `$4800` | PC sounds + freq (old walls.bin slot; ends `$4C5F`, `WPN_SPRITES` at `$5000`) |

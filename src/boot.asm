@@ -7,7 +7,7 @@
 
 !source "mem.asm"
 
-ENEMY_STAGING	= PAINTERS			; $8000 — overwritten later by PAINT
+ENEMY_STAGING	= PAINTERS			; $A000 — overwritten later by PAINT
 MENU_COPY_ENEMY	= LOCODE_BASE + 3
 
 *= LOADER_BASE

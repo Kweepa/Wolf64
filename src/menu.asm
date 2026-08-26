@@ -92,33 +92,68 @@ sound_max	= $c3
 ps_save_x	= $c4
 ps_save_y	= $c5
 mouse_en	= $38			; match zp.asm — 1351 on/off (survives locode LOAD)
+; copy_block_up (boot-only; aliases menu draw ZP)
+src_ptr		= ptr_l
+dst_ptr		= ptr_r_l
 
 *= LOCODE_BASE
 	jmp run_menu
 	jmp copy_enemy
 
+; Staging $A000 overlaps dest $C000 — must copy high→low (Quake64 copy_block_up).
 copy_enemy
 	sei
 	lda #$34
 	sta $01
+	lda #<ENEMY_STAGING
+	sta src_ptr
 	lda #>ENEMY_STAGING
-	sta .s + 2
+	sta src_ptr+1
+	lda #<ENEMY_BASE
+	sta dst_ptr
 	lda #>ENEMY_BASE
-	sta .d + 2
-	ldx #0
-	ldy #ENEMY_COPY_PAGES
-.pg
-.s	lda ENEMY_STAGING,x
-.d	sta ENEMY_BASE,x
-	inx
-	bne .pg
-	inc .s + 2
-	inc .d + 2
-	dey
-	bne .pg
+	sta dst_ptr+1
+	ldx #ENEMY_COPY_PAGES
+	ldy #0
+	jsr copy_block_up
 	lda #$36
 	sta $01
 	cli
+	rts
+
+; src_ptr → dst_ptr, size X=pages Y=frac. dst > src; overlap-safe (high→low).
+; Ported from Quake64 loader.asm.
+copy_block_up
+	txa
+	clc
+	adc src_ptr+1
+	sta src_ptr+1
+	txa
+	clc
+	adc dst_ptr+1
+	sta dst_ptr+1
+	cpy #0
+	beq .cbu_pages
+.cbu_frac
+	dey
+	lda (src_ptr),y
+	sta (dst_ptr),y
+	tya
+	bne .cbu_frac
+.cbu_pages
+	cpx #0
+	beq .cbu_rts
+	dec src_ptr+1
+	dec dst_ptr+1
+.cbu_page
+	dey				; 0 → 255
+	lda (src_ptr),y
+	sta (dst_ptr),y
+	tya
+	bne .cbu_page
+	dex
+	jmp .cbu_pages
+.cbu_rts
 	rts
 
 run_menu

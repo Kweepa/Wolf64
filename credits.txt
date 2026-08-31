@@ -20,6 +20,9 @@ bigfootbrz.
 
 Loader by Krill / Plush.
 
+2-button joystick support by
+Ursiny Games.
+
 Thanks!
 
 v1.7

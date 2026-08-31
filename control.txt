@@ -10,3 +10,18 @@ you can turn and shoot with it.
 Walk into doors to open them.
 Walk into secret walls to push them.
 Walk over items to pick them up.
+^
+Joystick in port 2. Enable it in
+the Options screen.
+
+^Up/Down.^ Forward/backward
+^Left/Rgt^ Turn or strafe
+^Fire....^ Fire
+
+Hold Button 2 to swap Left/Right
+between turning and strafing.
+The Options Btn2 setting picks
+which one Button 2 gives you.
+
+Button 2: C64GS / Annihilator
+pads, or Space / port 1 fire.

@@ -631,6 +631,9 @@ menu_select
 	lda #<control_text
 	ldy #>control_text
 	jsr show_text_screen
+	lda #<control2_text
+	ldy #>control2_text
+	jsr show_text_screen
 	jmp .ms_ret
 .ms_hlp
 	jsr sfx_shoot

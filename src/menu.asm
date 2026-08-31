@@ -424,7 +424,7 @@ mod_toggle
 	jmp sync_redraw
 
 sync_input_strings
-	ldx #7
+	ldx #9
 	lda input_mode
 	cmp #1
 	beq .sis_m
@@ -451,7 +451,7 @@ sync_input_strings
 	lda input_mode
 	cmp #2
 	beq .sis_m_en
-	ldx #15				; "Joy Btn2: " (10) + "Strafe"/"Turn  " (6)
+	ldx #16				; "Joy2 Btn2: " (11) + "Strafe"/"Turn  " (6)
 	lda #32
 .sis_bl
 	sta str_joy_mod,x
@@ -459,7 +459,7 @@ sync_input_strings
 	bpl .sis_bl
 	rts
 .sis_m_en
-	ldx #9
+	ldx #10
 .sis_rl
 	lda str_jm_l,x
 	sta str_joy_mod,x
@@ -471,22 +471,22 @@ sync_input_strings
 	bne .sis_t
 .sis_s
 	lda str_jm_s,x
-	sta str_joy_mod + 10,x
+	sta str_joy_mod + 11,x
 	dex
 	bpl .sis_s
 	rts
 .sis_t
 	lda str_jm_t,x
-	sta str_joy_mod + 10,x
+	sta str_joy_mod + 11,x
 	dex
 	bpl .sis_t
 	rts
 
-str_im_k	!scr "Keyboard"
-str_im_m	!scr "Mouse   "
-str_im_j	!scr "Joystick"
+str_im_k	!scr "Keyboard  "
+str_im_m	!scr "Mouse     "
+str_im_j	!scr "Joystick 2"
 str_jm_s	!scr "Strafe"
-str_jm_l	!scr "Joy Btn2: "
+str_jm_l	!scr "Joy2 Btn2: "
 str_jm_t	!scr "Turn  "
 
 sync_vol_strings
@@ -715,12 +715,22 @@ sync_input_and_redraw2
 draw_joystick_test
 	lda menu_id
 	cmp #3
-	bne .djt_skip
+	bne .djt_clear
 
 	lda input_mode
 	cmp #2
 	beq .djt_run
-.djt_skip
+.djt_clear
+	; Not showing Joystick diagnostics right now (different screen, or Input
+	; switched back to Keyboard/Mouse without leaving Options): these two
+	; cells are bitmap hi-res colour-matrix bytes, not text — once poked
+	; they stay whatever colour they were last set to until something
+	; rewrites them, and toggling Input only repaints the option text
+	; (sync_redraw), not the full screen. Restore them to plain background
+	; so a stale button indicator can't linger after Joystick is deselected.
+	lda clear_bg
+	sta SCREEN + 24*40 + 36
+	sta SCREEN + 24*40 + 38
 	rts
 .djt_run
 
@@ -2965,8 +2975,8 @@ str_e4		!scr "A Dark Secret",0
 str_e5		!scr "Trail of the Madman",0
 str_e6		!scr "Confrontation",0
 str_fx_vol	!scr "Effects Volume 15",0
-str_input	!scr "Input: Keyboard ",0
-str_joy_mod	!scr "Joy Btn2: Strafe",0
+str_input	!scr "Input: Keyboard   ",0
+str_joy_mod	!scr "Joy2 Btn2: Strafe",0
 str_itytd	!scr "Can I play, Daddy?",0
 str_dhm		!scr "Don't hurt me.",0
 str_hmp		!scr "Bring 'em on!",0

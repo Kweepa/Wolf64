@@ -451,7 +451,7 @@ sync_input_strings
 	lda input_mode
 	cmp #2
 	beq .sis_m_en
-	ldx #11
+	ldx #15				; "Joy Btn2: " (10) + "Strafe"/"Turn  " (6)
 	lda #32
 .sis_bl
 	sta str_joy_mod,x
@@ -459,7 +459,7 @@ sync_input_strings
 	bpl .sis_bl
 	rts
 .sis_m_en
-	ldx #5
+	ldx #9
 .sis_rl
 	lda str_jm_l,x
 	sta str_joy_mod,x
@@ -471,13 +471,13 @@ sync_input_strings
 	bne .sis_t
 .sis_s
 	lda str_jm_s,x
-	sta str_joy_mod + 6,x
+	sta str_joy_mod + 10,x
 	dex
 	bpl .sis_s
 	rts
 .sis_t
 	lda str_jm_t,x
-	sta str_joy_mod + 6,x
+	sta str_joy_mod + 10,x
 	dex
 	bpl .sis_t
 	rts
@@ -486,7 +486,7 @@ str_im_k	!scr "Keyboard"
 str_im_m	!scr "Mouse   "
 str_im_j	!scr "Joystick"
 str_jm_s	!scr "Strafe"
-str_jm_l	!scr "Btn2: "
+str_jm_l	!scr "Joy Btn2: "
 str_jm_t	!scr "Turn  "
 
 sync_vol_strings
@@ -2966,7 +2966,7 @@ str_e5		!scr "Trail of the Madman",0
 str_e6		!scr "Confrontation",0
 str_fx_vol	!scr "Effects Volume 15",0
 str_input	!scr "Input: Keyboard ",0
-str_joy_mod	!scr "Btn2: Strafe",0
+str_joy_mod	!scr "Joy Btn2: Strafe",0
 str_itytd	!scr "Can I play, Daddy?",0
 str_dhm		!scr "Don't hurt me.",0
 str_hmp		!scr "Bring 'em on!",0

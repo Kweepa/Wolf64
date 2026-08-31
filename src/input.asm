@@ -30,6 +30,17 @@ input_irq_init
 	sta turn_acc_l
 	sta turn_acc_h
 	sta $d01a				; no VIC IRQs
+
+	lda input_mode
+	cmp #2
+	beq .init_joy
+	lda #$7f
+	bne .init_set
+.init_joy
+	lda #$9f
+.init_set
+	sta $dc00				; pre-select POT multiplexer
+
 	lda $d419				; seed so first IRQ delta is 0
 	sta mouse_x
 
@@ -81,6 +92,12 @@ input_irq
 	pha
 	lda #$35
 	sta $01
+	; Sample SID POTX before anything below touches $DC00. CIA1 PA6/PA7 are
+	; the pot multiplexer select lines, so every keyboard row write corrupts
+	; the conversion in flight; here the mux has been parked by the previous
+	; IRQ's tail for a whole frame, so this reading is settled and valid.
+	lda $d419
+	sta potx_raw
 	lda $dc0d				; ack
 	and #$01
 	bne .irq_run
@@ -88,6 +105,166 @@ input_irq
 .irq_run
 	jsr update_sfx
 
+	lda input_mode
+	cmp #1
+	beq .irq_to_mouse
+	cmp #2
+	beq .irq_joy
+	jmp .irq_keys
+.irq_to_mouse
+	jmp .irq_mouse
+
+.irq_joy
+	lda $dc02
+	pha
+	lda #0
+	sta $dc02
+	lda #$ff
+	sta $dc00
+	lda $dc00
+	sta joy_state
+	pla
+	sta $dc02
+
+	lda joy_state
+	and #$01				; Up (Forward)
+	bne .joy_nou
+	lda in_fwd
+	jsr .irq_add_ms
+	sta in_fwd
+.joy_nou
+	lda joy_state
+	and #$02				; Down (Backward)
+	bne .joy_nod
+	lda in_back
+	jsr .irq_add_ms
+	sta in_back
+.joy_nod
+	lda joy_state
+	and #$10				; Fire 1
+	bne .joy_nof
+	lda #1
+	sta in_fire
+.joy_nof
+
+	; Button 2 detection:
+	; - Digital 2nd button / Spacebar / Port 1 Fire ($DC01 bit 4 == 0)
+	; - Cheetah Annihilator style 2nd button on POTX (port 2)
+	; POTX is not read here: it was latched into potx_raw at the top of the
+	; IRQ, the only point in the frame where the pot mux has been stable long
+	; enough for the SID's conversion to be valid. See mem.asm.
+
+	; Spacebar (Row 7, Col 4) / Joy 1 Fire
+	lda #$7f
+	sta $dc00
+	nop
+	nop
+	nop
+	lda $dc01
+	and #$10
+	beq .btn2_raw_down			; key or fire down: pressed, skip the pot
+
+	; Pot path, with a Schmitt trigger. A pressed Annihilator button pulls
+	; POTX low; released, the line floats and reads high. Values between the
+	; two thresholds hold the previous state instead of chattering.
+	lda potx_raw
+	cmp #BTN2_POT_LO
+	bcc .btn2_pot_dn
+	cmp #BTN2_POT_HI
+	bcc .btn2_pot_keep			; dead band: leave btn2_pot alone
+	lda #0
+	beq .btn2_pot_set
+.btn2_pot_dn
+	lda #1
+.btn2_pot_set
+	sta btn2_pot
+.btn2_pot_keep
+	lda btn2_pot
+	bne .btn2_raw_down
+	lda #0
+	beq .btn2_deb_chk
+.btn2_raw_down
+	lda #1
+
+.btn2_deb_chk
+	; A = this frame's raw state. Require BTN2_DEB agreeing frames before the
+	; latched btn2_down flips, so a single bad sample can never toggle it.
+	cmp btn2_down
+	beq .btn2_deb_rst
+	inc btn2_deb
+	ldx btn2_deb
+	cpx #BTN2_DEB
+	bcc .btn2_eval				; not stable yet: keep old btn2_down
+	sta btn2_down
+.btn2_deb_rst
+	ldx #0
+	stx btn2_deb
+
+.btn2_eval
+	lda btn2_down				; 1 if Button 2 held, 0 if released
+	; joy_mod: 0 = Btn2 Strafe (default Turn), 1 = Btn2 Turn (default Strafe)
+	eor joy_mod
+	sta btn2_state				; 0 = Turn, 1 = Strafe
+
+	lda joy_state
+	and #$04				; Left
+	bne .joy_nol
+	lda btn2_state
+	bne .joy_str_l
+	lda in_turn_l
+	jsr .irq_add_ms
+	sta in_turn_l
+	jmp .joy_nol
+.joy_str_l
+	lda in_strafel
+	jsr .irq_add_ms
+	sta in_strafel
+.joy_nol
+	lda joy_state
+	and #$08				; Right
+	bne .joy_nor
+	lda btn2_state
+	bne .joy_str_r
+	lda in_turn_r
+	jsr .irq_add_ms
+	sta in_turn_r
+	jmp .joy_nor
+.joy_str_r
+	lda in_strafer
+	jsr .irq_add_ms
+	sta in_strafer
+.joy_nor
+	jmp .irq_keys
+
+.irq_mouse
+	; 1351 POTX wrap-delta. |dx|<=2 noise; |dx|>=33 = wrap (keep mouse_x, no look)
+	lda potx_raw				; latched at IRQ entry; see mem.asm
+	tax
+	sec
+	sbc mouse_x
+	stx mouse_x
+	tay
+	bpl .irq_mpos
+	cpy #$fe
+	bcs .irq_keys
+	cpy #$e0
+	bcc .irq_keys
+	tya
+	bcs .irq_mdx
+.irq_mpos
+	cpy #3
+	bcc .irq_keys
+	cpy #33
+	bcs .irq_keys
+	tya
+.irq_mdx
+	cmp #$80				; signed /2 into playera (wraps as angle)
+	ror
+	clc
+	adc playera
+	sta playera
+
+.irq_keys
 	; J (PA4 = $EF) = turn left
 	lda #$ef
 	sta $dc00
@@ -186,36 +363,19 @@ input_irq
 	lda #1
 	sta in_fire
 .irq_nospc
-
-	lda mouse_en
-	beq .irq_rti
-	; 1351 POTX wrap-delta. |dx|<=2 noise; |dx|>=33 = wrap (keep mouse_x, no look)
-	lda $d419
-	tax
-	sec
-	sbc mouse_x
-	stx mouse_x
-	tay
-	bpl .irq_mpos
-	cpy #$fe
-	bcs .irq_rti
-	cpy #$e0
-	bcc .irq_rti
-	tya
-	bcs .irq_mdx
-.irq_mpos
-	cpy #3
-	bcc .irq_rti
-	cpy #33
-	bcs .irq_rti
-	tya
-.irq_mdx
-	cmp #$80				; signed /2 into playera (wraps as angle)
-	ror
-	clc
-	adc playera
-	sta playera
-
+	lda input_mode
+	cmp #1
+	beq .irq_prep_mouse
+	cmp #2
+	beq .irq_prep_joy
+	jmp .irq_rti
+.irq_prep_mouse
+	lda #$7f
+	sta $dc00
+	jmp .irq_rti
+.irq_prep_joy
+	lda #$9f
+	sta $dc00
 .irq_rti
 	pla
 	sta $01					; restore caller's banking
@@ -448,3 +608,10 @@ neg_a
 	clc
 	adc #1
 	rts
+
+joy_state: !byte 0
+btn2_state: !byte 0
+potx_raw: !byte $ff			; SID POTX, sampled at IRQ entry (mux settled)
+btn2_pot: !byte 0			; hysteresis state of the pot button
+btn2_down: !byte 0			; debounced Button 2, before joy_mod
+btn2_deb: !byte 0			; frames the raw state has disagreed

@@ -22,6 +22,8 @@ boot_start
 	and #%11101111				; DEN off until colour is in
 	sta $d011
 	lda #0
+	sta $38					; input_mode (0 = Keys)
+	sta $39					; joy_mod (0 = Btn2 Strafe)
 	sta $d020				; border shows even with DEN=0
 	sta $d015
 	sta $d01a
@@ -79,9 +81,7 @@ boot_start
 	clc
 	adc #<file_tab
 	tax
-	lda #>file_tab
-	adc #0
-	tay
+	ldy #>file_tab
 	lda .len
 	jsr load_sa1
 	bcs boot_fail

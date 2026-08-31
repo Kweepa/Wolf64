@@ -123,3 +123,14 @@ T_PUSH_TRAJ	= 146				; +0..3 = N,E,S,W
 DEATH_MS	= 120			; frames≈; counted down with dt_ms sum ~2s feel
 LEVEL_MAX	= 9			; 1..8 maps, 9 = boss (e1mb)
 LEVEL_SECRET	= 10			; e1ms; HUD 10
+
+; --- Button 2 / SID POTX ----------------------------------------------------
+; The SID pot A/D is a free-running 512-cycle conversion and CIA1 PA6/PA7 (the
+; top two bits of every $DC00 keyboard-row mask) drive the 4066 that feeds it.
+; Any $DC00 write therefore invalidates the conversion in flight, so POTX may
+; only be sampled after the mux has been parked on port 2 ($9F) for a couple of
+; conversion periods. Shared by input.asm (game) and menu.asm (separate PRG).
+BTN2_POT_LO	= $40			; raw < LO  -> button pressed (pot pulled low)
+BTN2_POT_HI	= $c0			; raw >= HI -> released (line floats high)
+					; LO..HI is the dead band: state is held
+BTN2_DEB	= 2			; agreeing frames required to flip the latch

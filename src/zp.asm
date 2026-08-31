@@ -9,6 +9,7 @@ aux_l	= $06
 aux_h	= $07
 tmp4	= $3a
 tmp5	= $3b
+tmp6	= $36
 
 ; Judd square-table ZP pointers (lo patched per multiply)
 sq1_l	= $08
@@ -60,7 +61,8 @@ side		= $32		; 0=x-hit, 1=y-hit
 view_back	= $33		; 0 = paint SCREEN; 1 = paint SCREEN_B
 scr_front_l	= $34		; visible matrix base (HUD) — must be contiguous word
 scr_front_h	= $35
-mouse_en		= $38		; 1 = 1351 Port 1 (menu detect/toggle; survives LOAD)
+input_mode	= $38		; 0=Keys, 1=1351 Port 1, 2=Joy Port 2 (survives LOAD)
+joy_mod		= $39		; 0=Btn2 Strafe, 1=Btn2 Turn
 dda_last_x	= $c6		; previous column xstep (0 = none)
 dda_last_y	= $c7		; previous column ystep
 door_cx		= $c8		; last door cell X ($ff = empty)

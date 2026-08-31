@@ -91,7 +91,8 @@ sound_count	= $c2
 sound_max	= $c3
 ps_save_x	= $c4
 ps_save_y	= $c5
-mouse_en	= $38			; match zp.asm — 1351 on/off (survives locode LOAD)
+input_mode	= $38			; 0=Keys, 1=Mouse, 2=Joy (survives locode LOAD)
+joy_mod		= $39
 ; copy_block_up (boot-only; aliases menu draw ZP)
 src_ptr		= ptr_l
 dst_ptr		= ptr_r_l
@@ -177,7 +178,7 @@ run_menu
 	jsr clear_screen_all
 	jsr draw_brand
 	jsr sync_vol_strings
-	jsr sync_mouse_string
+	jsr sync_input_strings
 	lda game_complete
 	cmp #1
 	bne .rm_menu
@@ -192,6 +193,7 @@ run_menu
 .rm_menu
 	jsr draw_menu
 .rm_loop
+	jsr draw_joystick_test
 	jsr ui_read_keys
 	jsr wait_frame
 
@@ -244,11 +246,20 @@ menu_move_up
 	lda menu_item
 	sta menu_prev
 	tax
-	dex
-	bpl .mmu
+	bne .mmu_ok
 	ldx menu_size
+.mmu_ok
 	dex
-.mmu
+	lda menu_id
+	cmp #3
+	bne .mmu_save
+	lda input_mode
+	cmp #2
+	beq .mmu_save
+	cpx #2
+	bne .mmu_save
+	dex
+.mmu_save
 	stx menu_item
 	jsr update_selection
 	jmp sfx_movegun2
@@ -259,9 +270,19 @@ menu_move_down
 	tax
 	inx
 	cpx menu_size
-	bcc .mmd
+	bcc .mmd_ok
 	ldx #0
-.mmd
+.mmd_ok
+	lda menu_id
+	cmp #3
+	bne .mmd_save
+	lda input_mode
+	cmp #2
+	beq .mmd_save
+	cpx #2
+	bne .mmd_save
+	inx
+.mmd_save
 	stx menu_item
 	jsr update_selection
 	jmp sfx_movegun2
@@ -294,12 +315,26 @@ menu_vol_input
 	lda menu_item
 	beq .mvi_vol
 	cmp #1
-	bne .mvi_o
+	beq .mvi_in
+	cmp #2
+	beq .mvi_mod
+	rts
+.mvi_in
+	lda #UI_RIGHT
+	and ui_pressed
+	bne .mvi_inc
+	lda #UI_LEFT
+	and ui_pressed
+	beq .mvi_o
+	jmp input_dec
+.mvi_inc
+	jmp input_inc
+.mvi_mod
 	lda #UI_RIGHT
 	ora #UI_LEFT
 	and ui_pressed
 	beq .mvi_o
-	jmp mouse_toggle
+	jmp mod_toggle
 .mvi_vol
 	lda #UI_RIGHT
 	and ui_pressed
@@ -330,7 +365,7 @@ vol_fx_dec
 	jsr sfx_movegun1
 sync_redraw
 	jsr sync_vol_strings
-	jsr sync_mouse_string
+	jsr sync_input_strings
 	ldx menu_item
 	stx tmp4
 	jmp draw_menu_item
@@ -338,7 +373,7 @@ sync_redraw
 ; 1351 Port 1: pots not stuck at $00/$FF
 detect_mouse
 	lda #0
-	sta mouse_en
+	sta input_mode
 	ldx #8
 .dm_samp
 	ldy #0
@@ -351,7 +386,7 @@ detect_mouse
 	beq .dm_y
 .dm_yes
 	lda #1
-	sta mouse_en
+	sta input_mode
 	rts
 .dm_y
 	lda $d41a
@@ -363,32 +398,96 @@ detect_mouse
 	bne .dm_samp
 	rts
 
-mouse_toggle
-	lda mouse_en
+input_inc
+	inc input_mode
+	lda input_mode
+	cmp #3
+	bcc .ic_done
+	lda #0
+	sta input_mode
+	jmp .ic_done
+input_dec
+	dec input_mode
+	bpl .ic_done
+	lda #2
+	sta input_mode
+.ic_done
+	jsr sfx_movegun1
+	jmp sync_input_and_redraw2
+
+mod_toggle
+	lda joy_mod
 	eor #1
-	sta mouse_en
+	and #1
+	sta joy_mod
 	jsr sfx_movegun1
 	jmp sync_redraw
 
-sync_mouse_string
-	ldx #2
-	lda mouse_en
-	bne .sms_on
-.sms_off
-	lda str_moff,x
-	sta str_mouse + 15,x
+sync_input_strings
+	ldx #7
+	lda input_mode
+	cmp #1
+	beq .sis_m
+	cmp #2
+	beq .sis_j
+.sis_k
+	lda str_im_k,x
+	sta str_input + 7,x
 	dex
-	bpl .sms_off
+	bpl .sis_k
+	jmp .sis_mod
+.sis_m
+	lda str_im_m,x
+	sta str_input + 7,x
+	dex
+	bpl .sis_m
+	jmp .sis_mod
+.sis_j
+	lda str_im_j,x
+	sta str_input + 7,x
+	dex
+	bpl .sis_j
+.sis_mod
+	lda input_mode
+	cmp #2
+	beq .sis_m_en
+	ldx #11
+	lda #32
+.sis_bl
+	sta str_joy_mod,x
+	dex
+	bpl .sis_bl
 	rts
-.sms_on
-	lda str_mon,x
-	sta str_mouse + 15,x
+.sis_m_en
+	ldx #5
+.sis_rl
+	lda str_jm_l,x
+	sta str_joy_mod,x
 	dex
-	bpl .sms_on
+	bpl .sis_rl
+
+	ldx #5
+	lda joy_mod
+	bne .sis_t
+.sis_s
+	lda str_jm_s,x
+	sta str_joy_mod + 6,x
+	dex
+	bpl .sis_s
+	rts
+.sis_t
+	lda str_jm_t,x
+	sta str_joy_mod + 6,x
+	dex
+	bpl .sis_t
 	rts
 
-str_mon		!scr "On "
-str_moff	!scr "Off"
+str_im_k	!scr "Keyboard"
+str_im_m	!scr "Mouse   "
+str_im_j	!scr "Joystick"
+str_jm_s	!scr "Strafe"
+str_jm_l	!scr "Btn2: "
+str_jm_t	!scr "Turn  "
 
 sync_vol_strings
 	lda #<str_fx_vol
@@ -472,8 +571,13 @@ menu_select
 	bne .ms_stay
 	lda menu_item
 	cmp #1
+	bne .ms_chk_mod
+	jsr input_inc
+	jmp .ms_stay
+.ms_chk_mod
+	cmp #2
 	bne .ms_stay
-	jsr mouse_toggle
+	jsr mod_toggle
 .ms_stay
 	jmp .ms_st
 .ms_ne
@@ -591,12 +695,120 @@ next_menu
 	!byte 1, 3, NM_CTRL, NM_HELP, NM_CREDITS, NM_QUIT, 0, 0
 	!byte 2, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_BACK, 0
 	!byte NM_START, NM_START, NM_START, NM_START, NM_BACK, 0, 0, 0
-	!byte 3, 3, NM_BACK, 0, 0, 0, 0, 0
+	!byte 3, 3, 3, NM_BACK, 0, 0, 0, 0
 
 menu_sizes
-	!byte 6, 7, 5, 3
+	!byte 6, 7, 5, 4
 
 ; --- drawing ---------------------------------------------------------------
+
+sync_input_and_redraw2
+	jsr sync_input_strings
+	ldx #2
+	stx tmp4
+	jsr draw_menu_item
+	jmp sync_redraw
+
+draw_joystick_test
+	lda menu_id
+	cmp #3
+	bne .djt_skip
+
+	lda input_mode
+	cmp #2
+	beq .djt_run
+.djt_skip
+	rts
+.djt_run
+
+	; Sample POTX before anything touches $DC00 or $DC02. ui_read_keys parks
+	; the mux on port 2 when it finishes and wait_frame has elapsed since, so
+	; the SID's conversion has had a full frame to settle. Note $DC02 = 0
+	; below floats PA6/PA7 high, which selects both ports and disturbs the
+	; mux too, so this read has to come first. See mem.asm.
+	lda $d419
+	sta potx_raw
+
+	lda $dc02
+	pha
+	lda #0
+	sta $dc02
+
+	; Check Button 1 (Fire)
+	lda #$ff
+	sta $dc00
+	lda $dc00
+	and #$10
+	bne .djt_b1_up
+	lda #49 ; '1'
+	bne .djt_b1_draw
+.djt_b1_up
+	lda #32 ; ' '
+.djt_b1_draw
+	sta SCREEN + 24*40 + 36
+
+	; Check Button 2 (Spacebar / Joy 1 Fire)
+	lda #$7f
+	sta $dc00
+	nop
+	nop
+	nop
+	lda $dc01
+	tax					; hold the row bits across the restore
+
+	pla
+	sta $dc02				; PA6/PA7 driving again before parking
+	lda #$9f
+	sta $dc00				; park mux on port 2 for the next sample
+
+	txa
+	and #$10
+	beq .djt_b2_raw_down			; key or fire down
+
+	; Pot path, same Schmitt trigger + debounce policy as input.asm
+	lda potx_raw
+	cmp #BTN2_POT_LO
+	bcc .djt_pot_dn
+	cmp #BTN2_POT_HI
+	bcc .djt_pot_keep			; dead band: hold previous state
+	lda #0
+	beq .djt_pot_set
+.djt_pot_dn
+	lda #1
+.djt_pot_set
+	sta btn2_pot
+.djt_pot_keep
+	lda btn2_pot
+	bne .djt_b2_raw_down
+	lda #0
+	beq .djt_deb_chk
+.djt_b2_raw_down
+	lda #1
+
+.djt_deb_chk
+	cmp btn2_down
+	beq .djt_deb_rst
+	inc btn2_deb
+	ldx btn2_deb
+	cpx #BTN2_DEB
+	bcc .djt_b2_show
+	sta btn2_down
+.djt_deb_rst
+	ldx #0
+	stx btn2_deb
+
+.djt_b2_show
+	lda btn2_down
+	bne .djt_b2_down
+	lda #32 ; ' '
+	bne .djt_b2_draw
+.djt_b2_down
+	lda #50 ; '2'
+.djt_b2_draw
+	sta SCREEN + 24*40 + 38
+.djt_rts
+	rts
+
 draw_menu
 	lda #COL_MAIN
 	sta clear_bg
@@ -2521,57 +2733,144 @@ ui_read_keys
 	lda #0
 	sta ui_keys
 
+	; Joystick Port 2 ($DC00 with $FF)
+	lda $dc02
+	pha
+	lda #0
+	sta $dc02
+	lda #$ff
+	sta $dc00
+	lda $dc00
+	tax
+	pla
+	sta $dc02
+
+	txa
+	and #$01				; Up
+	bne .urk_noju
+	lda ui_keys
+	ora #UI_UP
+	sta ui_keys
+.urk_noju
+	txa
+	and #$02				; Down
+	bne .urk_nojd
+	lda ui_keys
+	ora #UI_DOWN
+	sta ui_keys
+.urk_nojd
+	txa
+	and #$04				; Left
+	bne .urk_nojl
+	lda ui_keys
+	ora #UI_LEFT
+	sta ui_keys
+.urk_nojl
+	txa
+	and #$08				; Right
+	bne .urk_nojr
+	lda ui_keys
+	ora #UI_RIGHT
+	sta ui_keys
+.urk_nojr
+	txa
+	and #$10				; Fire
+	bne .urk_nojf
+	lda ui_keys
+	ora #UI_SELECT
+	sta ui_keys
+.urk_nojf
+
+	; Keyboard W/S/A on PA1 = $FD
 	lda #$fd
 	sta $dc00
 	lda $dc01
 	tax
-	and #$02
+	and #$02				; W = UP
 	bne .urk_now
 	lda ui_keys
 	ora #UI_UP
 	sta ui_keys
 .urk_now
 	txa
-	and #$20
+	and #$20				; S = DOWN
 	bne .urk_nos
 	lda ui_keys
 	ora #UI_DOWN
 	sta ui_keys
 .urk_nos
 	txa
-	and #$04
+	and #$04				; A = LEFT
 	bne .urk_noa
 	lda ui_keys
 	ora #UI_LEFT
 	sta ui_keys
 .urk_noa
+
+	; Keyboard D on PA2 = $FB
 	lda #$fb
 	sta $dc00
 	lda $dc01
-	and #$04
+	and #$04				; D = RIGHT
 	bne .urk_nod
 	lda ui_keys
 	ora #UI_RIGHT
 	sta ui_keys
 .urk_nod
+
+	; Keyboard RETURN / CRSR on PA0 = $FE
 	lda #$fe
 	sta $dc00
 	lda $dc01
-	and #$02
+	tax
+	and #$02				; RETURN = SELECT
 	bne .urk_noret
 	lda ui_keys
 	ora #UI_SELECT
 	sta ui_keys
 .urk_noret
+	txa
+	and #$80				; CRSR DOWN
+	bne .urk_nocrsrd
+	lda ui_keys
+	ora #UI_DOWN
+	sta ui_keys
+.urk_nocrsrd
+	txa
+	and #$04				; CRSR RIGHT
+	bne .urk_nocrsrr
+	lda ui_keys
+	ora #UI_RIGHT
+	sta ui_keys
+.urk_nocrsrr
+
+	; Keyboard RUN/STOP / SPACE on PA7 = $7F
 	lda #$7f
 	sta $dc00
 	lda $dc01
-	and #$80
+	tax
+	and #$80				; RUN/STOP = ESC
 	bne .urk_noesc
 	lda ui_keys
 	ora #UI_ESC
 	sta ui_keys
 .urk_noesc
+	txa
+	and #$10				; SPACE = SELECT
+	bne .urk_nospc
+	lda ui_keys
+	ora #UI_SELECT
+	sta ui_keys
+.urk_nospc
+
+	; Park the pot mux on port 2 so draw_joystick_test's POTX sample has a
+	; settled conversion next time round the loop. See mem.asm.
+	lda input_mode
+	cmp #2
+	bne .urk_nopark
+	lda #$9f
+	sta $dc00
+.urk_nopark
 	lda ui_old
 	eor #$ff
 	and ui_keys
@@ -2602,6 +2901,10 @@ menu_stk_i	!byte 0, 0, 0
 box_top		!byte 0
 box_left	!byte 0
 box_width	!byte 0
+potx_raw	!byte $ff		; SID POTX, sampled with the mux settled
+btn2_pot	!byte 0			; hysteresis state of the pot button
+btn2_down	!byte 0			; debounced Button 2
+btn2_deb	!byte 0			; frames the raw state has disagreed
 ui_keys		!byte 0
 ui_old		!byte 0
 ui_pressed	!byte 0
@@ -2659,7 +2962,8 @@ str_e4		!scr "A Dark Secret",0
 str_e5		!scr "Trail of the Madman",0
 str_e6		!scr "Confrontation",0
 str_fx_vol	!scr "Effects Volume 15",0
-str_mouse	!scr "Mouse (port 1) Off",0
+str_input	!scr "Input: Keyboard ",0
+str_joy_mod	!scr "Btn2: Strafe",0
 str_itytd	!scr "Can I play, Daddy?",0
 str_dhm		!scr "Don't hurt me.",0
 str_hmp		!scr "Bring 'em on!",0
@@ -2684,7 +2988,7 @@ menu_str_lo
 	!byte <str_e5, <str_e6, <str_back, 0
 	!byte <str_itytd, <str_dhm, <str_hmp, <str_uv
 	!byte <str_back, 0, 0, 0
-	!byte <str_fx_vol, <str_mouse, <str_back, 0
+	!byte <str_fx_vol, <str_input, <str_joy_mod, <str_back
 	!byte 0, 0, 0, 0
 menu_str_hi
 	!byte >str_new_game, >str_sound, >str_control, >str_read_this
@@ -2693,7 +2997,7 @@ menu_str_hi
 	!byte >str_e5, >str_e6, >str_back, 0
 	!byte >str_itytd, >str_dhm, >str_hmp, >str_uv
 	!byte >str_back, 0, 0, 0
-	!byte >str_fx_vol, >str_mouse, >str_back, 0
+	!byte >str_fx_vol, >str_input, >str_joy_mod, >str_back
 	!byte 0, 0, 0, 0
 
 !source "../generated/src/menu_logo.asm"

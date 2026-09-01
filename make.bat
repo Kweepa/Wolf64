@@ -14,4 +14,8 @@ echo VICE not found — wolf64.d64 is built; run it manually. run-game.bat krill
 exit /b 0
 
 :launch
-start "" "%VICE%" -silent -autostart "%~dp0wolf64.d64"
+if not exist "%~dp0wolf64.d64" (
+  echo wolf64.d64 missing after build
+  exit /b 1
+)
+start "" "%VICE%" -silent -autostartprgmode 0 -trapdevice8 +drive8truedrive -8 "%~dp0wolf64.d64" -autostart "%~dp0wolf64.d64"

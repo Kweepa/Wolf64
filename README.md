@@ -9,11 +9,11 @@ Requires [ACME](https://sourceforge.net/projects/acme-crossass/), Python 3, and 
 ```bat
 build.bat    rem produces wolf64.d64 (KERNAL) and wolf64-krill.d64
 make.bat     rem build + launch KERNAL disk in VICE
-run-game.bat         rem launch wolf64.d64
-run-game.bat krill   rem launch wolf64-krill.d64 (needs true drive emulation)
+run-game.bat         rem launch wolf64.d64 (VICE virtual device traps)
+run-game.bat krill   rem launch wolf64-krill.d64 (true drive emulation)
 ```
 
-The Krill disk needs a real 1541-class drive or VICE true drive emulation (virtual device traps will not run drive code). EasyFlash stays on the KERNAL disk. Rebuild Krill binaries with `python tools/build_krill.py` only when the resident address or `krill/config` changes.
+The Krill disk needs a real 1541-class drive or VICE true drive emulation (`run-game.bat krill` turns traps off and TDE on). Virtual device traps will not run drive code. EasyFlash stays on the KERNAL disk. Rebuild Krill binaries with `python tools/build_krill.py` only when the resident address or `krill/config` changes.
 
 ## EasyFlash cartridge
 

@@ -20,11 +20,14 @@ exit /b 1
 
 :launch
 set "DISK=%~dp0wolf64.d64"
+set "DRIVEOPTS=-trapdevice8 +drive8truedrive"
 if /i "%~1"=="krill" set "DISK=%~dp0wolf64-krill.d64"
+if /i "%~1"=="krill" set "DRIVEOPTS=+trapdevice8 -drive8truedrive"
 if /i "%~1"=="--krill" set "DISK=%~dp0wolf64-krill.d64"
+if /i "%~1"=="--krill" set "DRIVEOPTS=+trapdevice8 -drive8truedrive"
 if not exist "%DISK%" (
   echo %DISK% missing — run build.bat first
   exit /b 1
 )
 
-start "" "%VICE%" -silent -autostartprgmode 0 -8 "%DISK%" -autostart "%DISK%"
+start "" "%VICE%" -silent -autostartprgmode 0 %DRIVEOPTS% -8 "%DISK%" -autostart "%DISK%"

@@ -6,9 +6,7 @@ D018_SCR_A	= %00001000			; matrix $4000, bitmap $6000
 D018_SCR_B	= %00011000			; matrix $4400, bitmap $6000
 
 init_vic
-	lda $dd00
-	and #%11111100
-	ora #%00000010
+	lda #%00000010			; absolute — RMW poisons Krill IEC (DDRA=$03)
 	sta $dd00
 
 	lda #$3b				; DEN + BMM + RSEL + YSCROLL=3 (absolute)

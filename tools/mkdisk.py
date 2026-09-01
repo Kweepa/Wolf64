@@ -2,10 +2,11 @@
 """Build wolf64.d64 from game_image.prg (+ boot.prg) via c1541.
 
 Splits the fat ACME image (load @ TABLES) into
-tab/locode/scr/sfx/wpn/itm/bmp/tex_lo/tex_hi/paint/enemy
+tab/locode/scr/sfx/wpn/itm/bmp/tex_lo/paint/enemy
 using symbols from wolf64.lbl, adds splashc/splash, prebuilt sqtab.prg,
-stages maps at MAP ($EF00). Disk order: boot, splashc, splash, menu, …
-so the cover KERNAL-loads colour then pixels before MENU.
+stages maps at MAP ($EF00). Disk order: boot, splashc, splash, [loader,
+install], menu, … so the cover KERNAL-loads colour then pixels before MENU.
+--krill also packs krill/loader.prg + install.prg.
 """
 
 from __future__ import annotations
@@ -80,7 +81,7 @@ def parse_lbl(path: Path) -> Dict[str, int]:
 	return syms
 
 
-def slice_image(body: bytes, load_addr: int, start: int, end: int) -> bytes:
+def slice_image(body: bytes, load_addr: int, start: int, end: int, prg_load: Optional[int] = None) -> bytes:
 	if start < load_addr:
 		raise ValueError(f"slice start ${start:04X} < load ${load_addr:04X}")
 	if end < start:
@@ -92,7 +93,8 @@ def slice_image(body: bytes, load_addr: int, start: int, end: int) -> bytes:
 			f"slice ${start:04X}-${end:04X} past image end "
 			f"(load ${load_addr:04X}, len={len(body)})"
 		)
-	return struct.pack("<H", start) + body[off0:off1]
+	hdr = start if prg_load is None else prg_load
+	return struct.pack("<H", hdr) + body[off0:off1]
 
 
 def stage_map(bin_path: Path, out_path: Path) -> None:
@@ -118,6 +120,13 @@ def main() -> None:
 	ap.add_argument("--maps", default="maps")
 	ap.add_argument("--all-maps", action="store_true", help="include all Wolf1 maps")
 	ap.add_argument("--c1541", type=Path, default=None)
+	ap.add_argument(
+		"--krill",
+		action="store_true",
+		help="pack Krill LOADER+INSTALL (boot/splashc/game must be assembled -DUSE_KRILL=1)",
+	)
+	ap.add_argument("--loader", default="krill/loader.prg")
+	ap.add_argument("--install", default="krill/install.prg")
 	args = ap.parse_args()
 
 	c1541 = find_c1541(args.c1541)
@@ -139,6 +148,14 @@ def main() -> None:
 		if not p.is_file():
 			print(f"missing: {p}", file=sys.stderr)
 			sys.exit(1)
+
+	loader_path = Path(args.loader)
+	install_path = Path(args.install)
+	if args.krill:
+		for p in (loader_path, install_path):
+			if not p.is_file():
+				print(f"missing: {p} (run python tools/build_krill.py)", file=sys.stderr)
+				sys.exit(1)
 
 	syms = parse_lbl(lbl_path)
 	for need in (
@@ -189,9 +206,12 @@ def main() -> None:
 			start = syms[start_sym]
 			end = syms[end_sym]
 			out = tmp_dir / dos_name
-			out.write_bytes(slice_image(body, load_addr, start, end))
+			# Enemy stages at PAINTERS ($A000); boot then copy_enemy → $C000.
+			prg_load = 0xA000 if dos_name == "enemy" else None
+			out.write_bytes(slice_image(body, load_addr, start, end, prg_load))
+			hdr = prg_load if prg_load is not None else start
 			staged.append((dos_name, out))
-			print(f"  {dos_name}: ${start:04X}-${end:04X} ({end - start} bytes)")
+			print(f"  {dos_name}: ${start:04X}-${end:04X} header ${hdr:04X} ({end - start} bytes)")
 
 		# Prebuilt Judd tables (not part of fat image)
 		sq_raw = sqtab_path.read_bytes()
@@ -258,15 +278,27 @@ def main() -> None:
 			"-write",
 			str(splash_path),
 			"splash,p",
-			"-write",
-			str(menu_path),
-			"menu,p",
 		]
+		if args.krill:
+			cmd.extend(
+				[
+					"-write",
+					str(loader_path),
+					"loader,p",
+					"-write",
+					str(install_path),
+					"install,p",
+				]
+			)
+		cmd.extend(["-write", str(menu_path), "menu,p"])
 		for dos_name, path in staged:
 			cmd.extend(["-write", str(path), f"{dos_name},p"])
 		subprocess.check_call(cmd)
 
-	print(f"Wrote {d64} via {c1541} ({len(staged)} files + boot + splashc + splash + menu)")
+	kind = "krill" if args.krill else "kernal"
+	print(
+		f"Wrote {d64} via {c1541} ({kind}, {len(staged)} files + boot + splashc + splash + menu)"
+	)
 
 
 if __name__ == "__main__":

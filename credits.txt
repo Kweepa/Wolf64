@@ -18,6 +18,8 @@ Jay Wilbur, and Jason Blochowiak.
 Wall painter optimizations by
 bigfootbrz.
 
+Loader by Krill / Plush.
+
 Thanks!
 
-v1.6
+v1.7

@@ -13,6 +13,7 @@ MAX_HALF_H	= 75				; painter clamp (1..50 unrolled, 51..75 looped)
 NEAR_LO		= 51				; first looped (Bresenham) height; below this, TEX_HI/TEX_LO, no SMC
 
 ; --- memory map -----------------------------------------------------------
+; USE_KRILL=1: Krill loadraw at $4E00. Default: KERNAL LOAD.
 ; $0400  tables.asm (disk: tab)
 ; $0801  disposable boot → low BSS overlay (col_* / LoadPrg scrap)
 ; $08C0  reboot stub (installed at locode_entry); $08FD effects_vol; $08FE game_complete; $08FF difficulty
@@ -21,6 +22,7 @@ NEAR_LO		= 51				; first looped (Bresenham) height; below this, TEX_HI/TEX_LO, n
 ; $3800  Judd SQTAB (disk: sqt; 2K in locode–screen gap)
 ; $4000  VIC screen A / B ($4400) (disk: scr)
 ; $4800  PC SFX (disk: sfx; old walls.bin slot — texture data moved to TEX_LO/TEX_HI)
+; $4E00  Krill resident on wolf64-krill.d64 only (loadraw); reserved hole on both disks
 ; $5000  weapon HUD sprites (disk: wpn; ends at ITEM_SPRITES)
 ; $5880  world item gfx (disk: itm; to bitmap $6000); col_enemy in itm→bitmap slack
 ; $6000  bitmap (8K, disk: bmp); score code in hidden UI tail @ $64B0
@@ -409,6 +411,9 @@ player_bump_then_push
 	jmp push_walls
 
 end_sfx = *
+!if end_sfx > KRILL_HOLE {
+	!error "SFX overlaps Krill hole $4E00; end=$", end_sfx
+}
 !if end_sfx > WPN_SPRITES {
 	!error "SFX overlaps WPN_SPRITES; end=$", end_sfx
 }

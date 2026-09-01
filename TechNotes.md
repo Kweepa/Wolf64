@@ -175,7 +175,7 @@ SID writes, so gameplay callers never need a `$35` window for audio.
 
 ### Disk loading
 
-Boot PRG (`wolf64` on `wolf64.d64`) lives at `$0801` (BASIC `SYS 2061`). It
+Boot PRG (`wolf64` on `wolf64.d64` / `wolf64-krill.d64`) lives at `$0801` (BASIC `SYS 2061`). It
 must not emit bytes at `$08FD`–`$08FF` so `reboot_game`’s LOAD of `wolf64`
 leaves `effects_vol` / `game_complete` / `difficulty` intact.
 
@@ -183,19 +183,23 @@ Boot KERNAL-loads **splashc** at `$4000` (matrix in place, colour staged at
 `$43E8`, `do_splash` helpers immediately after the background byte at `$47D1`).
 `JSR do_splash` copies colour → `$D800`, clears the bitmap, and turns on bank-1
 MCM so the cover is coloured before pixels arrive. Then **splash** at `$6000`
-(bitmap paints in already coloured), then **MENU** at `$0900`. Boot `JSR`s
+(bitmap paints in already coloured). On the **Krill disk** splashc then
+KERNAL-loads **loader** (`$4E00`) and **install** (`$2000`), `JSR install`, and
+`loadraw`s **MENU**. On the KERNAL disk it KERNAL-loads MENU. Boot `JSR`s
 MENU (difficulty → `$08FF`; shareware always episode 0). MENU `init_menu_vic`
 blanks DEN and draws hires UI over the cover. Boot then stages
-**ENEMY** at `PAINTERS` (`$A000`) and calls MENU`+3` (`copy_enemy` →
+**ENEMY** at `PAINTERS` (`$A000`, PRG header) and calls MENU`+3` (`copy_enemy` →
 `copy_block_up`, overlap-safe high→low into `$C000` because staging overlaps
-the destination), then loads remaining assets with plain KERNAL SETNAM/SETLFS/LOAD
-(clear `$90`/ST between files; no per-file IOINIT/CIA). **LOCODE** overwrites
-the menu at `$0900`. Boot then jumps to `LOCODE_BASE`:
+the destination). Remaining assets: Krill `loadraw` (`$01=$35`, no `IOINIT`)
+or KERNAL SETNAM/SETLFS/LOAD. **LOCODE** overwrites the menu at `$0900`.
+Boot then jumps to `LOCODE_BASE`:
 
 | DOS | Load | Contents |
 |-----|------|----------|
 | `splashc` | `$4000` | Koala matrix + colour staging + bg; `do_splash` helpers at `$47D1` |
 | `splash` | `$6000` | Koala bitmap (8000 bytes; paints after colour is live) |
+| `loader` | `$4E00` | Krill resident (`wolf64-krill.d64` only) |
+| `install` | `$2000` | Krill installer (transient; MENU overwrites) |
 | `menu` | `$0900` | title/menu overlay (hires + menufont @ `$3800`; disposable) |
 | `enemy` | `$A000`→`$C000` | enemy block (staged at `PAINTERS`, then `copy_block_up`) |
 | `locode` | `$0900` | game code (no enemy modules; replaces menu) |
@@ -212,9 +216,14 @@ the menu at `$0900`. Boot then jumps to `LOCODE_BASE`:
 
 `TEX_HI` (also `$9000`-style row×256+texx×16+id layout, hi nibble pre-masked)
 is **not** a disk file: `init_tex_hi` (`render.asm`, called once from
-`game_start`) builds it in RAM at `TEX_HI = end_paint` ($AC13) by shifting
+`game_start`) builds it in RAM at `TEX_HI = $9000` by shifting
 every `TEX_LO` byte left 4 bits — the two tables hold the same information,
 so shipping/loading a second 4 KB blob would be pure waste.
+
+On the Krill disk, in-play `LoadLevel` is `loadraw` with `$01=$35` (KERNAL out
+so `$EF00` is RAM) and **must not `IOINIT`**. `$dd00` writes are absolute
+`%00000010` only (Krill sets CIA2 DDRA). `reboot_game` still `IOINIT`s so
+the next boot can KERNAL-load `wolf64` and reinstall.
 
 Locode’s `LoadLevel` pulls `e1m1` into **`$EF00`**. After handoff, **low BSS
 overlays the boot footprint** (`$0801`…`$08BF`). **`$08C0`** holds a 3-byte
@@ -222,7 +231,7 @@ overlays the boot footprint** (`$0801`…`$08BF`). **`$08C0`** holds a 3-byte
 in the enemy block so locode stays under SQTAB); **game over** (lives expired)
 blacks the screen and jumps there to LOAD `wolf64` (splash cover again, then menu).
 Deaths with lives remaining set `level_want=1` and restart the level. **`$08FF`**
-is `difficulty`. After `end_paint`: `TEX_HI` (RAM-only, see above), then
+is `difficulty`. After `end_paint`: `col_wallz_h`, then
 `col_wallz_h` / `col_enemy` (the latter in the itm→bitmap slack), then
 item/vis/cold-enemy SoA → `<$C000`. There is no more painter SMC and no
 `ph_h_done` — heights 1..75 all address `TEX_LO`/`TEX_HI` directly via

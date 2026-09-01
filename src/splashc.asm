@@ -1,6 +1,7 @@
 ; splashc.prg — Koala matrix/colour at $4000, then do_splash helpers after SPLASH_BG.
 ; Boot (load $0801) LOADs this, then JSR do_splash: copy colour, clear bitmap, MCM on,
-; LOAD splash pixels, LOAD MENU. Helpers overlap SFX_BASE; SFX loads much later.
+; LOAD splash pixels, then MENU (KERNAL or Krill loadraw after install).
+; Helpers overlap SFX_BASE; must end before KRILL_HOLE ($4E00).
 !cpu 6502
 !to "../generated/splashc.prg", cbm
 
@@ -25,15 +26,42 @@ clr_ptr		= $fb
 	bcs .fail
 	jsr splash_vic			; KERNAL LOAD RMW of $dd00; keep bank 1
 
+!if USE_KRILL {
+	lda #6
+	ldx #<name_loader
+	ldy #>name_loader
+	jsr load_sa1
+	bcs .fail
+	jsr splash_vic
+	lda #7
+	ldx #<name_install
+	ldy #>name_install
+	jsr load_sa1
+	bcs .fail
+	jsr splash_vic
+	jsr install
+	bcs .fail
+	jsr splash_vic			; Krill DDRA=$03 — absolute $dd00 only
+	sei
+	lda #BANK_LOADER
+	sta $01
+	clc
+	ldx #<name_menu
+	ldy #>name_menu
+	jsr loadraw
+	bcs .fail
+	jsr splash_vic
+} else {
 	lda #4
 	ldx #<name_menu
 	ldy #>name_menu
 	jsr load_sa1
 	bcs .fail
 	jsr splash_vic
+}
 	rts
 .fail
-	lda #$35
+	lda #BANK_LOADER
 	sta $01
 .hang
 	jmp .hang
@@ -115,10 +143,20 @@ load_sa1
 
 name_splash
 	!text "SPLASH"
+	!byte 0
 name_menu
 	!text "MENU"
+	!byte 0
+!if USE_KRILL {
+name_loader
+	!text "LOADER"
+	!byte 0
+name_install
+	!text "INSTALL"
+	!byte 0
+}
 
 end_splashc = *
-!if end_splashc > BITMAP {
-	!error "splashc helpers overlap bitmap; end=$", end_splashc
+!if end_splashc > KRILL_HOLE {
+	!error "splashc helpers overlap Krill hole; end=$", end_splashc
 }

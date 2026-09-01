@@ -10,7 +10,7 @@ if defined VICE_BIN if exist "%VICE_BIN%\x64sc.exe" (
   set VICE=%VICE_BIN%\x64sc.exe
   goto launch
 )
-echo VICE not found — wolf64.d64 is built; run it manually.
+echo VICE not found — wolf64.d64 is built; run it manually. run-game.bat krill for the Krill disk.
 exit /b 0
 
 :launch

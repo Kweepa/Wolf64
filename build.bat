@@ -48,12 +48,36 @@ python tools\gen_splash.py
 if errorlevel 1 exit /b 1
 
 pushd src
-"%ACME%" -v3 --vicelabels ..\generated\wolf64.lbl wolf64.asm
+"%ACME%" -v3 menu.asm
 if errorlevel 1 (
   popd
   exit /b 1
 )
-"%ACME%" -v3 menu.asm
+
+rem Krill disk first (236-byte loadraw @ $4E00, needs TDE / real 1541)
+"%ACME%" -DUSE_KRILL=1 -v3 --vicelabels ..\generated\wolf64-krill.lbl wolf64.asm
+if errorlevel 1 (
+  popd
+  echo Assemble failed ^(Krill^) — SFX must end before $4E00
+  exit /b 1
+)
+"%ACME%" -DUSE_KRILL=1 -v3 splashc.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" -DUSE_KRILL=1 boot.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+popd
+
+python tools\mkdisk.py --all-maps --krill --out wolf64-krill.d64 --labels generated\wolf64-krill.lbl
+if errorlevel 1 exit /b 1
+
+pushd src
+"%ACME%" -v3 --vicelabels ..\generated\wolf64.lbl wolf64.asm
 if errorlevel 1 (
   popd
   exit /b 1
@@ -73,6 +97,7 @@ popd
 python tools\mkdisk.py --all-maps
 if errorlevel 1 exit /b 1
 
-echo Built wolf64.d64
+echo Built wolf64.d64 ^(KERNAL^) and wolf64-krill.d64
 dir wolf64.d64
+dir wolf64-krill.d64
 dir generated\boot.prg generated\splashc.prg generated\splash.prg generated\menu.prg generated\game_image.prg 2>nul

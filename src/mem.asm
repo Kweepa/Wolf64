@@ -1,5 +1,23 @@
 ; Shared memory map — boot, locode image, and segment tooling
 ; Default $01=$34 (I/O out). Disk loads use $36; chip touch uses $35.
+; Krill loadraw needs $35 (IEC at $DD00) under SEI. Do not IOINIT while live.
+
+BANK_RAM	= $34
+BANK_LOADER	= $35			; I/O in, KERNAL out
+BANK_IO		= $36			; I/O + KERNAL, BASIC out
+
+; -DUSE_KRILL=1: native Krill (236 B at $4E00). Default 0: KERNAL LOAD ($FFD5).
+!ifndef USE_KRILL {
+	USE_KRILL = 0
+}
+; Reserved on both disks so SFX cannot grow into the resident hole.
+KRILL_HOLE	= $4E00			; loadraw on the Krill disk; unused otherwise
+!if USE_KRILL {
+	!source "../krill/loadersymbols-c64.inc"
+	!if loadraw != KRILL_HOLE {
+		!error "Krill loadraw is not KRILL_HOLE $4E00"
+	}
+}
 
 LOADER_BASE	= $0801			; disposable boot, then low BSS overlay
 LOCODE_BASE	= $0900			; resident low code (locode.prg); also MENU overlay pre-load
@@ -28,6 +46,7 @@ KOALA_TAIL	= 1000 - 768		; 232
 	!error "splash colour staging overlaps bitmap; bg=$", SPLASH_BG
 }
 SFX_BASE	= $4800			; pcsounds + pcsfreq_hi (old TEXTURES slot; walls.bin retired)
+; $4C60–$4DFF slack after SFX; $4E00–$4FFF reserved (Krill resident / unused)
 WPN_SPRITES	= $5000			; HUD weapons + flashes (34 sprites → $5880)
 ITEM_SPRITES	= $5880			; world item gfx (4bpp + LUTs; to bitmap $6000)
 MAX_VIS		= 48			; enemies + items in one depth-sorted draw list

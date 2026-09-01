@@ -1110,9 +1110,7 @@ apply_story_layout
 init_menu_vic
 	lda #$35				; I/O in, KERNAL out (menu_sfx IRQ uses $fffe)
 	sta $01
-	lda $dd00
-	and #%11111100
-	ora #%00000010			; VIC bank 1 ($4000-$7FFF)
+	lda #%00000010			; VIC bank 1; absolute — RMW poisons Krill IEC
 	sta $dd00
 	lda $d011
 	and #%10000111			; clear ECM/BMM/DEN/RSEL

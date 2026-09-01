@@ -1,14 +1,13 @@
 ; Wolf64 disposable boot — fits LOADER_BASE..effects_vol.
-; LOAD splashc @ $4000 → JSR do_splash (colour, pixels, MENU) → JSR menu
+; LOAD splashc @ $4000 → JSR do_splash (colour, pixels, MENU; Krill install) → JSR menu
 ; → ENEMY stage + JSR copy_enemy (+3) → file_tab → JMP $0900.
-; Per file: SETNAM / SETLFS / LOAD / CLOSE only.
+; USE_KRILL=1: loadraw after splashc installed Krill. Default: KERNAL $FFD5.
 ; File-table index in .xi (KERNAL LOAD clobbers ZP — do not keep ptr in $ae/$af).
 !cpu 6502
 !to "../generated/boot.prg", cbm
 
 !source "mem.asm"
 
-ENEMY_STAGING	= PAINTERS			; $A000 — overwritten later by PAINT
 MENU_COPY_ENEMY	= LOCODE_BASE + 3
 
 *= LOADER_BASE
@@ -16,7 +15,7 @@ MENU_COPY_ENEMY	= LOCODE_BASE + 3
 
 *= $080d
 boot_start
-	lda #$36
+	lda #BANK_IO
 	sta $01
 	jsr $ff84				; IOINIT
 	lda $d011
@@ -36,26 +35,41 @@ boot_start
 	jsr do_splash
 	jsr LOCODE_BASE				; run difficulty select
 
-	; ENEMY → $A000 (SA=0), copy under I/O → $C000 via MENU+3
-	lda #5
+	; ENEMY → $A000 (PRG header), copy under I/O → $C000 via MENU+3
 	ldx #<name_enemy
 	ldy #>name_enemy
-	jsr $ffbd
-	lda #1
-	ldx $ba
-	ldy #0
-	jsr $ffba
-	lda #0
-	ldx #<ENEMY_STAGING
-	ldy #>ENEMY_STAGING
-	jsr $ffd5
+!if USE_KRILL {
+	jsr load_file
+} else {
+	lda #5
+	jsr load_sa1
+}
 	bcs boot_fail
-	lda #1
-	jsr $ffc3
 	jsr MENU_COPY_ENEMY
 
 	ldx #0
 .next
+!if USE_KRILL {
+	lda file_tab,x
+	beq .done
+	stx .xi
+	txa
+	clc
+	adc #<file_tab
+	tax
+	lda #>file_tab
+	adc #0
+	tay
+	jsr load_file
+	bcs boot_fail
+	ldx .xi
+.sk
+	lda file_tab,x
+	inx
+	cmp #0
+	bne .sk
+	jmp .next
+} else {
 	lda file_tab,x
 	beq .done
 	sta .len
@@ -76,6 +90,7 @@ boot_start
 	adc .len
 	tax
 	jmp .next
+}
 
 .done
 	ldx #$ff
@@ -83,11 +98,12 @@ boot_start
 	jmp LOCODE_BASE
 
 boot_fail
-	lda #$35
+	lda #BANK_LOADER
 	sta $01
 .hang
 	jmp .hang
 
+; KERNAL LOAD, SA=1 (address from the PRG header). A=len, X/Y=name.
 load_sa1
 	jsr $ffbd
 	lda #1
@@ -102,9 +118,55 @@ load_sa1
 	plp
 	rts
 
+!if USE_KRILL {
+; loadraw, dest from PRG header. X/Y = 0-terminated name. Do not IOINIT.
+load_file
+	sei
+	lda #BANK_LOADER
+	sta $01
+	clc
+	jsr loadraw
+	php
+	lda #BANK_LOADER
+	sta $01
+	lda #%00000010
+	sta $dd00
+	plp
+	rts
+}
+
 .len	!byte 0
 .xi	!byte 0
 
+!if USE_KRILL {
+file_tab
+	!text "LOCODE"
+	!byte 0
+	!text "SCR"
+	!byte 0
+	!text "SFX"
+	!byte 0
+	!text "WPN"
+	!byte 0
+	!text "ITM"
+	!byte 0
+	!text "BMP"
+	!byte 0
+	!text "SQT"
+	!byte 0
+	!text "TEXLO"
+	!byte 0
+	!text "PAINT"
+	!byte 0
+	!text "TAB"
+	!byte 0
+	!text "COL"
+	!byte 0
+	!byte 0
+name_enemy
+	!text "ENEMY"
+	!byte 0
+} else {
 file_tab
 	!byte 6
 	!text "LOCODE"
@@ -129,11 +191,12 @@ file_tab
 	!byte 3
 	!text "COL"
 	!byte 0
+name_enemy
+	!text "ENEMY"
+}
 
 name_splashc
 	!text "SPLASHC"
-name_enemy
-	!text "ENEMY"
 
 end_boot = *
 !if end_boot > effects_vol {

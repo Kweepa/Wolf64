@@ -5,8 +5,8 @@ shareware/
 refs/
 
 # All build/generator output (tools/gen_*.py, pack_*.py, extract_*.py, ACME,
-# c1541) lives here — rebuild with build.bat. wolf64.d64/wolf64.crt are the
-# exception: kept at repo root and tracked, for clone-and-play.
+# c1541) lives here — rebuild with build.bat. wolf64.d64, wolf64-krill.d64,
+# and wolf64.crt are the exception: kept at repo root and tracked.
 generated/
 
 # Third-party tools, not redistributed

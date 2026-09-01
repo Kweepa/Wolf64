@@ -62,7 +62,6 @@ view_back	= $33		; 0 = paint SCREEN; 1 = paint SCREEN_B
 scr_front_l	= $34		; visible matrix base (HUD) — must be contiguous word
 scr_front_h	= $35
 input_mode	= $38		; 0=Keys, 1=1351 Port 1, 2=Joy Port 2 (survives LOAD)
-joy_mod		= $39		; 0=Btn2 Strafe, 1=Btn2 Turn
 dda_last_x	= $c6		; previous column xstep (0 = none)
 dda_last_y	= $c7		; previous column ystep
 door_cx		= $c8		; last door cell X ($ff = empty)

@@ -202,9 +202,7 @@ input_irq
 
 .btn2_eval
 	lda btn2_down				; 1 if Button 2 held, 0 if released
-	; joy_mod: 0 = Btn2 Strafe (default Turn), 1 = Btn2 Turn (default Strafe)
-	eor joy_mod
-	sta btn2_state				; 0 = Turn, 1 = Strafe
+	sta btn2_state				; 0 = Turn (default), 1 = Strafe
 
 	lda joy_state
 	and #$04				; Left
@@ -613,5 +611,5 @@ joy_state: !byte 0
 btn2_state: !byte 0
 potx_raw: !byte $ff			; SID POTX, sampled at IRQ entry (mux settled)
 btn2_pot: !byte 0			; hysteresis state of the pot button
-btn2_down: !byte 0			; debounced Button 2, before joy_mod
+btn2_down: !byte 0			; debounced Button 2
 btn2_deb: !byte 0			; frames the raw state has disagreed

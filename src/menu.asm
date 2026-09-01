@@ -92,7 +92,6 @@ sound_max	= $c3
 ps_save_x	= $c4
 ps_save_y	= $c5
 input_mode	= $38			; 0=Keys, 1=Mouse, 2=Joy (survives locode LOAD)
-joy_mod		= $39
 ; copy_block_up (boot-only; aliases menu draw ZP)
 src_ptr		= ptr_l
 dst_ptr		= ptr_r_l
@@ -193,7 +192,6 @@ run_menu
 .rm_menu
 	jsr draw_menu
 .rm_loop
-	jsr draw_joystick_test
 	jsr ui_read_keys
 	jsr wait_frame
 
@@ -250,16 +248,6 @@ menu_move_up
 	ldx menu_size
 .mmu_ok
 	dex
-	lda menu_id
-	cmp #3
-	bne .mmu_save
-	lda input_mode
-	cmp #2
-	beq .mmu_save
-	cpx #2
-	bne .mmu_save
-	dex
-.mmu_save
 	stx menu_item
 	jsr update_selection
 	jmp sfx_movegun2
@@ -273,16 +261,6 @@ menu_move_down
 	bcc .mmd_ok
 	ldx #0
 .mmd_ok
-	lda menu_id
-	cmp #3
-	bne .mmd_save
-	lda input_mode
-	cmp #2
-	beq .mmd_save
-	cpx #2
-	bne .mmd_save
-	inx
-.mmd_save
 	stx menu_item
 	jsr update_selection
 	jmp sfx_movegun2
@@ -316,8 +294,6 @@ menu_vol_input
 	beq .mvi_vol
 	cmp #1
 	beq .mvi_in
-	cmp #2
-	beq .mvi_mod
 	rts
 .mvi_in
 	lda #UI_RIGHT
@@ -329,12 +305,6 @@ menu_vol_input
 	jmp input_dec
 .mvi_inc
 	jmp input_inc
-.mvi_mod
-	lda #UI_RIGHT
-	ora #UI_LEFT
-	and ui_pressed
-	beq .mvi_o
-	jmp mod_toggle
 .mvi_vol
 	lda #UI_RIGHT
 	and ui_pressed
@@ -415,14 +385,6 @@ input_dec
 	jsr sfx_movegun1
 	jmp sync_input_and_redraw2
 
-mod_toggle
-	lda joy_mod
-	eor #1
-	and #1
-	sta joy_mod
-	jsr sfx_movegun1
-	jmp sync_redraw
-
 sync_input_strings
 	ldx #9
 	lda input_mode
@@ -435,59 +397,23 @@ sync_input_strings
 	sta str_input + 7,x
 	dex
 	bpl .sis_k
-	jmp .sis_mod
+	rts
 .sis_m
 	lda str_im_m,x
 	sta str_input + 7,x
 	dex
 	bpl .sis_m
-	jmp .sis_mod
+	rts
 .sis_j
 	lda str_im_j,x
 	sta str_input + 7,x
 	dex
 	bpl .sis_j
-.sis_mod
-	lda input_mode
-	cmp #2
-	beq .sis_m_en
-	ldx #16				; "Joy2 Btn2: " (11) + "Strafe"/"Turn  " (6)
-	lda #32
-.sis_bl
-	sta str_joy_mod,x
-	dex
-	bpl .sis_bl
-	rts
-.sis_m_en
-	ldx #10
-.sis_rl
-	lda str_jm_l,x
-	sta str_joy_mod,x
-	dex
-	bpl .sis_rl
-
-	ldx #5
-	lda joy_mod
-	bne .sis_t
-.sis_s
-	lda str_jm_s,x
-	sta str_joy_mod + 11,x
-	dex
-	bpl .sis_s
-	rts
-.sis_t
-	lda str_jm_t,x
-	sta str_joy_mod + 11,x
-	dex
-	bpl .sis_t
 	rts
 
 str_im_k	!scr "Keyboard  "
 str_im_m	!scr "Mouse     "
 str_im_j	!scr "Joystick 2"
-str_jm_s	!scr "Strafe"
-str_jm_l	!scr "Joy2 Btn2: "
-str_jm_t	!scr "Turn  "
 
 sync_vol_strings
 	lda #<str_fx_vol
@@ -571,13 +497,8 @@ menu_select
 	bne .ms_stay
 	lda menu_item
 	cmp #1
-	bne .ms_chk_mod
-	jsr input_inc
-	jmp .ms_stay
-.ms_chk_mod
-	cmp #2
 	bne .ms_stay
-	jsr mod_toggle
+	jsr input_inc
 .ms_stay
 	jmp .ms_st
 .ms_ne
@@ -698,10 +619,10 @@ next_menu
 	!byte 1, 3, NM_CTRL, NM_HELP, NM_CREDITS, NM_QUIT, 0, 0
 	!byte 2, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_BACK, 0
 	!byte NM_START, NM_START, NM_START, NM_START, NM_BACK, 0, 0, 0
-	!byte 3, 3, 3, NM_BACK, 0, 0, 0, 0
+	!byte 3, 3, NM_BACK, 0, 0, 0, 0, 0
 
 menu_sizes
-	!byte 6, 7, 5, 4
+	!byte 6, 7, 5, 3
 
 ; --- drawing ---------------------------------------------------------------
 
@@ -711,116 +632,6 @@ sync_input_and_redraw2
 	stx tmp4
 	jsr draw_menu_item
 	jmp sync_redraw
-
-draw_joystick_test
-	lda menu_id
-	cmp #3
-	bne .djt_clear
-
-	lda input_mode
-	cmp #2
-	beq .djt_run
-.djt_clear
-	; Not showing Joystick diagnostics right now (different screen, or Input
-	; switched back to Keyboard/Mouse without leaving Options): these two
-	; cells are bitmap hi-res colour-matrix bytes, not text — once poked
-	; they stay whatever colour they were last set to until something
-	; rewrites them, and toggling Input only repaints the option text
-	; (sync_redraw), not the full screen. Restore them to plain background
-	; so a stale button indicator can't linger after Joystick is deselected.
-	lda clear_bg
-	sta SCREEN + 24*40 + 36
-	sta SCREEN + 24*40 + 38
-	rts
-.djt_run
-
-	; Sample POTX before anything touches $DC00 or $DC02. ui_read_keys parks
-	; the mux on port 2 when it finishes and wait_frame has elapsed since, so
-	; the SID's conversion has had a full frame to settle. Note $DC02 = 0
-	; below floats PA6/PA7 high, which selects both ports and disturbs the
-	; mux too, so this read has to come first. See mem.asm.
-	lda $d419
-	sta potx_raw
-
-	lda $dc02
-	pha
-	lda #0
-	sta $dc02
-
-	; Check Button 1 (Fire)
-	lda #$ff
-	sta $dc00
-	lda $dc00
-	and #$10
-	bne .djt_b1_up
-	lda #49 ; '1'
-	bne .djt_b1_draw
-.djt_b1_up
-	lda #32 ; ' '
-.djt_b1_draw
-	sta SCREEN + 24*40 + 36
-
-	; Check Button 2 (Spacebar / Joy 1 Fire)
-	lda #$7f
-	sta $dc00
-	nop
-	nop
-	nop
-	lda $dc01
-	tax					; hold the row bits across the restore
-
-	pla
-	sta $dc02				; PA6/PA7 driving again before parking
-	lda #$9f
-	sta $dc00				; park mux on port 2 for the next sample
-
-	txa
-	and #$10
-	beq .djt_b2_raw_down			; key or fire down
-
-	; Pot path, same Schmitt trigger + debounce policy as input.asm
-	lda potx_raw
-	cmp #BTN2_POT_LO
-	bcc .djt_pot_dn
-	cmp #BTN2_POT_HI
-	bcc .djt_pot_keep			; dead band: hold previous state
-	lda #0
-	beq .djt_pot_set
-.djt_pot_dn
-	lda #1
-.djt_pot_set
-	sta btn2_pot
-.djt_pot_keep
-	lda btn2_pot
-	bne .djt_b2_raw_down
-	lda #0
-	beq .djt_deb_chk
-.djt_b2_raw_down
-	lda #1
-
-.djt_deb_chk
-	cmp btn2_down
-	beq .djt_deb_rst
-	inc btn2_deb
-	ldx btn2_deb
-	cpx #BTN2_DEB
-	bcc .djt_b2_show
-	sta btn2_down
-.djt_deb_rst
-	ldx #0
-	stx btn2_deb
-
-.djt_b2_show
-	lda btn2_down
-	bne .djt_b2_down
-	lda #32 ; ' '
-	bne .djt_b2_draw
-.djt_b2_down
-	lda #50 ; '2'
-.djt_b2_draw
-	sta SCREEN + 24*40 + 38
-.djt_rts
-	rts
 
 draw_menu
 	lda #COL_MAIN
@@ -2876,14 +2687,6 @@ ui_read_keys
 	sta ui_keys
 .urk_nospc
 
-	; Park the pot mux on port 2 so draw_joystick_test's POTX sample has a
-	; settled conversion next time round the loop. See mem.asm.
-	lda input_mode
-	cmp #2
-	bne .urk_nopark
-	lda #$9f
-	sta $dc00
-.urk_nopark
 	lda ui_old
 	eor #$ff
 	and ui_keys
@@ -2914,10 +2717,6 @@ menu_stk_i	!byte 0, 0, 0
 box_top		!byte 0
 box_left	!byte 0
 box_width	!byte 0
-potx_raw	!byte $ff		; SID POTX, sampled with the mux settled
-btn2_pot	!byte 0			; hysteresis state of the pot button
-btn2_down	!byte 0			; debounced Button 2
-btn2_deb	!byte 0			; frames the raw state has disagreed
 ui_keys		!byte 0
 ui_old		!byte 0
 ui_pressed	!byte 0
@@ -2976,7 +2775,6 @@ str_e5		!scr "Trail of the Madman",0
 str_e6		!scr "Confrontation",0
 str_fx_vol	!scr "Effects Volume 15",0
 str_input	!scr "Input: Keyboard   ",0
-str_joy_mod	!scr "Joy2 Btn2: Strafe",0
 str_itytd	!scr "Can I play, Daddy?",0
 str_dhm		!scr "Don't hurt me.",0
 str_hmp		!scr "Bring 'em on!",0
@@ -3001,7 +2799,7 @@ menu_str_lo
 	!byte <str_e5, <str_e6, <str_back, 0
 	!byte <str_itytd, <str_dhm, <str_hmp, <str_uv
 	!byte <str_back, 0, 0, 0
-	!byte <str_fx_vol, <str_input, <str_joy_mod, <str_back
+	!byte <str_fx_vol, <str_input, <str_back, 0
 	!byte 0, 0, 0, 0
 menu_str_hi
 	!byte >str_new_game, >str_sound, >str_control, >str_read_this
@@ -3010,7 +2808,7 @@ menu_str_hi
 	!byte >str_e5, >str_e6, >str_back, 0
 	!byte >str_itytd, >str_dhm, >str_hmp, >str_uv
 	!byte >str_back, 0, 0, 0
-	!byte >str_fx_vol, >str_input, >str_joy_mod, >str_back
+	!byte >str_fx_vol, >str_input, >str_back, 0
 	!byte 0, 0, 0, 0
 
 !source "../generated/src/menu_logo.asm"

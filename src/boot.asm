@@ -23,7 +23,6 @@ boot_start
 	sta $d011
 	lda #0
 	sta $38					; input_mode (0 = Keys)
-	sta $39					; joy_mod (0 = Btn2 Strafe)
 	sta $d020				; border shows even with DEN=0
 	sta $d015
 	sta $d01a

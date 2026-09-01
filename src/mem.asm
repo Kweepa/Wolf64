@@ -16,6 +16,17 @@ SCREEN_B	= $4400			; matrix B; $43E8–$43FF = sprite ptrs (SCR pads 24B)
 BITMAP		= $6000
 BITMAP_SIZE	= 8000			; VIC bitmap (last 192 of 8K unused)
 BITMAP_END	= BITMAP + BITMAP_SIZE	; $7F40
+; Boot splash (Koala split). splashc: matrix @ SCREEN, colour staged at SPLASH_COL.
+; Overlaps SCREEN_B until scr loads; unused until then.
+SPLASH_COL	= SCREEN + 1000		; $43E8
+SPLASH_COL_SIZE	= 1000
+SPLASH_BG	= SPLASH_COL + SPLASH_COL_SIZE	; $47D0
+do_splash	= SPLASH_BG + 1		; $47D1 — helpers ride on splashc.prg tail
+KOALA_COL_RAM	= $d800
+KOALA_TAIL	= 1000 - 768		; 232
+!if SPLASH_BG + 1 > BITMAP {
+	!error "splash colour staging overlaps bitmap; bg=$", SPLASH_BG
+}
 SFX_BASE	= $4800			; pcsounds + pcsfreq_hi (old TEXTURES slot; walls.bin retired)
 WPN_SPRITES	= $5000			; HUD weapons + flashes (34 sprites → $5880)
 ITEM_SPRITES	= $5880			; world item gfx (4bpp + LUTs; to bitmap $6000)

@@ -1,5 +1,6 @@
-; Wolf64 disposable boot — fits LOADER_BASE..LOCODE_BASE-1.
-; MENU @ $0900 → JSR menu → ENEMY stage + JSR copy_enemy (+3) → file_tab → JMP $0900.
+; Wolf64 disposable boot — fits LOADER_BASE..effects_vol.
+; LOAD splashc @ $4000 → JSR do_splash (colour, pixels, MENU) → JSR menu
+; → ENEMY stage + JSR copy_enemy (+3) → file_tab → JMP $0900.
 ; Per file: SETNAM / SETLFS / LOAD / CLOSE only.
 ; File-table index in .xi (KERNAL LOAD clobbers ZP — do not keep ptr in $ae/$af).
 !cpu 6502
@@ -19,31 +20,23 @@ boot_start
 	sta $01
 	jsr $ff84				; IOINIT
 	lda $d011
-	and #%11101111				; DEN off — IOINIT restores bank 0
+	and #%11101111				; DEN off until colour is in
 	sta $d011
 	lda #0
 	sta $d020				; border shows even with DEN=0
+	sta $d015
+	sta $d01a
 	cli
 
-	; MENU → $0900, run difficulty select
-	lda #4
-	ldx #<name_menu
-	ldy #>name_menu
-	jsr $ffbd
-	lda #1
-	ldx $ba				; device that loaded WOLF64
-	ldy #0
-	jsr $ffba
-	lda #0
-	ldx #<LOCODE_BASE
-	ldy #>LOCODE_BASE
-	jsr $ffd5
-	bcs .fail
-	lda #1
-	jsr $ffc3
-	jsr LOCODE_BASE
+	lda #7
+	ldx #<name_splashc
+	ldy #>name_splashc
+	jsr load_sa1
+	bcs boot_fail
+	jsr do_splash
+	jsr LOCODE_BASE				; run difficulty select
 
-	; ENEMY → $8000 (SA=0), copy under I/O → $C000 via MENU+3
+	; ENEMY → $A000 (SA=0), copy under I/O → $C000 via MENU+3
 	lda #5
 	ldx #<name_enemy
 	ldy #>name_enemy
@@ -56,7 +49,7 @@ boot_start
 	ldx #<ENEMY_STAGING
 	ldy #>ENEMY_STAGING
 	jsr $ffd5
-	bcs .fail
+	bcs boot_fail
 	lda #1
 	jsr $ffc3
 	jsr MENU_COPY_ENEMY
@@ -77,7 +70,7 @@ boot_start
 	tay
 	lda .len
 	jsr load_sa1
-	bcs .fail
+	bcs boot_fail
 	lda .xi
 	clc
 	adc .len
@@ -89,7 +82,7 @@ boot_start
 	txs					; discard KERNAL/BASIC stack junk
 	jmp LOCODE_BASE
 
-.fail
+boot_fail
 	lda #$35
 	sta $01
 .hang
@@ -137,8 +130,8 @@ file_tab
 	!text "COL"
 	!byte 0
 
-name_menu
-	!text "MENU"
+name_splashc
+	!text "SPLASHC"
 name_enemy
 	!text "ENEMY"
 

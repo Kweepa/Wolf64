@@ -175,8 +175,17 @@ SID writes, so gameplay callers never need a `$35` window for audio.
 
 ### Disk loading
 
-Boot PRG (`wolf64` on `wolf64.d64`) lives at `$0801`. It loads **MENU** at
-`$0900`, `JSR`s it (difficulty → `$08FF`; shareware always episode 0), then stages
+Boot PRG (`wolf64` on `wolf64.d64`) lives at `$0801` (BASIC `SYS 2061`). It
+must not emit bytes at `$08FD`–`$08FF` so `reboot_game`’s LOAD of `wolf64`
+leaves `effects_vol` / `game_complete` / `difficulty` intact.
+
+Boot KERNAL-loads **splashc** at `$4000` (matrix in place, colour staged at
+`$43E8`, `do_splash` helpers immediately after the background byte at `$47D1`).
+`JSR do_splash` copies colour → `$D800`, clears the bitmap, and turns on bank-1
+MCM so the cover is coloured before pixels arrive. Then **splash** at `$6000`
+(bitmap paints in already coloured), then **MENU** at `$0900`. Boot `JSR`s
+MENU (difficulty → `$08FF`; shareware always episode 0). MENU `init_menu_vic`
+blanks DEN and draws hires UI over the cover. Boot then stages
 **ENEMY** at `PAINTERS` (`$A000`) and calls MENU`+3` (`copy_enemy` →
 `copy_block_up`, overlap-safe high→low into `$C000` because staging overlaps
 the destination), then loads remaining assets with plain KERNAL SETNAM/SETLFS/LOAD
@@ -185,7 +194,9 @@ the menu at `$0900`. Boot then jumps to `LOCODE_BASE`:
 
 | DOS | Load | Contents |
 |-----|------|----------|
-| `menu` | `$0900` | title/menu overlay (text mode + menufont @ `$3800`; disposable) |
+| `splashc` | `$4000` | Koala matrix + colour staging + bg; `do_splash` helpers at `$47D1` |
+| `splash` | `$6000` | Koala bitmap (8000 bytes; paints after colour is live) |
+| `menu` | `$0900` | title/menu overlay (hires + menufont @ `$3800`; disposable) |
 | `enemy` | `$A000`→`$C000` | enemy block (staged at `PAINTERS`, then `copy_block_up`) |
 | `locode` | `$0900` | game code (no enemy modules; replaces menu) |
 | `scr` | `$4000` | video matrices |
@@ -209,7 +220,7 @@ Locode’s `LoadLevel` pulls `e1m1` into **`$EF00`**. After handoff, **low BSS
 overlays the boot footprint** (`$0801`…`$08BF`). **`$08C0`** holds a 3-byte
 `JMP reboot_game` trampoline installed by `locode_entry` (`reboot_game` lives
 in the enemy block so locode stays under SQTAB); **game over** (lives expired)
-blacks the screen and jumps there to LOAD `wolf64` and re-enter the menu.
+blacks the screen and jumps there to LOAD `wolf64` (splash cover again, then menu).
 Deaths with lives remaining set `level_want=1` and restart the level. **`$08FF`**
 is `difficulty`. After `end_paint`: `TEX_HI` (RAM-only, see above), then
 `col_wallz_h` / `col_enemy` (the latter in the itm→bitmap slack), then

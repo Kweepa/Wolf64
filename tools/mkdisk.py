@@ -3,7 +3,9 @@
 
 Splits the fat ACME image (load @ TABLES) into
 tab/locode/scr/sfx/wpn/itm/bmp/tex_lo/tex_hi/paint/enemy
-using symbols from wolf64.lbl, adds prebuilt sqtab.prg, stages maps at MAP ($EF00).
+using symbols from wolf64.lbl, adds splashc/splash, prebuilt sqtab.prg,
+stages maps at MAP ($EF00). Disk order: boot, splashc, splash, menu, …
+so the cover KERNAL-loads colour then pixels before MENU.
 """
 
 from __future__ import annotations
@@ -108,6 +110,8 @@ def main() -> None:
 	ap.add_argument("--out", default="wolf64.d64")
 	ap.add_argument("--image", default="generated/game_image.prg", help="fat ACME CBM image")
 	ap.add_argument("--boot", default="generated/boot.prg")
+	ap.add_argument("--splashc", default="generated/splashc.prg", help="Koala matrix + colour staging @ $4000")
+	ap.add_argument("--splash", default="generated/splash.prg", help="Koala bitmap @ $6000")
 	ap.add_argument("--menu", default="generated/menu.prg", help="pre-locode MENU overlay @ $0900")
 	ap.add_argument("--sqtab", default="generated/sqtab.prg", help="prebuilt Judd tables @ $3800")
 	ap.add_argument("--labels", default="generated/wolf64.lbl")
@@ -126,10 +130,12 @@ def main() -> None:
 
 	image_path = Path(args.image)
 	boot_path = Path(args.boot)
+	splashc_path = Path(args.splashc)
+	splash_path = Path(args.splash)
 	menu_path = Path(args.menu)
 	sqtab_path = Path(args.sqtab)
 	lbl_path = Path(args.labels)
-	for p in (image_path, boot_path, menu_path, sqtab_path, lbl_path):
+	for p in (image_path, boot_path, splashc_path, splash_path, menu_path, sqtab_path, lbl_path):
 		if not p.is_file():
 			print(f"missing: {p}", file=sys.stderr)
 			sys.exit(1)
@@ -247,6 +253,12 @@ def main() -> None:
 			str(boot_path),
 			"wolf64",
 			"-write",
+			str(splashc_path),
+			"splashc,p",
+			"-write",
+			str(splash_path),
+			"splash,p",
+			"-write",
 			str(menu_path),
 			"menu,p",
 		]
@@ -254,7 +266,7 @@ def main() -> None:
 			cmd.extend(["-write", str(path), f"{dos_name},p"])
 		subprocess.check_call(cmd)
 
-	print(f"Wrote {d64} via {c1541} ({len(staged)} files + boot + menu)")
+	print(f"Wrote {d64} via {c1541} ({len(staged)} files + boot + splashc + splash + menu)")
 
 
 if __name__ == "__main__":

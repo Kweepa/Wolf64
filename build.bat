@@ -44,6 +44,8 @@ python tools\gen_enemy_painters.py
 if errorlevel 1 exit /b 1
 python tools\gen_ui_bitmap.py
 if errorlevel 1 exit /b 1
+python tools\gen_splash.py
+if errorlevel 1 exit /b 1
 
 pushd src
 "%ACME%" -v3 --vicelabels ..\generated\wolf64.lbl wolf64.asm
@@ -52,6 +54,11 @@ if errorlevel 1 (
   exit /b 1
 )
 "%ACME%" -v3 menu.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" -v3 splashc.asm
 if errorlevel 1 (
   popd
   exit /b 1
@@ -68,4 +75,4 @@ if errorlevel 1 exit /b 1
 
 echo Built wolf64.d64
 dir wolf64.d64
-dir generated\boot.prg generated\menu.prg generated\game_image.prg 2>nul
+dir generated\boot.prg generated\splashc.prg generated\splash.prg generated\menu.prg generated\game_image.prg 2>nul

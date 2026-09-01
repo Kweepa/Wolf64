@@ -3,25 +3,17 @@
 ^Space...^ Fire
 ^1234....^ Change weapon
 
-If you have a mouse in port 1 and
-you have enabled it in the Options,
-you can turn and shoot with it.
-
 Walk into doors to open them.
 Walk into secret walls to push them.
 Walk over items to pick them up.
 ^
-Joystick in port 2. Enable it in
-the Options screen.
+If you have a mouse in port 1 and
+you have enabled it in the Options,
+you can turn and shoot with it.
 
-^Up/Down.^ Forward/backward
-^Left/Rgt^ Turn or strafe
-^Fire....^ Fire
-
-Hold Button 2 to swap Left/Right
-between turning and strafing.
-The Options Btn2 setting picks
-which one Button 2 gives you.
-
-Button 2: C64GS / Annihilator
-pads, or Space / port 1 fire.
+If you have a joystick in port 2 and
+you have enabled it in the Options,
+you can move and shoot with it.
+With a two button joystick, holding
+down the second button allows you
+to strafe.

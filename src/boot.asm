@@ -22,7 +22,8 @@ boot_start
 	and #%11101111				; DEN off until colour is in
 	sta $d011
 	lda #0
-	sta $38					; input_mode (0 = Keys)
+	sta $38					; mouse_en (menu detect)
+	sta $39					; joy_en
 	sta $d020				; border shows even with DEN=0
 	sta $d015
 	sta $d01a

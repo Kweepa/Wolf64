@@ -13,6 +13,7 @@ SAMPLE_TA_HI	= >$4FFF
 ; sintab AMP=64; identity: sin=64, dt=1024 → 1024 = 4.0 world.
 ; W/S or I/K move, A/D strafe, J/L turn (SquareDoom + IJKL).
 ; 1351 Port 1: POTX delta → playera; left button = FIRE (PB4, same as SPACE).
+; Joy Port 2 (joy_en): digital stick + Btn2 strafe; mutex with mouse_en.
 
 input_irq_init
 	lda #0
@@ -31,13 +32,12 @@ input_irq_init
 	sta turn_acc_h
 	sta $d01a				; no VIC IRQs
 
-	lda input_mode
-	cmp #2
-	beq .init_joy
-	lda #$7f
-	bne .init_set
-.init_joy
+	lda joy_en
+	beq .init_mouse
 	lda #$9f
+	bne .init_set
+.init_mouse
+	lda #$7f
 .init_set
 	sta $dc00				; pre-select POT multiplexer
 
@@ -105,11 +105,10 @@ input_irq
 .irq_run
 	jsr update_sfx
 
-	lda input_mode
-	cmp #1
-	beq .irq_to_mouse
-	cmp #2
-	beq .irq_joy
+	lda joy_en
+	bne .irq_joy
+	lda mouse_en
+	bne .irq_to_mouse
 	jmp .irq_keys
 .irq_to_mouse
 	jmp .irq_mouse
@@ -358,21 +357,16 @@ input_irq
 	txa
 	and #$10				; SPACE / 1351 left button (PB4)
 	bne .irq_nospc
+	lda joy_en
+	bne .irq_nospc			; joy: PB4 is Button 2 (strafe), not Fire
 	lda #1
 	sta in_fire
 .irq_nospc
-	lda input_mode
-	cmp #1
-	beq .irq_prep_mouse
-	cmp #2
-	beq .irq_prep_joy
-	jmp .irq_rti
-.irq_prep_mouse
 	lda #$7f
-	sta $dc00
-	jmp .irq_rti
-.irq_prep_joy
+	ldx joy_en
+	beq .irq_park
 	lda #$9f
+.irq_park
 	sta $dc00
 .irq_rti
 	pla

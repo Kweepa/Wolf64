@@ -91,7 +91,8 @@ sound_count	= $c2
 sound_max	= $c3
 ps_save_x	= $c4
 ps_save_y	= $c5
-input_mode	= $38			; 0=Keys, 1=Mouse, 2=Joy (survives locode LOAD)
+mouse_en	= $38			; match zp.asm — 1351 on/off (survives locode LOAD)
+joy_en		= $39			; Joy Port 2 on/off (mutex with mouse_en)
 ; copy_block_up (boot-only; aliases menu draw ZP)
 src_ptr		= ptr_l
 dst_ptr		= ptr_r_l
@@ -177,7 +178,8 @@ run_menu
 	jsr clear_screen_all
 	jsr draw_brand
 	jsr sync_vol_strings
-	jsr sync_input_strings
+	jsr sync_mouse_string
+	jsr sync_joy_string
 	lda game_complete
 	cmp #1
 	bne .rm_menu
@@ -293,18 +295,28 @@ menu_vol_input
 	lda menu_item
 	beq .mvi_vol
 	cmp #1
-	beq .mvi_in
+	beq .mvi_mouse
+	cmp #2
+	beq .mvi_joy
 	rts
-.mvi_in
+.mvi_mouse
 	lda #UI_RIGHT
 	and ui_pressed
-	bne .mvi_inc
+	bne .mvi_mt
 	lda #UI_LEFT
 	and ui_pressed
 	beq .mvi_o
-	jmp input_dec
-.mvi_inc
-	jmp input_inc
+.mvi_mt
+	jmp mouse_toggle
+.mvi_joy
+	lda #UI_RIGHT
+	and ui_pressed
+	bne .mvi_jt
+	lda #UI_LEFT
+	and ui_pressed
+	beq .mvi_o
+.mvi_jt
+	jmp joy_toggle
 .mvi_vol
 	lda #UI_RIGHT
 	and ui_pressed
@@ -335,7 +347,6 @@ vol_fx_dec
 	jsr sfx_movegun1
 sync_redraw
 	jsr sync_vol_strings
-	jsr sync_input_strings
 	ldx menu_item
 	stx tmp4
 	jmp draw_menu_item
@@ -343,7 +354,7 @@ sync_redraw
 ; 1351 Port 1: pots not stuck at $00/$FF
 detect_mouse
 	lda #0
-	sta input_mode
+	sta mouse_en
 	ldx #8
 .dm_samp
 	ldy #0
@@ -356,7 +367,7 @@ detect_mouse
 	beq .dm_y
 .dm_yes
 	lda #1
-	sta input_mode
+	sta mouse_en
 	rts
 .dm_y
 	lda $d41a
@@ -368,52 +379,74 @@ detect_mouse
 	bne .dm_samp
 	rts
 
-input_inc
-	inc input_mode
-	lda input_mode
-	cmp #3
-	bcc .ic_done
+mouse_toggle
+	lda mouse_en
+	eor #1
+	sta mouse_en
+	beq .mt_sfx
 	lda #0
-	sta input_mode
-	jmp .ic_done
-input_dec
-	dec input_mode
-	bpl .ic_done
-	lda #2
-	sta input_mode
-.ic_done
+	sta joy_en
+.mt_sfx
 	jsr sfx_movegun1
-	jmp sync_input_and_redraw2
+	jmp sync_device_redraw
 
-sync_input_strings
-	ldx #9
-	lda input_mode
-	cmp #1
-	beq .sis_m
-	cmp #2
-	beq .sis_j
-.sis_k
-	lda str_im_k,x
-	sta str_input + 7,x
+joy_toggle
+	lda joy_en
+	eor #1
+	sta joy_en
+	beq .jt_sfx
+	lda #0
+	sta mouse_en
+.jt_sfx
+	jsr sfx_movegun1
+	jmp sync_device_redraw
+
+sync_device_redraw
+	jsr sync_mouse_string
+	jsr sync_joy_string
+	ldx #1
+	stx tmp4
+	jsr draw_menu_item
+	ldx #2
+	stx tmp4
+	jmp draw_menu_item
+
+sync_mouse_string
+	ldx #2
+	lda mouse_en
+	bne .sms_on
+.sms_off
+	lda str_moff,x
+	sta str_mouse + 15,x
 	dex
-	bpl .sis_k
+	bpl .sms_off
 	rts
-.sis_m
-	lda str_im_m,x
-	sta str_input + 7,x
+.sms_on
+	lda str_mon,x
+	sta str_mouse + 15,x
 	dex
-	bpl .sis_m
-	rts
-.sis_j
-	lda str_im_j,x
-	sta str_input + 7,x
-	dex
-	bpl .sis_j
+	bpl .sms_on
 	rts
 
-str_im_k	!scr "Keyboard  "
-str_im_m	!scr "Mouse     "
-str_im_j	!scr "Joystick 2"
+sync_joy_string
+	ldx #2
+	lda joy_en
+	bne .sjs_on
+.sjs_off
+	lda str_moff,x
+	sta str_joy + 18,x
+	dex
+	bpl .sjs_off
+	rts
+.sjs_on
+	lda str_mon,x
+	sta str_joy + 18,x
+	dex
+	bpl .sjs_on
+	rts
+
+str_mon		!scr "On "
+str_moff	!scr "Off"
 
 sync_vol_strings
 	lda #<str_fx_vol
@@ -490,15 +523,20 @@ menu_select
 .ms_nv
 	lda tmp0
 	bmi .ms_tx
-; same-menu nop (volume) or mouse toggle
+; same-menu nop (volume) or mouse/joy toggle
 	cmp menu_id
 	bne .ms_ne
 	cmp #3
 	bne .ms_stay
 	lda menu_item
 	cmp #1
+	beq .ms_mouse
+	cmp #2
 	bne .ms_stay
-	jsr input_inc
+	jsr joy_toggle
+	jmp .ms_st
+.ms_mouse
+	jsr mouse_toggle
 .ms_stay
 	jmp .ms_st
 .ms_ne
@@ -619,19 +657,12 @@ next_menu
 	!byte 1, 3, NM_CTRL, NM_HELP, NM_CREDITS, NM_QUIT, 0, 0
 	!byte 2, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_BACK, 0
 	!byte NM_START, NM_START, NM_START, NM_START, NM_BACK, 0, 0, 0
-	!byte 3, 3, NM_BACK, 0, 0, 0, 0, 0
+	!byte 3, 3, 3, NM_BACK, 0, 0, 0, 0
 
 menu_sizes
-	!byte 6, 7, 5, 3
+	!byte 6, 7, 5, 4
 
 ; --- drawing ---------------------------------------------------------------
-
-sync_input_and_redraw2
-	jsr sync_input_strings
-	ldx #2
-	stx tmp4
-	jsr draw_menu_item
-	jmp sync_redraw
 
 draw_menu
 	lda #COL_MAIN
@@ -2774,7 +2805,8 @@ str_e4		!scr "A Dark Secret",0
 str_e5		!scr "Trail of the Madman",0
 str_e6		!scr "Confrontation",0
 str_fx_vol	!scr "Effects Volume 15",0
-str_input	!scr "Input: Keyboard   ",0
+str_mouse	!scr "Mouse (port 1) Off",0
+str_joy		!scr "Joystick (port 2) Off",0
 str_itytd	!scr "Can I play, Daddy?",0
 str_dhm		!scr "Don't hurt me.",0
 str_hmp		!scr "Bring 'em on!",0
@@ -2799,7 +2831,7 @@ menu_str_lo
 	!byte <str_e5, <str_e6, <str_back, 0
 	!byte <str_itytd, <str_dhm, <str_hmp, <str_uv
 	!byte <str_back, 0, 0, 0
-	!byte <str_fx_vol, <str_input, <str_back, 0
+	!byte <str_fx_vol, <str_mouse, <str_joy, <str_back
 	!byte 0, 0, 0, 0
 menu_str_hi
 	!byte >str_new_game, >str_sound, >str_control, >str_read_this
@@ -2808,7 +2840,7 @@ menu_str_hi
 	!byte >str_e5, >str_e6, >str_back, 0
 	!byte >str_itytd, >str_dhm, >str_hmp, >str_uv
 	!byte >str_back, 0, 0, 0
-	!byte >str_fx_vol, >str_input, >str_back, 0
+	!byte >str_fx_vol, >str_mouse, >str_joy, >str_back
 	!byte 0, 0, 0, 0
 
 !source "../generated/src/menu_logo.asm"

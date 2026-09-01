@@ -1,4 +1,4 @@
-; WASD / IJKL (no joystick — floating CIA bits cause phantom input)
+; WASD / IJKL (stick is input.asm / joy_en — floating CIA bits if always polled)
 !zone player
 
 WALL_MARGIN = $40				; 1/4 tile keep-out (player, guard, SS)

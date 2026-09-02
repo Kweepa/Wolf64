@@ -2,7 +2,7 @@
 """Build wolf64.d64 from game_image.prg (+ boot.prg) via c1541.
 
 Splits the fat ACME image (load @ TABLES) into
-tab/locode/scr/sfx/wpn/itm/bmp/tex_lo/paint/enemy
+tab/locode/scr/sfx/bjh/wpn/itm/bmp/tex_lo/paint/enemy
 using symbols from wolf64.lbl, adds splashc/splash, prebuilt sqtab.prg,
 stages maps at MAP ($EF00). Disk order: boot, splashc, splash, [loader,
 install], menu, … so the cover KERNAL-loads colour then pixels before MENU.
@@ -31,6 +31,7 @@ SEGMENTS = [
 	("locode", "LOCODE_BASE", "end_locode"),
 	("scr", "SCREEN", "end_scr"),
 	("sfx", "SFX_BASE", "end_sfx"),
+	("bjh", "BJH_SPRITES", "end_bjh"),
 	("wpn", "WPN_SPRITES", "end_wpn"),
 	("itm", "ITEM_SPRITES", "end_itm"),
 	("bmp", "BITMAP", "end_bmp"),
@@ -167,6 +168,8 @@ def main() -> None:
 		"end_scr",
 		"SFX_BASE",
 		"end_sfx",
+		"BJH_SPRITES",
+		"end_bjh",
 		"WPN_SPRITES",
 		"end_wpn",
 		"ITEM_SPRITES",

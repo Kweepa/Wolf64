@@ -9,7 +9,7 @@ init_vic
 	lda #%00000010			; absolute — RMW poisons Krill IEC (DDRA=$03)
 	sta $dd00
 
-	lda #$3b				; DEN + BMM + RSEL + YSCROLL=3 (absolute)
+	lda #$2b				; BMM + RSEL + YSCROLL=3, DEN off until first swap_view
 	sta $d011
 	lda #$18				; 40 columns + multicolor
 	sta $d016
@@ -22,7 +22,10 @@ init_vic
 	lda #0
 	sta $d020
 	sta $d021
-	sta $d015
+	sta $d015				; IRQ raster mux owns $d015 after input_irq_init
+	sta $d01a
+	lda $d019
+	sta $d019
 
 	; Bitmap + screen + colour RAM loaded from disk (SCR/BMP/COL)
 	jmp set_view_rows
@@ -69,12 +72,16 @@ swap_view
 	sta $d018
 	lda #0
 	sta view_back
-	beq .io_out
+	beq .unblank
 .show_a
 	lda #D018_SCR_A
 	sta $d018
 	lda #1
 	sta view_back
+.unblank
+	lda #$3b				; DEN on once the painted matrix is shown.
+	sta $d011				; Absolute: $d011 reads back the live raster
+						; MSB, so RMW would poison the IRQ compare.
 .io_out
 	lda #$34
 	sta $01

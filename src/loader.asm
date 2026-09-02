@@ -1,7 +1,7 @@
 ; Disk load helpers — resident in locode (map load + restart).
 ; USE_KRILL=1: loadraw, no IOINIT. Default: KERNAL SETNAM/SETLFS/LOAD/CLOSE.
 ;
-; Screen border blacked during LoadLevel (DEN stays on).
+; Screen blacked during LoadLevel (DEN off until first swap_view).
 !zone loader
 
 level_dos_name
@@ -36,13 +36,18 @@ FormatDosName
 	sta level_dos_name + 3
 	rts
 
-; Black border/bg, sprites off during load. Keep DEN on — if restart
-; aborts before init_vic, DEN=0 would leave a permanent black screen.
+; Black border/bg, sprites off, DEN off. Border still shows if load fails
+; (init_vic leaves DEN off; caller sets $d020).
 blank_screen
+	lda #$2b				; absolute — RMW writes the live raster MSB into RST8
+	sta $d011
 	lda #0
 	sta $d015
+	sta $d01a
 	sta $d020
 	sta $d021
+	lda $d019
+	sta $d019
 	rts
 
 !if USE_KRILL {
@@ -87,6 +92,10 @@ LoadLevel
 	lda #$7f
 	sta $dc0d
 	lda $dc0d
+	lda #0
+	sta $d01a
+	lda $d019
+	sta $d019
 	jsr blank_screen
 	jsr FormatDosName
 	ldx #<level_dos_name
@@ -120,21 +129,19 @@ LoadPrg
 	plp
 	rts
 
-; IOINIT can leave CIA2 Timer A generating NMIs. Quiesce CIA2 while
-; loading; prof_init restarts both timers afterward for frame timing.
-load_cia2_quiet
+; IOINIT can leave CIA2 Timer A generating NMIs. Mask the NMI without
+; stopping the timers — $dd0e/$dd0f=0 plus DEN=0 stalls KERNAL IEC.
+load_cia2_nmi_off
 	lda #0
-	sta $dd0e
-	sta $dd0f
 	sta $02a1				; KERNAL CIA2 ICR shadow; prevent FE88 re-enable
 	lda #$7f
 	sta $dd0d
 	lda $dd0d
 	rts
 
-; LoadLevel — IOINIT + blank + LoadPrg.
-; load_in_play=0: like boot — IOINIT, DEN off, CLI, no CIA2 quiet (quiet+DEN=0
-; stalls KERNAL IEC). load_in_play=1: IOINIT, init_vic (DEN on), CIA2 quiet, SEI.
+; LoadLevel — IOINIT + blank + LoadPrg. DEN off (blank_screen) until the
+; caller's first swap_view. load_in_play=1 also masks CIA2 NMI (game left
+; CIA2 running); timers keep running so IEC still works with DEN=0.
 ; C=0 ok, C=1 error. Caller must re-init IRQs/ZP (see restart_level).
 LoadLevel
 	sei
@@ -143,39 +150,25 @@ LoadLevel
 	lda #$7f
 	sta $dc0d				; kill game Timer A IRQ before KERNAL
 	lda $dc0d
-	lda load_in_play
-	beq .ll_cold
-	lda #$36
-	sta $01
-	jsr $ff84				; reset IEC (2nd+ in-play load needs this)
-	lda #$35
-	sta $01
-	jsr load_cia2_quiet
-	jsr init_vic				; undo IOINIT charset before blank/load
-	jmp .ll_common
-.ll_cold
-	lda #$36
-	sta $01
-	jsr $ff84				; IOINIT — cold only
-	lda #$35
-	sta $01
-	; Match boot: do not quiesce CIA2. Quiet + DEN=0 stalls KERNAL IEC.
-	jsr blank_screen
-	lda $d011
-	and #%11101111				; DEN off after IOINIT
+	lda #0
+	sta $d01a				; raster still latches if $d01a=1 after SEI
+	lda $d019
+	sta $d019
+	lda #$2b				; blank before IOINIT can restore DEN
 	sta $d011
 	lda #$36
 	sta $01
-	cli
-	bne .ll_dos				; A = $36
-
-.ll_common
+	jsr $ff84				; IOINIT — cold and 2nd+ in-play
 	lda #$35
 	sta $01
-	jsr blank_screen
+	lda load_in_play
+	beq .ll_blank
+	jsr load_cia2_nmi_off
+.ll_blank
+	jsr blank_screen			; DEN off after IOINIT
 	lda #$36
 	sta $01
-.ll_dos
+	cli
 	jsr FormatDosName
 	lda #4
 	ldx #<level_dos_name

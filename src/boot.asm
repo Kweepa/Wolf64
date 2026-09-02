@@ -146,6 +146,8 @@ file_tab
 	!byte 0
 	!text "SFX"
 	!byte 0
+	!text "BJH"
+	!byte 0
 	!text "WPN"
 	!byte 0
 	!text "ITM"
@@ -174,6 +176,8 @@ file_tab
 	!text "SCR"
 	!byte 3
 	!text "SFX"
+	!byte 3
+	!text "BJH"
 	!byte 3
 	!text "WPN"
 	!byte 3

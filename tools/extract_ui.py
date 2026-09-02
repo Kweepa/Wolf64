@@ -8,7 +8,10 @@ Writes textures/ui/:
   face1a.png .. face7c.png, face8a.png, face_gotgatling.png, face_mutant.png
   ui_digits_sheet.png   (10×1)
   ui_keys_sheet.png     (3×1)
-  ui_faces_sheet.png    (8×3; last cells empty)
+  ui_faces_sheet.png    (8×3)
+
+--faces-sheet PATH writes only the 24 HUD BJ faces as a 3×8 atlas
+(look a/b/c × HP 1–7 + dead/gatling/mutant).
 
 Chunk IDs are shareware VGAGRAPH.WL1 (GFXV_WL1.H + 8).
 """
@@ -228,7 +231,9 @@ def write_sheet(images: list[Image.Image], path: Path, cols: int) -> None:
     print(f"sheet            {cols}x{rows}  -> {path}")
 
 
-def extract_ui(shareware: Path, out_dir: Path) -> int:
+def load_vgagraph(
+    shareware: Path,
+) -> tuple[bytes, list[int], list[tuple[int, int]], list[tuple[int, int]]]:
     head = shareware / "VGAHEAD.WL1"
     dic = shareware / "VGADICT.WL1"
     graph_path = shareware / "VGAGRAPH.WL1"
@@ -241,6 +246,24 @@ def extract_ui(shareware: Path, out_dir: Path) -> int:
     graph = graph_path.read_bytes()
     pictable = load_pictable(graph, starts, nodes)
     print(f"pictable         {len(pictable)} entries (STARTPICS={STARTPICS})")
+    return graph, starts, nodes, pictable
+
+
+def extract_faces_sheet(shareware: Path, sheet_path: Path) -> int:
+    graph, starts, nodes, pictable = load_vgagraph(shareware)
+    images: list[Image.Image] = []
+    for name, chunk in UI_FACES:
+        img = extract_pic(graph, starts, nodes, pictable, chunk)
+        w, h = img.size
+        print(f"{name:16} chunk={chunk:3d}  {w}x{h}")
+        images.append(img)
+    sheet_path.parent.mkdir(parents=True, exist_ok=True)
+    write_sheet(images, sheet_path, 3)
+    return len(images)
+
+
+def extract_ui(shareware: Path, out_dir: Path) -> int:
+    graph, starts, nodes, pictable = load_vgagraph(shareware)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     jobs = UI_DIGITS + UI_KEYS + UI_FACES
@@ -269,7 +292,17 @@ def main(argv: list[str]) -> int:
         default=None,
         help="output directory (default: textures/ui)",
     )
+    ap.add_argument(
+        "--faces-sheet",
+        type=Path,
+        default=None,
+        help="write only the 24 HUD BJ faces as a 3×8 atlas (skip digits/keys)",
+    )
     args = ap.parse_args(argv)
+    if args.faces_sheet is not None:
+        n = extract_faces_sheet(args.shareware, args.faces_sheet)
+        print(f"Wrote {n} faces to {args.faces_sheet}")
+        return 0
     out = args.out or (root / "textures" / "ui")
     n = extract_ui(args.shareware, out)
     print(f"Wrote {n} pics to {out}")

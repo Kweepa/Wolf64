@@ -1,10 +1,9 @@
-; CIA1 Timer A IRQ accumulates hold-ms; read_input scales turn/move (SquareDoom)
+; Raster IRQ cascade: line 40 = face sprites; line 88 = gun then input/SFX.
+; Hold-ms accumulated once per frame at the weapon raster; read_input scales
+; turn/move (SquareDoom). CIA1 Timer A does not IRQ (it delayed raster 40).
 !zone input
 
-SAMPLE_MS	= 20
-; Timer A load = SAMPLE_MS * 1024 - 1 (binary-ms, φ2 ticks) → 50 Hz
-SAMPLE_TA_LO	= <$4FFF
-SAMPLE_TA_HI	= >$4FFF
+SAMPLE_MS	= 20			; one frame tick (PAL ~50 Hz)
 
 ; IRQ accumulates hold times into in_*; read_input snapshots under SEI and
 ; scales turn/wish by those times (not full-frame dt_ms):
@@ -30,7 +29,14 @@ input_irq_init
 	sta in_wpn_chaingun
 	sta turn_acc_l
 	sta turn_acc_h
-	sta $d01a				; no VIC IRQs
+	sta mux_phase
+
+	lda #$2b				; absolute — RST8 = 0; DEN stays off until first paint
+	sta $d011
+	lda #MUX_HUD_RASTER
+	sta $d012
+	lda $d019
+	sta $d019
 
 	lda joy_en
 	beq .init_mouse
@@ -47,10 +53,8 @@ input_irq_init
 	lda #$7f
 	sta $dc0d				; clear CIA1 IRQ enables
 	lda $dc0d				; ack
-	lda #SAMPLE_TA_LO
-	sta $dc04
-	lda #SAMPLE_TA_HI
-	sta $dc05
+	lda #0
+	sta $dc0e				; Timer A stopped — raster-only IRQ
 	lda #<input_irq
 	sta $fffe
 	lda #>input_irq
@@ -63,10 +67,8 @@ input_irq_init
 	lda #>nmi_stub
 	sta $fffb
 	sta $0319
-	lda #$81				; set + enable Timer A IRQ
-	sta $dc0d
-	lda #$11				; start + force load, continuous φ2
-	sta $dc0e
+	lda #1
+	sta $d01a				; raster IRQ only
 	rts
 
 ; Ack CIA2 NMI (RESTORE) with KERNAL banked out; banks I/O in for the ack
@@ -92,17 +94,48 @@ input_irq
 	pha
 	lda #$35
 	sta $01
-	; Sample SID POTX before anything below touches $DC00. CIA1 PA6/PA7 are
-	; the pot multiplexer select lines, so every keyboard row write corrupts
-	; the conversion in flight; here the mux has been parked by the previous
-	; IRQ's tail for a whole frame, so this reading is settled and valid.
+	lda mux_phase
+	bne .irq_wpn
+	jsr mux_hud_spr
+	lda #1
+	sta mux_phase
+	lda #MUX_WPN_RASTER
+	sta $d012
+	lda $d019
+	sta $d019
+	jmp .irq_rti
+.irq_wpn
+	lda tmp0
+	pha
+	lda tmp1
+	pha
+	lda tmp2
+	pha
+	lda tmp3
+	pha
+	lda tmp4
+	pha
+	lda tmp5
+	pha
+	jsr wpn_mux_restore
+	pla
+	sta tmp5
+	pla
+	sta tmp4
+	pla
+	sta tmp3
+	pla
+	sta tmp2
+	pla
+	sta tmp1
+	pla
+	sta tmp0
+	; Gun is programmed; input/SFX run here so they cannot delay raster 40.
+.irq_run
+	; POTX: HUD mux must not touch $DC00. Previous frame's .irq_park left
+	; the mux settled for a full frame.
 	lda $d419
 	sta potx_raw
-	lda $dc0d				; ack
-	and #$01
-	bne .irq_run
-	jmp .irq_rti
-.irq_run
 	jsr update_sfx
 
 	lda joy_en
@@ -149,8 +182,8 @@ input_irq
 	; Button 2 detection:
 	; - Digital 2nd button / Spacebar / Port 1 Fire ($DC01 bit 4 == 0)
 	; - Cheetah Annihilator style 2nd button on POTX (port 2)
-	; POTX is not read here: it was latched into potx_raw at the top of the
-	; IRQ, the only point in the frame where the pot mux has been stable long
+	; POTX is not read here: it was latched into potx_raw after gun mux, the
+	; only point in the frame where the pot mux has been stable long
 	; enough for the SID's conversion to be valid. See mem.asm.
 
 	; Spacebar (Row 7, Col 4) / Joy 1 Fire
@@ -235,7 +268,7 @@ input_irq
 
 .irq_mouse
 	; 1351 POTX wrap-delta. |dx|<=2 noise; |dx|>=33 = wrap (keep mouse_x, no look)
-	lda potx_raw				; latched at IRQ entry; see mem.asm
+	lda potx_raw				; latched after gun mux; see mem.asm
 	tax
 	sec
 	sbc mouse_x
@@ -368,6 +401,12 @@ input_irq
 	lda #$9f
 .irq_park
 	sta $dc00
+	lda #0
+	sta mux_phase
+	lda #MUX_HUD_RASTER
+	sta $d012
+	lda $d019
+	sta $d019
 .irq_rti
 	pla
 	sta $01					; restore caller's banking
@@ -603,7 +642,98 @@ neg_a
 
 joy_state: !byte 0
 btn2_state: !byte 0
-potx_raw: !byte $ff			; SID POTX, sampled at IRQ entry (mux settled)
+potx_raw: !byte $ff			; SID POTX, sampled after gun mux (mux settled)
 btn2_pot: !byte 0			; hysteresis state of the pot button
 btn2_down: !byte 0			; debounced Button 2
 btn2_deb: !byte 0			; frames the raw state has disagreed
+
+; Raster ~40: unexpanded hi-res BJ-head sprites over the HUD yellow.
+mux_hud_spr
+	lda #0
+	sta $d01d
+	sta $d017
+	sta $d01c
+	sta $d010
+	lda #BJH_X
+	sta $d000
+	sta $d002
+	sta $d004
+	sta $d006
+	sta $d008
+	lda #BJH_Y_LOOK
+	sta $d001
+	lda #BJH_Y_BLOOD
+	sta $d003
+	lda #BJH_Y_WHITE
+	sta $d005
+
+	lda player_hp
+	bne .mh_live
+
+	lda #BJH_Y_DEADLT
+	sta $d007
+	lda #BJH_Y_DEADRED
+	sta $d009
+	lda #BJH_PTR_DEADLT
+	sta $43fb
+	sta $47fb
+	lda #BJH_PTR_DEADRED
+	sta $43fc
+	sta $47fc
+	lda #10
+	sta $d02a
+	lda #2
+	sta $d02b
+	lda #BJH_EN_DEAD
+	sta $d015
+	rts
+
+.mh_live
+	lda #BJH_Y_BASE
+	sta $d007
+	sta $d009
+	ldy bjh_look
+	lda bjh_look_ptr,y
+	sta $43f8
+	sta $47f8
+	lda #2
+	sta $d027
+
+	lda player_hp
+	ldx #0
+	cmp #67
+	bcs .mh_blood
+	inx
+	cmp #34
+	bcs .mh_blood
+	inx
+.mh_blood
+	lda bjh_blood_ptr,x
+	sta $43f9
+	sta $47f9
+	lda bjh_blood_col,x
+	sta $d028
+
+	lda #BJH_PTR_WHITE
+	sta $43fa
+	sta $47fa
+	lda #1
+	sta $d029
+	lda #BJH_PTR_LTRED
+	sta $43fb
+	sta $47fb
+	lda #10
+	sta $d02a
+	lda #BJH_PTR_RED
+	sta $43fc
+	sta $47fc
+	lda #2
+	sta $d02b
+
+	lda #BJH_EN_ALIVE
+	cpx #0
+	beq +
+	lda #BJH_EN_BLOOD
++
+	sta $d015
+	rts

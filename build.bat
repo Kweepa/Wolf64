@@ -28,6 +28,8 @@ python tools\gen_menu_hint_sprites.py
 if errorlevel 1 exit /b 1
 python tools\gen_menu_cursor_sprites.py
 if errorlevel 1 exit /b 1
+python tools\gen_bjhead_sprites.py
+if errorlevel 1 exit /b 1
 python tools\gen_menu_text.py
 if errorlevel 1 exit /b 1
 python tools\gen_painters.py
@@ -58,7 +60,7 @@ rem Krill disk first (236-byte loadraw @ $4E00, needs TDE / real 1541)
 "%ACME%" -DUSE_KRILL=1 -v3 --vicelabels ..\generated\wolf64-krill.lbl wolf64.asm
 if errorlevel 1 (
   popd
-  echo Assemble failed ^(Krill^) — SFX must end before $4E00
+  echo Assemble failed ^(Krill^) — BJH must end before $4E00
   exit /b 1
 )
 "%ACME%" -DUSE_KRILL=1 -v3 splashc.asm

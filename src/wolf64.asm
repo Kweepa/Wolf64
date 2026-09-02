@@ -19,9 +19,10 @@ NEAR_LO		= 51				; first looped (Bresenham) height; below this, TEX_HI/TEX_LO, n
 ; $08C0  reboot stub (installed at locode_entry); $08FD effects_vol; $08FE game_complete; $08FF difficulty
 ; $0900  locode — game code, no enemy modules (disk: locode); MENU overlay pre-load
 ; $033C  locode runtime BSS (cassette buffer; not in locode PRG)
+; $3000  PC SFX (disk: sfx; CPU-only, locode–SQTAB gap)
 ; $3800  Judd SQTAB (disk: sqt; 2K in locode–screen gap)
 ; $4000  VIC screen A / B ($4400) (disk: scr)
-; $4800  PC SFX (disk: sfx; old walls.bin slot — texture data moved to TEX_LO/TEX_HI)
+; $4800  BJ-head HUD sprites (disk: bjh; 10×64)
 ; $4E00  Krill resident on wolf64-krill.d64 only (loadraw); reserved hole on both disks
 ; $5000  weapon HUD sprites (disk: wpn; ends at ITEM_SPRITES)
 ; $5880  world item gfx (disk: itm; to bitmap $6000); col_enemy in itm→bitmap slack
@@ -90,7 +91,7 @@ game_start
 	sei
 	lda #$35
 	sta $01					; I/O in for VIC/SID/CIA init
-	jsr init_vic				; unblank before any further init
+	jsr init_vic				; bitmap mode, DEN off until first swap_view
 
 	lda #$ff
 	sta $dc02
@@ -199,13 +200,13 @@ prof_cy
 }
 
 end_locode = *
-!if end_locode > SQTAB1 {
-	!error "Locode overlaps SQTAB1; end=$", end_locode
+!if end_locode > SFX_BASE {
+	!error "Locode overlaps SFX_BASE; end=$", end_locode
 }
-!warn "Locode free $", SQTAB1 - end_locode, " (end=$", end_locode, " limit SQTAB1=$", SQTAB1, ")"
+!warn "Locode free $", SFX_BASE - end_locode, " (end=$", end_locode, " limit SFX_BASE=$", SFX_BASE, ")"
 
 ; --- Locode runtime BSS in cassette buffer (not emitted into locode PRG) ---
-; item_* scratch is in RAM after end_sfx; col_* overlays boot (bss.asm)
+; item_* scratch is after painters; col_* overlays boot (bss.asm)
 enemy_count	= TAPE_BSS
 item_considered	= enemy_count + 1
 los_rr		= item_considered + 1
@@ -295,27 +296,16 @@ player_score_l	= casc_now + 4			; displayed score / 100
 player_score_h	= player_score_l + 1
 score_1up_l	= player_score_h + 1		; next extra-life threshold (units)
 score_1up_h	= score_1up_l + 1
-end_tape_bss	= score_1up_h + 1
+face_tic_l	= score_1up_h + 1		; Wolf look cadence (dt_ms accum)
+face_tic_h	= face_tic_l + 1
+bjh_look	= face_tic_h + 1		; 0=left 1=center 2=right
+end_tape_bss	= bjh_look + 1
 !if end_tape_bss > TAPE_BSS_END {
 	!error "Tape BSS overflows cassette buffer; end=$", end_tape_bss
 }
 
 ; =========================================================================
-; scr — matrix A @ $4000, 24-byte sprite-ptr pad, matrix B @ $4400
-; =========================================================================
-*= SCREEN
-!binary "../generated/textures/ui/screen.bin", 2024
-end_scr = *
-!if end_scr != SCREEN_B + 1000 {
-	!error "SCR must end at SCREEN_B+1000 ($47E8); end=$", end_scr
-}
-!if end_scr > SFX_BASE {
-	!error "Screen matrices overlap SFX_BASE; end=$", end_scr
-}
-
-; =========================================================================
-; sfx — PC sounds @ $4800 (old walls.bin slot; texture data moved to
-; TEX_LO/TEX_HI, no longer a fixed-format packed table, no SMC needed)
+; sfx — PC sounds @ $3000 (CPU-only; locode–SQTAB gap)
 ; =========================================================================
 *= SFX_BASE
 !source "../generated/src/pcsounds.asm"
@@ -411,11 +401,31 @@ player_bump_then_push
 	jmp push_walls
 
 end_sfx = *
-!if end_sfx > KRILL_HOLE {
-	!error "SFX overlaps Krill hole $4E00; end=$", end_sfx
+!if end_sfx > SQTAB1 {
+	!error "SFX overlaps SQTAB1; end=$", end_sfx
 }
-!if end_sfx > WPN_SPRITES {
-	!error "SFX overlaps WPN_SPRITES; end=$", end_sfx
+
+; =========================================================================
+; scr — matrix A @ $4000, 24-byte sprite-ptr pad, matrix B @ $4400
+; =========================================================================
+*= SCREEN
+!binary "../generated/textures/ui/screen.bin", 2024
+end_scr = *
+!if end_scr != SCREEN_B + 1000 {
+	!error "SCR must end at SCREEN_B+1000 ($47E8); end=$", end_scr
+}
+!if end_scr > BJH_SPRITES {
+	!error "Screen matrices overlap BJH_SPRITES; end=$", end_scr
+}
+
+; =========================================================================
+; bjh — 10 BJ-head HUD sprites @ $4800 (ptrs $20–$29)
+; =========================================================================
+*= BJH_SPRITES
+!source "../generated/src/bjhead_spr.asm"
+end_bjh = *
+!if end_bjh > KRILL_HOLE {
+	!error "BJH sprites overlap Krill hole $4E00; end=$", end_bjh
 }
 
 ; =========================================================================
@@ -443,19 +453,19 @@ end_itm = *
 
 ; =========================================================================
 ; bmp — full MCM bitmap @ $6000 (UI + viewport pattern)
-; Hidden code @ $64B0: row 3 cols 30–39 + row 4 (400 bytes).
-; leftover: enemy_vel_rem (SuperCPU patrol/chase dt remainder).
+; Hidden code @ $64B0: row 3 cols 30–39, skip digit bottoms, rest of row 4.
 ; =========================================================================
 *= BITMAP
 !binary "../generated/textures/ui/bitmap.bin", 3 * 320 + 30 * 8
 !source "score.asm"
-enemy_vel_rem
-!fill MAX_ENEMIES, 0
 end_score = *
 !if end_score > BITMAP + 5 * 320 {
 	!error "Score code overlaps 3D bitmap row 5; end=$", end_score
 }
 !warn "Score code free $", BITMAP + 5 * 320 - end_score, " (end=$", end_score, ")"
+; Digit bottoms (row 4 cols 0–9) into the hole score.asm *= skipped.
+*= BITMAP + 4 * 320
+!binary "../generated/textures/ui/bitmap.bin", 10 * 8, 4 * 320
 *= BITMAP + 5 * 320
 !binary "../generated/textures/ui/bitmap.bin", 20 * 320, 5 * 320
 ; Profiler hexfont in unused VIC bitmap tail ($7F40..)
@@ -510,7 +520,8 @@ enemy_state_t	= vis_kind + MAX_VIS
 enemy_type	= enemy_state_t + MAX_ENEMIES
 enemy_hp		= enemy_type + MAX_ENEMIES
 enemy_state	= enemy_hp + MAX_ENEMIES
-end_item_soa	= enemy_state + MAX_ENEMIES
+enemy_vel_rem	= enemy_state + MAX_ENEMIES	; SuperCPU patrol/chase dt remainder
+end_item_soa	= enemy_vel_rem + MAX_ENEMIES
 !if end_item_soa > ENEMY_BASE {
 	!error "Item/vis/enemy BSS overlaps ENEMY_BASE; end=$", end_item_soa
 }

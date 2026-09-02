@@ -76,7 +76,6 @@ give_weapon
 init_weapon
 	lda #0
 	sta wpn_visible
-	sta $d015
 	sta muzzle_ms_l
 	sta muzzle_ms_h
 	sta fire_rpt_l
@@ -91,8 +90,6 @@ init_weapon
 show_weapon
 	lda #$ff
 	sta wpn_visible
-	lda spr_en
-	sta $d015
 	rts
 
 ; After level reload — keep ownership; re-apply sprite setup
@@ -118,14 +115,25 @@ refresh_weapon
 hide_weapon
 	lda #0
 	sta wpn_visible
+	rts
+
+; Raster ~88: restore XY-expanded weapon sprites (or hide them). Faces stay
+; programmed by mux_hud_spr; do not poke $d015 from the main thread.
+wpn_mux_restore
+	lda wpn_visible
+	beq .wmr_off
+	jsr setup_weapon
+	lda spr_en
+	sta $d015
+	rts
+.wmr_off
+	lda #0
 	sta $d015
 	rts
 
-; A = enable mask → spr_en; $d015 only if wpn_visible.
+; A = enable mask → spr_en. $d015 is applied at the weapon raster.
 .wpn_en
 	sta spr_en
-	and wpn_visible
-	sta $d015
 	rts
 
 ; A = sprite pointer, Y = sprite index — both double-buffer matrices

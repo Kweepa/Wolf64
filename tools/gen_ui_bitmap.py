@@ -9,18 +9,15 @@ Outputs (textures/ui/):
   colorram.bin 1000 bytes @ $d800
   uilayout_c64_preview.png
 
-Packed HUD (5 char rows; row 3 cols 30–39 + row 4 = contiguous hidden code @ $64B0):
-  rows 0–2 cols 32–39  face bank (4× 2×3, shared MCM; screen/colour 0 = hidden)
-  row 3 cols 0–19      digits 0–9 flattened (upper cell, then lower)
-  row 3 cols 20–29     digit 0–9 screen / colour LUT
-  face/key ON attrs    emitted as src/ui_attr.inc (score overlay; not HUD cells)
+Packed HUD (5 char rows; row 3 cols 30–39 + row 4 cols 10–39 = hidden code):
+  rows 0–3             chrome from PNG (yellow BJ silhouette + keys)
+  rows 3–4 cols 0–9    digit glyphs in place; screen/colour 0 = hidden
+  key ON attrs         emitted as src/ui_attr.inc (score overlay; not HUD cells)
   row 3 cols 30–39     zero attrs (joins bitmap row 4 code hole)
 
-PNG source: digits at rows 3–4 cols 0–9; faces at rows 0–2 cols 32–39
-(plus a face0 placeholder at cols 19–20 cleared from chrome).
-Keys flank the face at row 2 cols 18 (gold) and 21 (silver) — bitmap stays;
-visibility is toggled via colour attrs at runtime.
-Live face dest is rows 0–2 col UI_COL_FACE (19).
+PNG source: digits at rows 3–4 cols 0–9. Keys at row 3 cols 17 (gold) and 22
+(silver) — bitmap stays; visibility is toggled via colour attrs at runtime.
+Yellow face is baked into the bitmap; overlay is VIC sprites (not cells).
 """
 
 from __future__ import annotations
@@ -40,21 +37,12 @@ SRC_PNG = UI_DIR / "uilayout.png"
 GEN_UI_DIR = ROOT / "generated" / "textures" / "ui"
 
 SRC_DIGIT_COL0 = 0
-SRC_FACE_COL0 = 32
-SRC_FACE_DEST_COL = 19  # placeholder cleared from chrome
-N_FACES = 4
-FACE_W_CELLS = 2
-FACE_H_CELLS = 3
+N_DIGITS = 10
 
-DST_DIGIT_COL0 = 0  # flattened: digit d at cols 2d (top) and 2d+1 (bot) on row 3
-DST_FACE_COL0 = 32  # live chrome RHS, hidden via zero attrs
-ATTR_DIGIT_ROW = 3
-ATTR_DIGIT_COL0 = 20
-
-# Live key cells in chrome (row 2, either side of face cols 19–20)
-KEY_GOLD_COL = 18
-KEY_SILVER_COL = 21
-KEY_ROW = 2
+# Live key cells in chrome (row 3, flanking the yellow chin)
+KEY_GOLD_COL = 17
+KEY_SILVER_COL = 22
+KEY_ROW = 3
 
 
 def pack_cell_mapped(
@@ -140,17 +128,18 @@ def main() -> None:
     screen = bytearray(1000)
     colorram = bytearray(1000)
 
-    for cy in range(3):
+    for cy in range(5):
         for cx in range(40):
             data, scr, col = pack_cell(cell_mcm_colors(src, cx, cy))
             write_bitmap_cell(bitmap, cx, cy, data)
             screen[cy * 40 + cx] = scr
             colorram[cy * 40 + cx] = col
 
-    # Live face dest is blitted at runtime; leave source bank bitmap, hide via attrs.
-    for cy in range(FACE_H_CELLS):
-        for dx in range(FACE_W_CELLS):
-            clear_cell(bitmap, screen, colorram, SRC_FACE_DEST_COL + dx, cy)
+    # Digits stay on PNG rows 3–4 cols 0–9; hide via black attrs (keep bitmap).
+    for cy in (3, 4):
+        for cx in range(N_DIGITS):
+            screen[cy * 40 + cx] = 0
+            colorram[cy * 40 + cx] = 0
 
     # Keys: keep bitmap, stash ON attrs, hide in live chrome (attrs=0).
     key_gold_scr = screen[KEY_ROW * 40 + KEY_GOLD_COL]
@@ -166,68 +155,18 @@ def main() -> None:
         f"silver col{KEY_SILVER_COL} scr=${key_sil_scr:02x} col=${key_sil_col:x} (start hidden)"
     )
 
-    digit_bmp: list[tuple[bytes, bytes]] = []
-    digit_attr: list[tuple[int, int]] = []
-    for d in range(10):
-        cx = SRC_DIGIT_COL0 + d
-        top, s0, c0 = pack_cell(cell_mcm_colors(src, cx, 3))
-        bot, _s1, _c1 = pack_cell(cell_mcm_colors(src, cx, 4))
-        digit_bmp.append((top, bot))
-        digit_attr.append((s0, c0))
-
-    face_colors: list[list[list[int]]] = []
-    all_face_px: list[int] = []
-    for f in range(N_FACES):
-        cells = []
-        for dy in range(FACE_H_CELLS):
-            for dx in range(FACE_W_CELLS):
-                cols = cell_mcm_colors(src, SRC_FACE_COL0 + f * FACE_W_CELLS + dx, dy)
-                cells.append(cols)
-                all_face_px.extend(cols)
-        face_colors.append(cells)
-
-    counts = Counter(c for c in all_face_px if c != 0)
-    top = [c for c, _ in counts.most_common(3)]
-    while len(top) < 3:
-        top.append(0)
-    face_c01, face_c10, face_c11 = top[0], top[1], top[2]
-    face_scr = ((face_c01 & 15) << 4) | (face_c10 & 15)
-    face_col = face_c11 & 15
-    print(
-        f"shared face palette: 01=${face_c01:x} 10=${face_c10:x} 11=${face_c11:x} "
-        f"screen=${face_scr:02x} col=${face_col:x}"
-    )
-
-    # Glyph rows 3–4: clear. Row 3 cols 30–39 + row 4 stay zero (score overlay @ $64B0).
-    for cy in range(3, 5):
-        for cx in range(40):
-            clear_cell(bitmap, screen, colorram, cx, cy)
-
-    for d in range(10):
-        top, bot = digit_bmp[d]
-        write_bitmap_cell(bitmap, DST_DIGIT_COL0 + d * 2, 3, top)
-        write_bitmap_cell(bitmap, DST_DIGIT_COL0 + d * 2 + 1, 3, bot)
-
-    for f in range(N_FACES):
-        for i, cols in enumerate(face_colors[f]):
-            dy, dx = i // FACE_W_CELLS, i % FACE_W_CELLS
-            data = pack_cell_mapped(cols, face_c01, face_c10, face_c11)
-            write_bitmap_cell(bitmap, DST_FACE_COL0 + f * 2 + dx, dy, data)
-            # Hidden source: zero attrs so four BJ heads are not visible on the HUD.
-            screen[dy * 40 + DST_FACE_COL0 + f * 2 + dx] = 0
-            colorram[dy * 40 + DST_FACE_COL0 + f * 2 + dx] = 0
-
-    for d in range(10):
-        scr, col = digit_attr[d]
-        screen[ATTR_DIGIT_ROW * 40 + ATTR_DIGIT_COL0 + d] = scr
-        colorram[ATTR_DIGIT_ROW * 40 + ATTR_DIGIT_COL0 + d] = col
+    # Row 3 cols 30–39 + row 4 cols 10–39: zero attrs for score overlay.
+    for cx in range(30, 40):
+        screen[3 * 40 + cx] = 0
+        colorram[3 * 40 + cx] = 0
+    for cx in range(10, 40):
+        screen[4 * 40 + cx] = 0
+        colorram[4 * 40 + cx] = 0
 
     attr_inc = ROOT / "generated" / "src" / "ui_attr.inc"
     attr_inc.parent.mkdir(parents=True, exist_ok=True)
     attr_inc.write_text(
-        "; Auto-generated by tools/gen_ui_bitmap.py — face/key ON attrs\n"
-        f"UI_ATTR_FACE\t\t!byte ${face_scr:02x}\n"
-        f"UI_COLR_FACE\t\t!byte ${face_col:02x}\n"
+        "; Auto-generated by tools/gen_ui_bitmap.py — key ON attrs\n"
         f"UI_ATTR_KEY_GOLD\t!byte ${key_gold_scr:02x}\n"
         f"UI_COLR_KEY_GOLD\t!byte ${key_gold_col:02x}\n"
         f"UI_ATTR_KEY_SILVER\t!byte ${key_sil_scr:02x}\n"
@@ -260,14 +199,8 @@ def main() -> None:
             data = read_bitmap_cell(bitmap, cx, cy)
             scr = screen[cy * 40 + cx]
             col = colorram[cy * 40 + cx]
-            if cy == 3 and cx < 20:
-                d = cx // 2
-                scr = screen[ATTR_DIGIT_ROW * 40 + ATTR_DIGIT_COL0 + d]
-                col = colorram[ATTR_DIGIT_ROW * 40 + ATTR_DIGIT_COL0 + d]
-            elif cy < 3 and DST_FACE_COL0 <= cx < DST_FACE_COL0 + N_FACES * FACE_W_CELLS:
-                scr, col = face_scr, face_col
             # Preview keys as ON (live chrome starts hidden).
-            elif cy == KEY_ROW and cx == KEY_GOLD_COL:
+            if cy == KEY_ROW and cx == KEY_GOLD_COL:
                 scr, col = key_gold_scr, key_gold_col
             elif cy == KEY_ROW and cx == KEY_SILVER_COL:
                 scr, col = key_sil_scr, key_sil_col
@@ -293,9 +226,8 @@ def main() -> None:
         f"colorram.bin ({len(colorram)}), {attr_inc.name}"
     )
     print(
-        f"faces: {N_FACES}×{FACE_W_CELLS*8}x{FACE_H_CELLS*8} hidden @ cols "
-        f"{DST_FACE_COL0}–{DST_FACE_COL0 + N_FACES * FACE_W_CELLS - 1} rows 0–2; "
-        f"digits flattened row 3 cols 0–19"
+        f"digits hidden in place rows 3–4 cols 0–9; "
+        f"keys row {KEY_ROW} cols {KEY_GOLD_COL}/{KEY_SILVER_COL}"
     )
 
 

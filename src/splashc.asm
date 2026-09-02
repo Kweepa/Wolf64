@@ -1,7 +1,7 @@
 ; splashc.prg — Koala matrix/colour at $4000, then do_splash helpers after SPLASH_BG.
 ; Boot (load $0801) LOADs this, then JSR do_splash: copy colour, clear bitmap, MCM on,
 ; LOAD splash pixels, then MENU (KERNAL or Krill loadraw after install).
-; Helpers overlap SFX_BASE; must end before KRILL_HOLE ($4E00).
+; Helpers overlap BJH_SPRITES ($4800); must end before KRILL_HOLE ($4E00).
 !cpu 6502
 !to "../generated/splashc.prg", cbm
 

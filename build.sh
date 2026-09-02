@@ -15,6 +15,7 @@ python3 tools/gen_menufont.py
 python3 tools/gen_menu_logo.py
 python3 tools/gen_menu_hint_sprites.py
 python3 tools/gen_menu_cursor_sprites.py
+python3 tools/gen_bjhead_sprites.py
 python3 tools/gen_menu_text.py
 python3 tools/gen_painters.py
 python3 tools/extract_walls.py --from-preview
@@ -28,7 +29,7 @@ python3 tools/gen_splash.py
 cd src
 acme -v3 menu.asm
 
-# Krill disk first (236-byte loadraw @ $4E00 — SFX must end before $4E00)
+# Krill disk first (236-byte loadraw @ $4E00 — BJH must end before $4E00)
 acme -DUSE_KRILL=1 -v3 --vicelabels ../generated/wolf64-krill.lbl wolf64.asm
 acme -DUSE_KRILL=1 -v3 splashc.asm
 acme -DUSE_KRILL=1 boot.asm

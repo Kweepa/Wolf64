@@ -86,6 +86,9 @@ reboot_game
 	sta $d015
 	sta $d020
 	sta $d021
+	sta $d01a
+	lda $d019
+	sta $d019
 	lda #6
 	ldx #< .rg_name
 	ldy #> .rg_name

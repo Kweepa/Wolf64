@@ -10,7 +10,7 @@ BANK_IO		= $36			; I/O + KERNAL, BASIC out
 !ifndef USE_KRILL {
 	USE_KRILL = 0
 }
-; Reserved on both disks so SFX cannot grow into the resident hole.
+; Reserved on both disks so BJH sprites cannot grow into the resident hole.
 KRILL_HOLE	= $4E00			; loadraw on the Krill disk; unused otherwise
 !if USE_KRILL {
 	!source "../krill/loadersymbols-c64.inc"
@@ -45,9 +45,12 @@ KOALA_TAIL	= 1000 - 768		; 232
 !if SPLASH_BG + 1 > BITMAP {
 	!error "splash colour staging overlaps bitmap; bg=$", SPLASH_BG
 }
-SFX_BASE	= $4800			; pcsounds + pcsfreq_hi (old TEXTURES slot; walls.bin retired)
-; $4C60–$4DFF slack after SFX; $4E00–$4FFF reserved (Krill resident / unused)
+SFX_BASE	= $3000			; pcsounds + pcsfreq_hi (CPU-only; locode–SQTAB gap)
+BJH_SPRITES	= $4800			; 10 BJ-head HUD sprites (640 B, ptrs $20–$29)
+; $4A80–$4DFF slack after BJH; $4E00–$4FFF reserved (Krill resident / unused)
 WPN_SPRITES	= $5000			; HUD weapons + flashes (34 sprites → $5880)
+MUX_HUD_RASTER	= 40			; face sprites (unexpanded) before HUD
+MUX_WPN_RASTER	= 88			; restore weapon sprites after HUD 40px
 ITEM_SPRITES	= $5880			; world item gfx (4bpp + LUTs; to bitmap $6000)
 MAX_VIS		= 48			; enemies + items in one depth-sorted draw list
 MAX_ENEMIES	= 64			; enemy SoA pool (hot in enemy PRG / gap / stack)
@@ -62,7 +65,7 @@ TEX_LO		= $8000			; 16 rows x 256 (texx*16+id); disk-loaded (tex_lo.bin)
 ; grow or shrink without moving TEX_HI.
 TEX_HI		= TEX_LO + 4096
 PAINTERS	= TEX_HI + 4096
-; Item scratch + vis_depth/order live in RAM after end_sfx (see wolf64.asm); must end ≤ ENEMY_BASE
+; Item scratch + vis_depth/order live in RAM after end_paint (see wolf64.asm); must end ≤ ENEMY_BASE
 ; col_enemy is 40 bytes at end_itm (itm→bitmap slack)
 ENEMY_BASE	= $C000			; contiguous enemy code+gfx+hot SoA
 MAP		= $EF00			; 4K level (under-KERNAL; LoadLevel)
@@ -96,24 +99,22 @@ UI_DIRTY_FACE	= $10
 UI_DIRTY_KEYS	= $20
 UI_DIRTY_SCORE	= $40
 UI_DIRTY_ALL	= $7F
-; HUD dest cols; digits flattened on bitmap row 3; faces hidden at cols 32–39 rows 0–2
+; HUD dest cols; digit glyphs stay on bitmap rows 3–4 cols 0–9 (attrs 0)
 UI_COL_LEVEL	= 2
 UI_COL_SCORE	= 6			; 4 live digits + static 00
 UI_COL_LIVES	= 14
-UI_COL_FACE	= 19			; live face dest (2×3 cells, rows 0–2)
-UI_COL_KEY_GOLD	= 18			; row 2 — attr on/off
-UI_COL_KEY_SILVER = 21			; row 2 — attr on/off
+UI_COL_FACE	= 19			; yellow silhouette (sprites overlay)
+UI_COL_KEY_GOLD	= 17			; row 3 — attr on/off
+UI_COL_KEY_SILVER = 22			; row 3 — attr on/off
 UI_COL_HP	= 23
 UI_COL_AMMO	= 29			; 2 digits (AMMO_MAX 99)
-UI_FACE_COL0	= 32			; bank: face f at col 32+f*2, rows 0–2
-UI_N_FACES	= 4
-UI_ATTR_DIGIT	= SCREEN + 3 * 40 + 20	; digit 0..9 screen attrs
-UI_COLR_DIGIT	= $d800 + 3 * 40 + 20
-; UI_ATTR_FACE / UI_COLR_*_KEY live in ui_attr.inc (score overlay)
+UI_ATTR_DIGIT	= $3e			; MCM cyan $3 + light blue $E
+UI_COLR_DIGIT	= $00			; black
+; UI_COLR_*_KEY live in ui_attr.inc (score overlay)
 UI_BMP_ROW0	= BITMAP
 UI_BMP_ROW1	= BITMAP + 1 * 320
 UI_BMP_ROW3	= BITMAP + 3 * 320
-SCORE_CODE	= BITMAP + 3 * 320 + 30 * 8	; row 3 cols 30–39 + row 4 ($64B0)
+SCORE_CODE	= BITMAP + 3 * 320 + 30 * 8	; row 3 cols 30–39 + row 4 cols 10–39 ($64B0)
 SCORE_1UP	= 400			; extra life every 40,000 displayed
 T_SECRET_ELEVATOR = 11			; Wolf wall 22; painted as T_ELEVATOR
 T_ELEVATOR	= 13

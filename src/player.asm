@@ -338,6 +338,10 @@ player_reset_status
 	sta death_ms_l
 	sta death_ms_h
 	sta hurt_flash
+	sta face_tic_l
+	sta face_tic_h
+	lda #1
+	sta bjh_look				; center
 	lda #UI_DIRTY_ALL
 	sta ui_dirty
 	rts
@@ -374,6 +378,9 @@ reboot_to_menu
 	sta $d020
 	sta $d021
 	sta $d015
+	sta $d01a
+	lda $d019
+	sta $d019
 	jmp REBOOT_STUB
 
 ; Walk-on exit tile 144

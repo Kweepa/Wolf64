@@ -443,6 +443,7 @@ prof_print
 ; ---------------------------------------------------------------------------
 ; Status bar. I/O in ($01=$35).
 ui_update
+	jsr .ui_look_tick
 	lda ui_dirty
 	bne +
 	rts
@@ -485,11 +486,6 @@ ui_update
 	jsr .ui_num
 +
 	lda ui_dirty
-	and #UI_DIRTY_FACE
-	beq +
-	jsr .ui_face
-+
-	lda ui_dirty
 	and #UI_DIRTY_KEYS
 	beq +
 	jsr .ui_keys
@@ -528,35 +524,30 @@ ui_update
 	bne .un_out
 	rts
 
-; A=digit X=dest col (preserved). Src: bitmap row 3, cols digit*2 / digit*2+1.
+; A=digit X=dest col (preserved). Src: bitmap rows 3–4, col = digit.
 ui_dig
 	sta tmp4
 	stx tmp5
-	asl tmp4
 	lda #3
 	ldy #1
 	jsr .ui_blitcell
-	inc tmp4
-	lda #3
+	lda #4
 	ldy #2
 	jsr .ui_blitcell
-	lda tmp4
-	lsr
-	tax
-	lda UI_ATTR_DIGIT,x
 	ldy tmp5
+	lda #UI_ATTR_DIGIT
 	sta SCREEN+40,y
 	sta SCREEN_B+40,y
 	sta SCREEN+80,y
 	sta SCREEN_B+80,y
-	lda UI_COLR_DIGIT,x
+	lda #UI_COLR_DIGIT
 	sta $d800+40,y
 	sta $d800+80,y
 	ldx tmp5
 	rts
 
 ; tmp4=src col, tmp5=dst col, A=src row (0..4), Y=dst row (0..2)
-; Clobbers tmp0-tmp3. Src col*8 is 16-bit (face bank starts at col 32).
+; Clobbers tmp0-tmp3. Src col*8 is 16-bit (cols 32+ need the high byte).
 .ui_blitcell
 	sta tmp3
 	tya
@@ -627,113 +618,87 @@ ui_dig
 	bpl -
 	rts
 
-; HP → face 0..2 by thirds; face 3 when dead. 16×24 (2×3 cells).
-.ui_face
+; Wolf look cadence: accumulate dt_ms; when count > rnd8*4, faceframe = rnd8>>6
+; (3 → 1 = center). IRQ reads bjh_look / player_hp for sprite layers.
+.ui_look_tick
 	lda player_hp
-	bne .uf_live
-	lda #3
-	bne .uf_got
-.uf_live
-	cmp #34
-	bcc .uf_f2
-	cmp #67
-	bcc .uf_f1
+	beq .ult_rts
+	clc
+	lda face_tic_l
+	adc dt_ms
+	sta face_tic_l
+	lda face_tic_h
+	adc #0
+	sta face_tic_h
+	jsr rnd8
+	sta tmp0
 	lda #0
-	beq .uf_got
-.uf_f1
-	lda #1
-	bne .uf_got
-.uf_f2
-	lda #2
-.uf_got
-	asl
-	clc
-	adc #UI_FACE_COL0
-	sta pp_dig_h				; src left col
+	asl tmp0
+	rol
+	asl tmp0
+	rol
+	sta tmp1				; threshold = rnd8 << 2
+	lda face_tic_h
+	cmp tmp1
+	bcc .ult_rts
+	bne .ult_fire
+	lda face_tic_l
+	cmp tmp0
+	bcc .ult_rts
+	beq .ult_rts
+.ult_fire
 	lda #0
-	sta pp_dig_t				; 0..5 = dy*2+dx
-.uf_c
-	lda pp_dig_t
-	and #1
-	clc
-	adc #UI_COL_FACE
-	sta tmp5
-	lda pp_dig_t
-	and #1
-	clc
-	adc pp_dig_h
-	sta tmp4
-	lda pp_dig_t
-	lsr					; dy = src and dest row
-	tay
-	jsr .ui_blitcell
-	ldx tmp5
-	lda pp_dig_t
+	sta face_tic_l
+	sta face_tic_h
+	jsr rnd8
 	lsr
-	tay					; dy
-	lda UI_ATTR_FACE
-	cpy #1
-	beq .uf_a1
-	bcs .uf_a2
-	sta SCREEN,x
-	sta SCREEN_B,x
-	lda UI_COLR_FACE
-	sta $d800,x
-	jmp .uf_n
-.uf_a1
-	sta SCREEN+40,x
-	sta SCREEN_B+40,x
-	lda UI_COLR_FACE
-	sta $d800+40,x
-	jmp .uf_n
-.uf_a2
-	sta SCREEN+80,x
-	sta SCREEN_B+80,x
-	lda UI_COLR_FACE
-	sta $d800+80,x
-.uf_n
-	inc pp_dig_t
-	lda pp_dig_t
-	cmp #6
-	bcs +
-	jmp .uf_c
+	lsr
+	lsr
+	lsr
+	lsr
+	lsr
+	cmp #3
+	bne +
+	lda #1
 +
+	sta bjh_look
+.ult_rts
 	rts
 
-; Gold/silver keys: bitmap always present at row2 cols 18/21; show via attrs.
+; Gold/silver keys: bitmap always present at row 3 cols 17/22; show via attrs.
 .ui_keys
 	lda player_keys
 	and #KEY_GOLD
 	beq .uk_goff
 	lda UI_ATTR_KEY_GOLD
 	ldy #UI_COL_KEY_GOLD
-	sta SCREEN+80,y
-	sta SCREEN_B+80,y
+	sta SCREEN+120,y
+	sta SCREEN_B+120,y
 	lda UI_COLR_KEY_GOLD
-	sta $d800+80,y
+	sta $d800+120,y
 	jmp .uk_sil
 .uk_goff
 	lda #0
 	ldy #UI_COL_KEY_GOLD
-	sta SCREEN+80,y
-	sta SCREEN_B+80,y
-	sta $d800+80,y
+	sta SCREEN+120,y
+	sta SCREEN_B+120,y
+	sta $d800+120,y
 .uk_sil
 	lda player_keys
 	and #KEY_SILVER
 	beq .uk_soff
 	lda UI_ATTR_KEY_SILVER
 	ldy #UI_COL_KEY_SILVER
-	sta SCREEN+80,y
-	sta SCREEN_B+80,y
+	sta SCREEN+120,y
+	sta SCREEN_B+120,y
 	lda UI_COLR_KEY_SILVER
-	sta $d800+80,y
+	sta $d800+120,y
 	rts
 .uk_soff
 	lda #0
 	ldy #UI_COL_KEY_SILVER
-	sta SCREEN+80,y
-	sta SCREEN_B+80,y
-	sta $d800+80,y
+	sta SCREEN+120,y
+	sta SCREEN_B+120,y
+	sta $d800+120,y
 	rts
 

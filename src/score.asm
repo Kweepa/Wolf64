@@ -1,11 +1,14 @@
 ; Score /100 + HUD draw + extra-life. Linked at SCORE_CODE ($64B0).
-; Hidden: row 3 cols 30–39 + row 4 must keep screen/colour 0.
+; Skip $6500–$654F (row 4 cols 0–9) so PNG digit bottoms stay in the bitmap.
+; Hidden: row 3 cols 30–39 + row 4 cols 10–39 must keep screen/colour 0.
 !zone score
 !source "../generated/src/ui_attr.inc"
 
 ; ET_GUARD, ET_SS, ET_DOG, ET_HANS
 kill_pts
 	!byte 1, 5, 2, 50
+
+*= BITMAP + 4 * 320 + 10 * 8		; $6550 — after digit bottoms
 
 ; X = enemy (clobbered; restored from enemy_idx)
 score_add_kill

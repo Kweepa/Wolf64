@@ -3,6 +3,7 @@ shareware/
 
 # Local reference dumps / reverse-engineering scratch
 refs/
+*.vsf
 
 # All build/generator output (tools/gen_*.py, pack_*.py, extract_*.py, ACME,
 # c1541) lives here — rebuild with build.bat. wolf64.d64, wolf64-krill.d64,

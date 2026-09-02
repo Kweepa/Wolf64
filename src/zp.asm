@@ -71,7 +71,7 @@ door_corient	= $ca
 door_cpos	= $cb
 enemy_idx	= $cc		; current enemy (was tape BSS; ZP saves ~73 in enemy PRG)
 ui_dirty	= $cd		; HUD dirty flags (was tape BSS; ZP saves locode)
-; $ce/$cf — KERNAL-volatile during in-play LOAD; player_hp moved to tape BSS
+mux_phase	= $ce		; 0=HUD faces (line 40), 1=gun (line 88)
 dt_rem8		= $cf		; leftover ms toward next enemy dt8 tick
 
 move_dx_l	= $3d
@@ -79,7 +79,7 @@ move_dx_h	= $3e
 move_dy_l	= $40
 move_dy_h	= $41
 
-; SquareDoom-style hold-ms input (CIA1 Timer A IRQ → read_input)
+; SquareDoom-style hold-ms input (weapon raster IRQ → read_input)
 in_fwd		= $3c
 in_back		= $3f
 in_turn_l	= $42

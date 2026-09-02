@@ -1,6 +1,6 @@
 ; Sound effects — Wolf PC-speaker envelopes on SID voice 2 pulse (50% duty).
 ; Data: pcsounds.asm + pcsfreq.asm (tools/gensounds.py from AUDIOT.WL1).
-; Decimated 3x; stepped once per CIA1 Timer A IRQ (~50 Hz).
+; Decimated 3x; stepped once per frame at the weapon raster (~50 Hz PAL).
 ; SID Fn lo fixed at $80 (hi LUT only — saves 256 bytes).
 
 !zone playsound
@@ -42,7 +42,7 @@ sfx_voice2_adsr
 
 ; ------------------------------------------------------------------
 ; play_sound — A = sound index; higher-or-equal priority preempts
-; Queue-only: no SID access (safe at $01=$34); the Timer A IRQ
+; Queue-only: no SID access (safe at $01=$34); the raster-88 IRQ
 ; (update_sfx) does all SID writes, starting on the next tick.
 ; Preserves X,Y and caller's I flag; A clobbered
 ; ------------------------------------------------------------------
@@ -81,7 +81,7 @@ play_sound
 	rts
 
 ; ------------------------------------------------------------------
-; update_sfx — one PC speaker sample per call (~50 Hz Timer A)
+; update_sfx — one PC speaker sample per call (weapon raster, ~50 Hz PAL)
 ; Must not touch tmp0–tmp5 / other main-thread ZP. Voice 2 only.
 ; ------------------------------------------------------------------
 update_sfx

@@ -204,7 +204,8 @@ Boot then jumps to `LOCODE_BASE`:
 | `enemy` | `$A000`→`$C000` | enemy block (staged at `PAINTERS`, then `copy_block_up`) |
 | `locode` | `$0900` | game code (no enemy modules; replaces menu) |
 | `scr` | `$4000` | video matrices |
-| `sfx` | `$4800` | PC sounds + freq (old walls.bin slot; ends `$4C5F`, `WPN_SPRITES` at `$5000`) |
+| `sfx` | `$3000` | PC sounds + freq (CPU-only; locode–SQTAB gap) |
+| `bjh` | `$4800` | 10 BJ-head HUD sprites (640 B, ptrs `$20`–`$29`; before Krill hole) |
 | `wpn` | `$5000` | weapon HUD sprites (all 4 + flashes, ends `$5880`) |
 | `itm` | `$5880` | world item gfx (4bpp frames + LUTs, to `$6000`) |
 | `bmp` | `$6000` | MCM bitmap |
@@ -295,7 +296,7 @@ Painters write colour nibbles straight into the **back** video matrix via ZP `vi
 
 `PROFILE=1` / `DBG_FPS=1` in `src/wolf64.asm`. CIA2 TA/TB cascaded ϕ2 clock (`src/profil.asm`). Bitmap row 0 shows approx **ms** (same `(cycles>>8)>>2` as SquareDoom).
 
-**`PROFILE=1` does not fit locode** (BSS + gated bodies push `end_locode` past SQTAB `$3800`). Ship with **`DBG_FPS=1`** (cols 0–2 = **F** only). Do not move Judd tables to make the full HUD fit. `PROF_SPLIT=1` is extra code and ~20ms of CIA samples — leave off.
+**`PROFILE=1` does not fit locode** (BSS + gated bodies push `end_locode` past SFX `$3000`). Ship with **`DBG_FPS=1`** (cols 0–2 = **F** only). Do not move Judd tables to make the full HUD fit. `PROF_SPLIT=1` is extra code and ~20ms of CIA samples — leave off.
 
 Pipelined render stores per-column `col_texid` / `col_half_h` / `col_texx`, then paints the back matrix.
 Default **`PROF_SPLIT=0`**: stage-boundary buckets only.  

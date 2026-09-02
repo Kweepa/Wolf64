@@ -117,14 +117,42 @@ hide_weapon
 	sta wpn_visible
 	rts
 
-; Raster ~88: restore XY-expanded weapon sprites (or hide them). Faces stay
-; programmed by mux_hud_spr; do not poke $d015 from the main thread.
+; Raster ~88: blit staged snapshot (or hide). Faces stay programmed by
+; mux_hud_spr; do not poke $d015 from the main thread. A/X/Y only.
 wpn_mux_restore
+	lda $d011
+	and #%00010000
+	beq .wmr_skip				; load / first paint: leave $d015
 	lda wpn_visible
 	beq .wmr_off
-	jsr setup_weapon
+	lda #0
+	sta $d01c
+	sta $d010
+	lda #$ff
+	sta $d01d
+	sta $d017
+	ldx #7
+.wmr_ptr
+	lda wpn_snap_ptr,x
+	sta $43f8,x
+	sta $47f8,x
+	dex
+	bpl .wmr_ptr
+	ldx #7
+.wmr_col
+	lda wpn_snap_col,x
+	sta $d027,x
+	dex
+	bpl .wmr_col
+	ldx #15
+.wmr_xy
+	lda wpn_snap_xy,x
+	sta $d000,x
+	dex
+	bpl .wmr_xy
 	lda spr_en
 	sta $d015
+.wmr_skip
 	rts
 .wmr_off
 	lda #0
@@ -136,54 +164,43 @@ wpn_mux_restore
 	sta spr_en
 	rts
 
-; A = sprite pointer, Y = sprite index — both double-buffer matrices
+; A = sprite pointer, Y = sprite index — snapshot; IRQ copies both matrices
 .wpn_ptr
-	sta $43f8,y
-	sta $47f8,y
+	sta wpn_snap_ptr,y
 	rts
 
+; Main thread only (weapon switch). Fills wpn_snap_* + spr_en; no VIC.
 setup_weapon
-	lda $01
-	pha
-	lda #$35
-	sta $01					; VIC regs; $D000–$DFFF is enemy RAM when I/O out
 	ldx cur_weapon
-	lda #0
-	sta $d01c
-	sta $d010
-	lda #$ff
-	sta $d01d
-	sta $d017
-
 	lda wpn_body_ptr0,x
-	sta tmp0
+	sta wpn_t0
 	lda wpn_nbody,x
-	sta tmp1
+	sta wpn_t1
 	ldy #0
 .su_ptr
 	tya
 	clc
-	adc tmp0
+	adc wpn_t0
 	jsr .wpn_ptr
 	iny
-	cpy tmp1
+	cpy wpn_t1
 	bcc .su_ptr
 
 	lda cur_weapon
 	asl
 	asl
 	asl
-	sta tmp2
+	sta wpn_t2
 	ldy #0
 .su_col
 	tya
 	clc
-	adc tmp2
+	adc wpn_t2
 	tax
 	lda wpn_spr_col,x
-	sta $d027,y
+	sta wpn_snap_col,y
 	iny
-	cpy tmp1
+	cpy wpn_t1
 	bcc .su_col
 
 	ldx cur_weapon
@@ -192,34 +209,31 @@ setup_weapon
 	lda wpn_nbody,x
 	tay
 	lda #1
-	sta $d027,y
+	sta wpn_snap_col,y
 	iny
 	lda wpn_nflash,x
 	sec
 	sbc #1
 	beq .su_fptrs
-	sta tmp0
+	sta wpn_t0
 	lda #10
 .su_fred
-	sta $d027,y
+	sta wpn_snap_col,y
 	iny
-	dec tmp0
+	dec wpn_t0
 	bne .su_fred
 .su_fptrs
 	jsr .set_flash_ptrs
 .su_pose
-	jsr apply_pose
-	pla
-	sta $01
-	rts
+	jmp apply_pose
 
 .set_flash_ptrs
 	ldx cur_weapon
 	lda wpn_nflash,x
 	beq .sfp_rts
-	sta tmp1
+	sta wpn_t1
 	lda wpn_nbody,x
-	sta tmp2
+	sta wpn_t2
 	lda wpn_flash_ptr0,x
 	cpx #WPN_CHAINGUN
 	bne .sfp_base
@@ -227,19 +241,19 @@ setup_weapon
 	beq .sfp_base
 	lda wpn_flash_ptr1,x
 .sfp_base
-	sta tmp0
+	sta wpn_t0
 	ldy #0
 .sfp_loop
 	tya
 	clc
-	adc tmp0
-	sty tmp3
-	ldy tmp2
+	adc wpn_t0
+	sty wpn_t3
+	ldy wpn_t2
 	jsr .wpn_ptr
-	inc tmp2
-	ldy tmp3
+	inc wpn_t2
+	ldy wpn_t3
 	iny
-	cpy tmp1
+	cpy wpn_t1
 	bcc .sfp_loop
 .sfp_rts
 	rts
@@ -267,83 +281,83 @@ apply_pose
 	adc wpn_pose
 	tay
 	lda wpn_pose_dx,y
-	sta tmp0
+	sta wpn_t0
 	lda wpn_pose_dy,y
-	sta tmp1
+	sta wpn_t1
 	ldx cur_weapon
 	lda wpn_nbody,x
-	sta tmp3
+	sta wpn_t3
 	lda cur_weapon
 	asl
 	asl
 	asl
-	sta tmp2
+	sta wpn_t2
 	ldy #0
 .axy_body
 	tya
 	asl
 	tax
-	sty tmp4
+	sty wpn_t4
 	tya
 	clc
-	adc tmp2
+	adc wpn_t2
 	tay
 	lda wpn_spr_x,y
 	clc
-	adc tmp0
-	sta $d000,x
+	adc wpn_t0
+	sta wpn_snap_xy,x
 	lda wpn_spr_y,y
 	clc
-	adc tmp1
-	sta $d001,x
-	ldy tmp4
+	adc wpn_t1
+	sta wpn_snap_xy+1,x
+	ldy wpn_t4
 	iny
-	cpy tmp3
+	cpy wpn_t3
 	bcc .axy_body
 
 	ldx cur_weapon
 	lda wpn_nflash,x
 	beq .axy_rts
-	sta tmp3
+	sta wpn_t3
 	lda wpn_nbody,x
-	sta tmp5
+	sta wpn_t5
 	lda cur_weapon
 	asl
 	asl
 	asl
-	sta tmp2
+	sta wpn_t2
 	cpx #WPN_CHAINGUN
 	bne .axy_flash
 	lda mg_frame
 	beq .axy_flash
 	clc
-	lda tmp2
+	lda wpn_t2
 	adc #4
-	sta tmp2
+	sta wpn_t2
 .axy_flash
 	ldy #0
 .axy_floop
 	tya
 	clc
-	adc tmp5
+	adc wpn_t5
 	asl
 	tax
-	sty tmp4
+	sty wpn_t4
 	tya
 	clc
-	adc tmp2
+	adc wpn_t2
 	tay
 	lda wpn_flash_x,y
 	clc
-	adc tmp0
-	sta $d000,x
+	adc wpn_t0
+	sta wpn_snap_xy,x
 	lda wpn_flash_y,y
 	clc
-	adc tmp1
-	sta $d001,x
-	ldy tmp4
+	adc wpn_t1
+	sta wpn_snap_xy+1,x
+	ldy wpn_t4
 	iny
-	cpy tmp3
+	cpy wpn_t3
 	bcc .axy_floop
 .axy_rts
 	rts
@@ -483,4 +497,18 @@ update_weapon
 	jmp .muzzle_expired
 .uw_up_rts
 	rts
+
+; Locode snapshot + scratch (tape BSS is full). IRQ blits ptr/col/xy to VIC.
+wpn_snap_ptr
+	!fill 8, 0
+wpn_snap_col
+	!fill 8, 0
+wpn_snap_xy
+	!fill 16, 0
+wpn_t0	!byte 0
+wpn_t1	!byte 0
+wpn_t2	!byte 0
+wpn_t3	!byte 0
+wpn_t4	!byte 0
+wpn_t5	!byte 0
 

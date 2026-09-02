@@ -115,7 +115,7 @@ game_start
 	jsr play_sound_init
 	jsr player_init_game
 
-	jsr init_weapon			; needs VIC sprites ($d0xx) while I/O in
+	jsr init_weapon			; snapshot for raster-88 blit (no VIC)
 	lda #$34
 	sta $01					; I/O out — enemy block spans $D000–$DFFF
 	jsr doors_clear

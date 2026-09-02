@@ -487,7 +487,7 @@ handle_level_want
 .hlw_life
 	jsr player_init_life
 .hlw_wpn
-	jsr init_weapon				; pistol sprites; I/O already $35
+	jsr init_weapon				; pistol snapshot for raster-88 blit
 .hlw_done
 	lda #0					; successful restart: restore black border
 	sta $d020

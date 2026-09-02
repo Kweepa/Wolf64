@@ -105,31 +105,7 @@ input_irq
 	sta $d019
 	jmp .irq_rti
 .irq_wpn
-	lda tmp0
-	pha
-	lda tmp1
-	pha
-	lda tmp2
-	pha
-	lda tmp3
-	pha
-	lda tmp4
-	pha
-	lda tmp5
-	pha
 	jsr wpn_mux_restore
-	pla
-	sta tmp5
-	pla
-	sta tmp4
-	pla
-	sta tmp3
-	pla
-	sta tmp2
-	pla
-	sta tmp1
-	pla
-	sta tmp0
 	; Gun is programmed; input/SFX run here so they cannot delay raster 40.
 .irq_run
 	; POTX: HUD mux must not touch $DC00. Previous frame's .irq_park left

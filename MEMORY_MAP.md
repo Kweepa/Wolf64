@@ -211,6 +211,7 @@ Hot enemy pos/facing/flags are at the tail of the enemy PRG (`enemy_xh`…`enemy
 | Sprite pointers | `$43F8` / `$47F8` (while that matrix is shown) |
 | BJ-head HUD sprites | `$4800`–`$4A85` (10×64 + ptr tables, VIC ptrs `$20`–`$29`; raster-muxed with weapons) |
 | Weapon sprites | `$5000`–`$587F` (VIC index from `$4000`) |
+| Weapon mux snapshot | locode `wpn_snap_ptr` / `_col` / `_xy`; raster 88 blits to VIC |
 | Item gfx | `$5880` (CPU; not VIC sprite pointers) |
 | Bitmap | `$6000`–`$7F3F` |
 | Colour RAM | `$D800`–`$DBE7` (I/O in only) |

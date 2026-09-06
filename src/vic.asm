@@ -1,12 +1,12 @@
 ; VIC setup - TechDesignDoc chunky view via multicolor bitmap nibbles
-; Double-buffer: SCREEN $4000 / SCREEN_B $4400, flip via $d018
+; Double-buffer: SCREEN $8000 / SCREEN_B $8400, flip via $d018
 !zone vic
 
-D018_SCR_A	= %00001000			; matrix $4000, bitmap $6000
-D018_SCR_B	= %00011000			; matrix $4400, bitmap $6000
+D018_SCR_A	= %00001000			; matrix $8000, bitmap $A000
+D018_SCR_B	= %00011000			; matrix $8400, bitmap $A000
 
 init_vic
-	lda #%00000010			; absolute — RMW poisons Krill IEC (DDRA=$03)
+	lda #VIC_BANK_DD00			; absolute — RMW poisons Krill IEC (DDRA=$03)
 	sta $dd00
 
 	lda #$2b				; BMM + RSEL + YSCROLL=3, DEN off until first swap_view

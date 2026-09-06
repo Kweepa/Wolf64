@@ -17,7 +17,8 @@ texture-id patch anywhere in this file any more.
 TEX_HI/TEX_LO hold every (row, texx, id) texel pre-masked at build time:
 TEX_HI + row*256,x = texel<<4 (lo nibble already 0), TEX_LO + row*256,x =
 texel (hi nibble already 0). Both bases are page-aligned, so "row*256" is
-purely a high-byte offset.
+purely a high-byte offset. Row 15 of TEX_HI is shadowed at TEX_HI_R15
+($DF00) because $FF00 is the 6502 vector page.
 
 half_h 1..50 (compile-time row): each combine site already knows row_top/
 row_bot, so it just emits `lda TEX_HI+row_top*256,x` / `ora TEX_LO+row_bot*256,x`
@@ -77,6 +78,13 @@ def emit_run(lines: list[str], value: int, start: int, count: int) -> None:
 		lines.append(f"\tsta (view_row{start + i}),y")
 
 
+def tex_hi_operand(row: int) -> str:
+	"""Row 15 lives at TEX_HI_R15 — $FF00 is the 6502 vector page."""
+	if row == 15:
+		return "TEX_HI_R15"
+	return f"TEX_HI + {row * 256}"
+
+
 def emit_unrolled(code: list[str]) -> None:
 	for h in range(1, MAX_UNROLL + 1):
 		label = f"painter_h{h:02d}"
@@ -120,7 +128,7 @@ def emit_unrolled(code: list[str]) -> None:
 			elif kt == "floor":
 				code.append("\tlda #$c0")
 			else:
-				code.append(f"\tlda TEX_HI + {tex_row(vt, h) * 256},x")
+				code.append(f"\tlda {tex_hi_operand(tex_row(vt, h))},x")
 
 			if kb == "sky":
 				code.append("\tora #$0b")
@@ -224,6 +232,12 @@ def emit_near(code: list[str]) -> None:
 		"\tsbc half_h",
 		"\tinc .pn_ld+2\t\t\t; next tex row = next page",
 		"\tinc .pn_ld2+2",
+		"\tlda .pn_ld+2",
+		"\tcmp #$ff\t\t\t; row 15 would be vector page — use shadow",
+		"\tbne +",
+		"\tlda #>TEX_HI_R15",
+		"\tsta .pn_ld+2",
+		"+",
 		"\tclc\t\t\t\t; not-taken path: force C=0 to match the taken path",
 		".pn_s1",
 		"\tsta tmp5",
@@ -239,6 +253,12 @@ def emit_near(code: list[str]) -> None:
 		"\tsbc half_h",
 		"\tinc .pn_ld+2",
 		"\tinc .pn_ld2+2",
+		"\tlda .pn_ld+2",
+		"\tcmp #$ff",
+		"\tbne +",
+		"\tlda #>TEX_HI_R15",
+		"\tsta .pn_ld+2",
+		"+",
 		"\tclc\t\t\t\t; not-taken path: force C=0 to match the taken path",
 		".pn_s2",
 		"\tsta tmp5",

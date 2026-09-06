@@ -1,6 +1,8 @@
 # Generate src/bss.asm — boot-overlay BSS (LOADER_BASE .. REBOOT_STUB).
 # col_wallz_h / col_enemy live after end_sfx (see wolf64.asm).
 # Doors / profiler / enemy temps / SoA stay as normal !fill in wolf64.asm.
+# episode / level_num / secret_from stay here: FormatDosName runs with KERNAL
+# in ($01=$36), so GAME_STATE at $EBA1 is ROM, not RAM. QS patches them in/out.
 from pathlib import Path
 
 REBOOT_STUB = 0x08C0

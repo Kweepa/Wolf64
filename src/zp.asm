@@ -180,3 +180,6 @@ sound_count		= $c2
 sound_max		= $c3
 ps_save_x		= $c4
 ps_save_y		= $c5
+; Quick save/load IRQ OR-latches (F5/F7). Above $cf; leave $90–$A4 and Krill $60–$64 alone.
+in_qsave		= $d0
+in_qload		= $d1

@@ -27,6 +27,8 @@ input_irq_init
 	sta in_wpn_pistol
 	sta in_wpn_mg
 	sta in_wpn_chaingun
+	sta in_qsave
+	sta in_qload
 	sta turn_acc_l
 	sta turn_acc_h
 	sta mux_phase
@@ -371,6 +373,22 @@ input_irq
 	lda #1
 	sta in_fire
 .irq_nospc
+	; F5 / F7 on PA0 = $FE (same row as RETURN/cursors; unused in play)
+	lda #$fe
+	sta $dc00
+	lda $dc01
+	tax
+	and #$40				; F5 = quick save
+	bne .irq_nof5
+	lda #1
+	sta in_qsave
+.irq_nof5
+	txa
+	and #$08				; F7 = quick load
+	bne .irq_nof7
+	lda #1
+	sta in_qload
+.irq_nof7
 	lda #$7f
 	ldx joy_en
 	beq .irq_park
@@ -651,11 +669,11 @@ mux_hud_spr
 	lda #BJH_Y_DEADRED
 	sta $d009
 	lda #BJH_PTR_DEADLT
-	sta $43fb
-	sta $47fb
+	sta SCREEN+$3fb
+	sta SCREEN_B+$3fb
 	lda #BJH_PTR_DEADRED
-	sta $43fc
-	sta $47fc
+	sta SCREEN+$3fc
+	sta SCREEN_B+$3fc
 	lda #10
 	sta $d02a
 	lda #2
@@ -670,8 +688,8 @@ mux_hud_spr
 	sta $d009
 	ldy bjh_look
 	lda bjh_look_ptr,y
-	sta $43f8
-	sta $47f8
+	sta SCREEN+$3f8
+	sta SCREEN_B+$3f8
 	lda #2
 	sta $d027
 
@@ -685,24 +703,24 @@ mux_hud_spr
 	inx
 .mh_blood
 	lda bjh_blood_ptr,x
-	sta $43f9
-	sta $47f9
+	sta SCREEN+$3f9
+	sta SCREEN_B+$3f9
 	lda bjh_blood_col,x
 	sta $d028
 
 	lda #BJH_PTR_WHITE
-	sta $43fa
-	sta $47fa
+	sta SCREEN+$3fa
+	sta SCREEN_B+$3fa
 	lda #1
 	sta $d029
 	lda #BJH_PTR_LTRED
-	sta $43fb
-	sta $47fb
+	sta SCREEN+$3fb
+	sta SCREEN_B+$3fb
 	lda #10
 	sta $d02a
 	lda #BJH_PTR_RED
-	sta $43fc
-	sta $47fc
+	sta SCREEN+$3fc
+	sta SCREEN_B+$3fc
 	lda #2
 	sta $d02b
 

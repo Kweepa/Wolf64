@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Judd/Arndt SQTAB1..4 (2K) as a CBM PRG load @ $3800.
+"""Generate Judd/Arndt SQTAB1..4 (2K) as a CBM PRG load @ $E000.
 
 Matches src/mul.asm init_sqtabs table fill (ZP hi pointers stay in-game).
 """
@@ -10,7 +10,7 @@ import argparse
 import struct
 from pathlib import Path
 
-SQTAB_LOAD = 0x3800
+SQTAB_LOAD = 0xC000  # staged at MAP; install_sqtabs copies to $D000
 SQTAB_SIZE = 0x800
 
 
@@ -76,7 +76,7 @@ def build_sqtab() -> bytes:
 
 def main() -> None:
 	default_out = Path(__file__).resolve().parents[1] / "generated" / "sqtab.prg"
-	ap = argparse.ArgumentParser(description="Generate sqtab.prg @ $3800")
+	ap = argparse.ArgumentParser(description="Generate sqtab.prg @ $C000 (MAP staging)")
 	ap.add_argument("-o", "--output", default=str(default_out))
 	args = ap.parse_args()
 

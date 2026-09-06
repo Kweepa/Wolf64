@@ -1,5 +1,5 @@
 ; Wolf64 MENU overlay — load @ LOCODE_BASE ($0900), JSR from boot, then overwritten by LOCODE.
-; Entry: +0 run_menu, +3 copy_enemy. Hires bitmap UI + full menufont (options + text screens).
+; Entry: +0 run_menu; +3 pad (boot no longer calls). Hires bitmap UI + full menufont.
 ; difficulty → $08FF; effects_vol/game_complete → $08FD/$08FE (survive LOCODE overwrite).
 ; Menu SFX: CIA1 Timer A + playsound (MOVEGUN/SHOOT/ESC from AUDIOT).
 !cpu 6502
@@ -8,9 +8,6 @@
 MENU_HELP_ENDINGS = 0			; 1 = Read This! shows ending1/2 (spacing)
 
 !source "mem.asm"
-
-ENEMY_STAGING	= PAINTERS
-ENEMY_COPY_PAGES = (MAP - ENEMY_BASE + 255) / 256
 
 MENU_SLOTS	= 8
 BOX_PAD		= 2
@@ -28,7 +25,7 @@ HINT_GAP	= 8			; px between key sprite and label
 HINT_SPR_Y	= 228			; 21px sprite centered on row 23
 MUX_LOGO_RASTER	= 30
 MUX_HINT_RASTER	= 90
-LOGO_SPR_RAM	= $4800			; 7×64 in VIC bank 1 (menu-only)
+LOGO_SPR_RAM	= BJH_SPRITES		; 7×64 in VIC bank $8000 (menu-only)
 LOGO_SPR_PTR0	= (LOGO_SPR_RAM - SCREEN) / 64
 HINT_SPR_RAM	= LOGO_SPR_RAM + MENU_LOGO_SPR_COUNT * 64
 HINT_SPR_PTR0	= (HINT_SPR_RAM - SCREEN) / 64
@@ -93,69 +90,12 @@ ps_save_x	= $c4
 ps_save_y	= $c5
 mouse_en	= $38			; match zp.asm — 1351 on/off (survives locode LOAD)
 joy_en		= $39			; Joy Port 2 on/off (mutex with mouse_en)
-; copy_block_up (boot-only; aliases menu draw ZP)
-src_ptr		= ptr_l
-dst_ptr		= ptr_r_l
 
 *= LOCODE_BASE
 	jmp run_menu
-	jmp copy_enemy
-
-; Staging $A000 overlaps dest $C000 — must copy high→low (Quake64 copy_block_up).
-copy_enemy
-	sei
-	lda #$34
-	sta $01
-	lda #<ENEMY_STAGING
-	sta src_ptr
-	lda #>ENEMY_STAGING
-	sta src_ptr+1
-	lda #<ENEMY_BASE
-	sta dst_ptr
-	lda #>ENEMY_BASE
-	sta dst_ptr+1
-	ldx #ENEMY_COPY_PAGES
-	ldy #0
-	jsr copy_block_up
-	lda #$36
-	sta $01
-	cli
-	rts
-
-; src_ptr → dst_ptr, size X=pages Y=frac. dst > src; overlap-safe (high→low).
-; Ported from Quake64 loader.asm.
-copy_block_up
-	txa
-	clc
-	adc src_ptr+1
-	sta src_ptr+1
-	txa
-	clc
-	adc dst_ptr+1
-	sta dst_ptr+1
-	cpy #0
-	beq .cbu_pages
-.cbu_frac
-	dey
-	lda (src_ptr),y
-	sta (dst_ptr),y
-	tya
-	bne .cbu_frac
-.cbu_pages
-	cpx #0
-	beq .cbu_rts
-	dec src_ptr+1
-	dec dst_ptr+1
-.cbu_page
-	dey				; 0 → 255
-	lda (src_ptr),y
-	sta (dst_ptr),y
-	tya
-	bne .cbu_page
-	dex
-	jmp .cbu_pages
-.cbu_rts
-	rts
+	rts					; +3 pad (was copy_enemy)
+	nop
+	nop
 
 run_menu
 	sei
@@ -1177,7 +1117,7 @@ apply_story_layout
 init_menu_vic
 	lda #$35				; I/O in, KERNAL out (menu_sfx IRQ uses $fffe)
 	sta $01
-	lda #%00000010			; VIC bank 1; absolute — RMW poisons Krill IEC
+	lda #VIC_BANK_DD00			; VIC bank $8000; absolute — RMW poisons Krill IEC
 	sta $dd00
 	lda $d011
 	and #%10000111			; clear ECM/BMM/DEN/RSEL
@@ -1187,7 +1127,7 @@ init_menu_vic
 	and #%11100111			; hires (not MCM), 40 cols
 	ora #%00001000
 	sta $d016
-	lda #%00001000			; matrix $4000, bitmap $6000
+	lda #%00001000			; matrix $8000, bitmap $A000
 	sta $d018
 	lda #0
 	sta $d015
@@ -1232,7 +1172,7 @@ clear_screen
 	lda #0
 	beq .cs_p
 .cs_col
-	; colour matrix from row 6: 760 bytes (do not touch sprite ptrs @ $43F8)
+	; colour matrix from row 6: 760 bytes (do not touch sprite ptrs @ SCREEN+$3F8)
 	ldx #0
 	lda clear_bg
 .cs_c
@@ -2853,6 +2793,6 @@ menu_str_hi
 !source "../generated/src/pcsfreq.asm"
 
 end_menu = *
-!if end_menu > $4000 {
+!if end_menu > SCREEN {
 	!error "Menu overlaps SCREEN; end=$", end_menu
 }

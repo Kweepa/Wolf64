@@ -2,8 +2,8 @@
 """Pack textures/splashscreen_c64.png as Koala MCM splash (Pepto closest match).
 
 320×200 RGB → VIC-II Pepto palette, 2px MCM pairs, 4 colours/cell (bg black + 3).
-splashc_data.bin → ACME splashc.asm prepends load $4000 and appends do_splash.
-splash.prg      → $6000 bitmap, loaded after colour so it paints in already coloured.
+splashc_data.bin → ACME splashc.asm prepends load $8000 and appends do_splash.
+splash.prg      → $A000 bitmap, loaded after colour so it paints in already coloured.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ OUT_COL_BIN = ROOT / "generated" / "splashc_data.bin"
 OUT_BMP = ROOT / "generated" / "splash.prg"
 PREVIEW = ROOT / "generated" / "splash_preview.png"
 
-LOAD_BMP = 0x6000
+LOAD_BMP = 0xA000
 COLS = 40
 ROWS = 25
 BG = 0

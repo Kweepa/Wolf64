@@ -1,7 +1,8 @@
 ^WASD....^ Forward/backward/strafe
 ^IJKL....^ Forward/backward/turn
-^Space...^ Fire
+Space^...^ Fire
 ^1234....^ Change weapon
+^F5/F7...^ Quick save/quick load
 
 Walk into doors to open them.
 Walk into secret walls to push them.

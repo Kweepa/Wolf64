@@ -1,6 +1,6 @@
 ; First-person HUD: knife / pistol / machinegun / chaingun
 ; All sprites XY-expanded (2×). Flash: white + 1/2/3 red (pistol/MG/chaingun).
-; Chaingun flash A/B = distinct blobs; mg_frame selects ptr + XY slots.
+; Chaingun flash A/B = both staged; mg_frame retargets ptrs + XY (no fire copy).
 !source "../generated/src/weapons/wpn_tables.asm"
 !zone weapon
 
@@ -134,8 +134,8 @@ wpn_mux_restore
 	ldx #7
 .wmr_ptr
 	lda wpn_snap_ptr,x
-	sta $43f8,x
-	sta $47f8,x
+	sta SCREEN+$3f8,x
+	sta SCREEN_B+$3f8,x
 	dex
 	bpl .wmr_ptr
 	ldx #7
@@ -169,23 +169,130 @@ wpn_mux_restore
 	sta wpn_snap_ptr,y
 	rts
 
-; Main thread only (weapon switch). Fills wpn_snap_* + spr_en; no VIC.
-setup_weapon
-	ldx cur_weapon
-	lda wpn_body_ptr0,x
-	sta wpn_t0
-	lda wpn_nbody,x
-	sta wpn_t1
+; Copy X sprites (64 B each) from (aux_l) → (tmp0). Clobbers Y, A, X.
+.wpn_copy_spr
 	ldy #0
-.su_ptr
+.wcs_byte
+	lda (aux_l),y
+	sta (tmp0),y
+	iny
+	cpy #64
+	bne .wcs_byte
+	clc
+	lda aux_l
+	adc #64
+	sta aux_l
+	bcc +
+	inc aux_h
++
+	clc
+	lda tmp0
+	adc #64
+	sta tmp0
+	bcc +
+	inc tmp1
++
+	dex
+	bne .wpn_copy_spr
+	rts
+
+; Stage body + flash A (+ flash B for chaingun) into WPN_STAGE.
+; Main thread / weapon switch only. Uses aux/tmp0.
+.stage_weapon
+	ldx cur_weapon
+	lda wpn_body_src_l,x
+	sta aux_l
+	lda wpn_body_src_h,x
+	sta aux_h
+	lda #<WPN_STAGE
+	sta tmp0
+	lda #>WPN_STAGE
+	sta tmp1
+	lda wpn_nbody,x
+	tax
+	jsr .wpn_copy_spr
+
+	ldx cur_weapon
+	lda wpn_nflash,x
+	beq .sw_body_ptrs
+	sta wpn_t0
+	lda wpn_flash_src0_l,x
+	sta aux_l
+	lda wpn_flash_src0_h,x
+	sta aux_h
+	; dest already WPN_STAGE + nbody*64 after body copy
+	ldx wpn_t0
+	jsr .wpn_copy_spr
+
+	ldx cur_weapon
+	cpx #WPN_CHAINGUN
+	bne .sw_body_ptrs
+	lda wpn_flash_src1_l,x
+	sta aux_l
+	lda wpn_flash_src1_h,x
+	sta aux_h
+	lda wpn_nflash,x
+	tax
+	jsr .wpn_copy_spr
+
+.sw_body_ptrs
+	ldx cur_weapon
+	lda wpn_nbody,x
+	sta wpn_t0
+	ldy #0
+.sw_bp
 	tya
 	clc
-	adc wpn_t0
+	adc #WPN_STAGE_PTR0
 	jsr .wpn_ptr
 	iny
-	cpy wpn_t1
-	bcc .su_ptr
+	cpy wpn_t0
+	bcc .sw_bp
+	; fall through: flash HW ptrs for current mg_frame
 
+; Retarget flash snap ptrs to staged A or B (no pixel copy).
+.set_flash_ptrs
+	ldx cur_weapon
+	lda wpn_nflash,x
+	beq .sfp_rts
+	sta wpn_t0				; flash count
+	lda wpn_nbody,x
+	sta wpn_t1				; HW flash sprite index base
+	sta wpn_t2				; stage slot base (flash A)
+	cpx #WPN_CHAINGUN
+	bne .sfp_go
+	ldy mg_frame
+	beq .sfp_go
+	clc
+	adc wpn_t0				; stage = nbody+nflash (flash B)
+	sta wpn_t2
+.sfp_go
+	ldy #0
+.sfp_p
+	sty wpn_t3
+	tya
+	clc
+	adc wpn_t1
+	tay					; Y = snap index
+	lda wpn_t3
+	clc
+	adc wpn_t2
+	clc
+	adc #WPN_STAGE_PTR0
+	jsr .wpn_ptr
+	ldy wpn_t3
+	iny
+	cpy wpn_t0
+	bcc .sfp_p
+.sfp_rts
+	rts
+
+; Main thread only (weapon switch). Stage pixels, fill wpn_snap_* + spr_en.
+setup_weapon
+	jsr .stage_weapon
+	ldx cur_weapon
+	lda wpn_nbody,x
+	sta wpn_t1
 	lda cur_weapon
 	asl
 	asl
@@ -214,7 +321,7 @@ setup_weapon
 	lda wpn_nflash,x
 	sec
 	sbc #1
-	beq .su_fptrs
+	beq .su_pose
 	sta wpn_t0
 	lda #10
 .su_fred
@@ -222,41 +329,8 @@ setup_weapon
 	iny
 	dec wpn_t0
 	bne .su_fred
-.su_fptrs
-	jsr .set_flash_ptrs
 .su_pose
 	jmp apply_pose
-
-.set_flash_ptrs
-	ldx cur_weapon
-	lda wpn_nflash,x
-	beq .sfp_rts
-	sta wpn_t1
-	lda wpn_nbody,x
-	sta wpn_t2
-	lda wpn_flash_ptr0,x
-	cpx #WPN_CHAINGUN
-	bne .sfp_base
-	ldy mg_frame
-	beq .sfp_base
-	lda wpn_flash_ptr1,x
-.sfp_base
-	sta wpn_t0
-	ldy #0
-.sfp_loop
-	tya
-	clc
-	adc wpn_t0
-	sty wpn_t3
-	ldy wpn_t2
-	jsr .wpn_ptr
-	inc wpn_t2
-	ldy wpn_t3
-	iny
-	cpy wpn_t1
-	bcc .sfp_loop
-.sfp_rts
-	rts
 
 apply_pose
 	jsr .apply_xy

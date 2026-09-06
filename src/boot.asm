@@ -1,14 +1,12 @@
 ; Wolf64 disposable boot — fits LOADER_BASE..effects_vol.
-; LOAD splashc @ $4000 → JSR do_splash (colour, pixels, MENU; Krill install) → JSR menu
-; → ENEMY stage + JSR copy_enemy (+3) → file_tab → JMP $0900.
+; LOAD splashc @ $8000 → JSR do_splash (colour, pixels, MENU; Krill install) → JSR menu
+; → file_tab (incl. EGFX) → JMP $0900.
 ; USE_KRILL=1: loadraw after splashc installed Krill. Default: KERNAL $FFD5.
 ; File-table index in .xi (KERNAL LOAD clobbers ZP — do not keep ptr in $ae/$af).
 !cpu 6502
 !to "../generated/boot.prg", cbm
 
 !source "mem.asm"
-
-MENU_COPY_ENEMY	= LOCODE_BASE + 3
 
 *= LOADER_BASE
 !byte $0b, $08, $0a, $00, $9e, $32, $30, $36, $31, $00, $00, $00	; SYS 2061
@@ -36,18 +34,6 @@ boot_start
 	bcs boot_fail
 	jsr do_splash
 	jsr LOCODE_BASE				; run difficulty select
-
-	; ENEMY → $A000 (PRG header), copy under I/O → $C000 via MENU+3
-	ldx #<name_enemy
-	ldy #>name_enemy
-!if USE_KRILL {
-	jsr load_file
-} else {
-	lda #5
-	jsr load_sa1
-}
-	bcs boot_fail
-	jsr MENU_COPY_ENEMY
 
 	ldx #0
 .next
@@ -129,7 +115,7 @@ load_file
 	php
 	lda #BANK_LOADER
 	sta $01
-	lda #%00000010
+	lda #VIC_BANK_DD00
 	sta $dd00
 	plp
 	rts
@@ -152,6 +138,8 @@ file_tab
 	!byte 0
 	!text "ITM"
 	!byte 0
+	!text "EGFX"
+	!byte 0
 	!text "BMP"
 	!byte 0
 	!text "SQT"
@@ -164,9 +152,6 @@ file_tab
 	!byte 0
 	!text "COL"
 	!byte 0
-	!byte 0
-name_enemy
-	!text "ENEMY"
 	!byte 0
 } else {
 file_tab
@@ -182,6 +167,8 @@ file_tab
 	!text "WPN"
 	!byte 3
 	!text "ITM"
+	!byte 4
+	!text "EGFX"
 	!byte 3
 	!text "BMP"
 	!byte 3
@@ -195,8 +182,6 @@ file_tab
 	!byte 3
 	!text "COL"
 	!byte 0
-name_enemy
-	!text "ENEMY"
 }
 
 name_splashc

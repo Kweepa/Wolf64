@@ -41,11 +41,11 @@ def main() -> None:
     print(
         f"d011=${mem[0xD011]:02x} d018=${mem[0xD018]:02x} dd00=${mem[0xDD00]:02x}"
     )
-    scr = bytes(mem[0x4000 : 0x4000 + 1000])
-    print("SCREEN $4000 nonzero", sum(1 for b in scr if b), "row1", scr[40:80].hex())
-    print("BITMAP $6000", bytes(mem[0x6000:0x6010]).hex())
+    scr = bytes(mem[0x8000 : 0x8000 + 1000])
+    print("SCREEN $8000 nonzero", sum(1 for b in scr if b), "row1", scr[40:80].hex())
+    print("BITMAP $A000", bytes(mem[0xA000:0xA010]).hex())
     print("FB $E000", bytes(mem[0xE000:0xE018]).hex())
-    print("MAP $5000", bytes(mem[0x5000:0x5008]).hex())
+    print("MAP $C000", bytes(mem[0xC000:0xC008]).hex())
 
 
 if __name__ == "__main__":

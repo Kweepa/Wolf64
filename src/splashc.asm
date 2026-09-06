@@ -1,7 +1,7 @@
-; splashc.prg — Koala matrix/colour at $4000, then do_splash helpers after SPLASH_BG.
+; splashc.prg — Koala matrix/colour at $8000, then do_splash helpers after SPLASH_BG.
 ; Boot (load $0801) LOADs this, then JSR do_splash: copy colour, clear bitmap, MCM on,
 ; LOAD splash pixels, then MENU (KERNAL or Krill loadraw after install).
-; Helpers overlap BJH_SPRITES ($4800); must end before KRILL_HOLE ($4E00).
+; Helpers sit after SPLASH_BG in bank $8000; must end before BITMAP ($A000).
 !cpu 6502
 !to "../generated/splashc.prg", cbm
 
@@ -24,7 +24,7 @@ clr_ptr		= $fb
 	ldy #>name_splash
 	jsr load_sa1
 	bcs .fail
-	jsr splash_vic			; KERNAL LOAD RMW of $dd00; keep bank 1
+	jsr splash_vic			; KERNAL LOAD RMW of $dd00; keep VIC bank $8000
 
 !if USE_KRILL {
 	lda #6
@@ -107,7 +107,7 @@ clear_bitmap
 	rts
 
 splash_vic
-	lda #%00000010			; VIC bank 1; upper 6 bits 0
+	lda #VIC_BANK_DD00			; VIC bank $8000; upper 6 bits 0
 	sta $dd00
 	lda $d011
 	and #%10000111			; clear ECM/BMM/DEN/RSEL
@@ -117,7 +117,7 @@ splash_vic
 	and #%11100111
 	ora #%00011000			; CSEL + MCM
 	sta $d016
-	lda #%00001000			; matrix $4000, bitmap $6000
+	lda #%00001000			; matrix $8000, bitmap $A000
 	sta $d018
 	lda #0
 	sta $d015
@@ -157,6 +157,6 @@ name_install
 }
 
 end_splashc = *
-!if end_splashc > KRILL_HOLE {
-	!error "splashc helpers overlap Krill hole; end=$", end_splashc
+!if end_splashc > BITMAP {
+	!error "splashc helpers overlap BITMAP; end=$", end_splashc
 }

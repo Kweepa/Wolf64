@@ -16,26 +16,19 @@ NEAR_LO		= 51				; first looped (Bresenham) height; below this, TEX_HI/TEX_LO, n
 ; USE_KRILL=1: Krill loadraw at $4E00. Default: KERNAL LOAD.
 ; $0400  tables.asm (disk: tab)
 ; $0801  disposable boot → low BSS overlay (col_* / LoadPrg scrap)
-; $08C0  reboot stub (installed at locode_entry); $08FD effects_vol; $08FE game_complete; $08FF difficulty
-; $0900  locode — game code, no enemy modules (disk: locode); MENU overlay pre-load
-; $033C  locode runtime BSS (cassette buffer; not in locode PRG)
-; $3000  PC SFX (disk: sfx; CPU-only, locode–SQTAB gap)
-; $3800  Judd SQTAB (disk: sqt; 2K in locode–screen gap)
-; $4000  VIC screen A / B ($4400) (disk: scr)
-; $4800  BJ-head HUD sprites (disk: bjh; 10×64)
-; $4E00  Krill resident on wolf64-krill.d64 only (loadraw); reserved hole on both disks
-; $5000  weapon HUD sprites (disk: wpn; ends at ITEM_SPRITES)
-; $5880  world item gfx (disk: itm; to bitmap $6000); col_enemy in itm→bitmap slack
-; $6000  bitmap (8K, disk: bmp); score code in hidden UI tail @ $64B0
-; $8000  TEX_LO (disk: texlo, 4K) — row*256+texx*16+id, lo nibble pre-masked
-; $9000  TEX_HI (4K, RAM-only, NOT disk-loaded, fixed address) — init_tex_hi
-;        (render.asm, called once from game_start) fills it by shifting
-;        every TEX_LO byte left 4 bits; pure derived data, no PRG bytes here
-; $A000  wall painters only (disk: paint); enemy staged here first (boot.asm)
-;        col_wallz_h + item/vis scratch + cold enemy SoA follow end_paint → <$C000
-; $C000  enemy block — code, AI, gfx, hot pos/facing/flags (disk: enemy)
-; $0100  vis_slot + vis_perp + enemy_burst; STACK_GUARD=$01D0
-; $EF00  map (disk: e1m1… via LoadLevel)
+; $08C0  reboot stub; $08FD effects_vol; $08FE game_complete; $08FF difficulty
+; $0900  ALL game code (locode+enemy*.asm+items_draw); MENU overlay pre-load
+; $033C  tape BSS (temps; not in locode PRG)
+; $4E00  Krill hole (both disks)
+; $4805…$4E00 SFX in locode→Krill gap (exact start = end_locode)
+; $5000  paint → enemy pixels (≤$8000); scratch BSS after egfx
+; $8000  VIC bank (%01): scr A/B, BJH, WPN_STAGE; WPN_MASTER+itm in $9000 hole
+; $9BAD  GAME_STATE (863 B, QS file); scratch @ $D800
+; $A000  MCM bitmap 8K (disk: bmp); score in UI hole
+; $C000  MAP 4K (disk: e1m*; also SQT load staging → copy to $D000)
+; $D000  Judd SQTAB 2K (RAM after install_sqtabs); $D800 item/vis scratch
+; $E000  TEX_LO (disk: texlo); $F000 TEX_HI (RAM-built)
+; $0100  vis_slot + vis_perp; STACK_GUARD=$01D0
 
 !source "mem.asm"
 !source "zp.asm"
@@ -52,11 +45,11 @@ end_tab = *
 }
 
 ; =========================================================================
-; locode — resident low code (no enemy modules)
+; locode — all game code (≤ KRILL_HOLE)
 ; =========================================================================
 *= LOCODE_BASE
 
-; Boot jumps here after LOADing locode + assets (map still on disk)
+; Boot jumps here after LOADing locode + assets (SQT staged at MAP; map still on disk)
 locode_entry
 	jsr install_reboot_stub
 	lda #0
@@ -65,6 +58,7 @@ locode_entry
 	sta secret_from
 	lda #1
 	sta level_num
+	jsr install_sqtabs			; $C000 → $D000 before LoadLevel
 	jsr LoadLevel
 	bcs .le_fail
 	jmp game_start
@@ -77,7 +71,7 @@ locode_entry
 .le_hang
 	jmp .le_hang
 
-; 3-byte trampoline at REBOOT_STUB → reboot_game (in enemy block; keeps locode under SQTAB)
+; 3-byte trampoline at REBOOT_STUB → reboot_game
 install_reboot_stub
 	lda #$4c
 	sta REBOOT_STUB
@@ -117,7 +111,7 @@ game_start
 
 	jsr init_weapon			; snapshot for raster-88 blit (no VIC)
 	lda #$34
-	sta $01					; I/O out — enemy block spans $D000–$DFFF
+	sta $01					; I/O out — TEX_HI / SQTAB / scratch under I/O hole
 	jsr doors_clear
 	jsr find_spawn
 	jsr enemies_init
@@ -131,6 +125,8 @@ main_loop
 	jsr handle_level_want
 	jmp .ml_render
 .ml_alive
+	jsr poll_quick_keys			; F5/F7; works while dead too
+	bcs .ml_render				; disk op done — repaint
 	lda player_dead
 	beq .ml_play
 	jsr player_death_tick
@@ -155,16 +151,16 @@ main_loop
 }
 .ml_render
 	jsr render_frame
-	lda #$35
-	sta $01
 	lda wpn_visible			; deferred until first frame flipped
 	bne .ml_wpn
 	jsr show_weapon
 .ml_wpn
 	lda player_dead
-	bne .ml_nower
-	jsr update_weapon
-.ml_nower
+	bne .ml_ui
+	jsr update_weapon		; col_enemy visible at $34
+.ml_ui
+	lda #$35
+	sta $01
 	jsr ui_update
 	jsr player_border_tick		; needs I/O ($d020)
 	lda #$34
@@ -186,6 +182,11 @@ main_loop
 !source "player.asm"
 !source "weapon.asm"
 !source "items.asm"
+!source "items_draw.asm"
+!source "enemy.asm"
+!source "../generated/src/enemy_gfx.asm"
+!source "enemy_ai.asm"
+!source "../generated/src/enemy_painters.asm"
 
 ; PROFILE-only BSS stays in locode PRG (won't fit leftover tape slack)
 !if PROFILE = 1 {
@@ -200,27 +201,19 @@ prof_cy
 }
 
 end_locode = *
-!if end_locode > SFX_BASE {
-	!error "Locode overlaps SFX_BASE; end=$", end_locode
+!if end_locode > KRILL_HOLE {
+	!error "Locode overlaps Krill hole; end=$", end_locode
 }
-!warn "Locode free $", SFX_BASE - end_locode, " (end=$", end_locode, " limit SFX_BASE=$", SFX_BASE, ")"
+!warn "Locode free $", KRILL_HOLE - end_locode, " (end=$", end_locode, " limit KRILL_HOLE=$", KRILL_HOLE, ")"
 
-; --- Locode runtime BSS in cassette buffer (not emitted into locode PRG) ---
-; item_* scratch is after painters; col_* overlays boot (bss.asm)
-enemy_count	= TAPE_BSS
-item_considered	= enemy_count + 1
+SFX_BASE = end_locode
+
+; --- Tape BSS (temps only; saveable state lives in GAME_STATE) ------------
+item_considered	= TAPE_BSS
 los_rr		= item_considered + 1
 walk_anim_t	= los_rr + 1			; global walk A/B ms accumulator
 walk_phase	= walk_anim_t + 1		; 0=A, nonzero=B
-player_ammo	= walk_phase + 1
-player_keys	= player_ammo + 1
-player_hp	= player_keys + 1
-player_lives	= player_hp + 1
-player_dead	= player_lives + 1
-death_ms_l	= player_dead + 1
-death_ms_h	= death_ms_l + 1
-hurt_flash	= death_ms_h + 1		; 1=red this frame, 2=clear next
-level_want	= hurt_flash + 1		; 0=none 1=restart 2=next 3=new 4=secret
+level_want	= walk_phase + 1		; 0=none 1=restart 2=next 3=new 4=secret
 ai_dx		= level_want + 1
 ai_dy		= ai_dx + 1
 ai_steps	= ai_dy + 1
@@ -275,15 +268,7 @@ e_step_l	= e_gfx_h + 1
 e_step_h	= e_step_l + 1
 e_row		= e_step_h + 1
 e_pix		= e_row + 1			; 16 bytes
-door_x		= e_pix + 16
-door_y		= door_x + 8
-door_pos	= door_y + 8
-door_state	= door_pos + 8
-door_orient	= door_state + 8
-door_tic_l	= door_orient + 8
-door_tic_h	= door_tic_l + 8
-door_tile	= door_tic_h + 8
-door_savex	= door_tile + 8
+door_savex	= e_pix + 16
 door_savetl	= door_savex + 1
 door_saveth	= door_savetl + 1
 turn_acc_l	= door_saveth + 1
@@ -292,11 +277,7 @@ mouse_x		= turn_acc_h + 1			; last SID POTX ($d419)
 frame_t0	= mouse_x + 1			; 4 bytes
 frame_cy	= frame_t0 + 4
 casc_now	= frame_cy + 4
-player_score_l	= casc_now + 4			; displayed score / 100
-player_score_h	= player_score_l + 1
-score_1up_l	= player_score_h + 1		; next extra-life threshold (units)
-score_1up_h	= score_1up_l + 1
-face_tic_l	= score_1up_h + 1		; Wolf look cadence (dt_ms accum)
+face_tic_l	= casc_now + 4			; Wolf look cadence (dt_ms countdown)
 face_tic_h	= face_tic_l + 1
 bjh_look	= face_tic_h + 1		; 0=left 1=center 2=right
 end_tape_bss	= bjh_look + 1
@@ -304,8 +285,78 @@ end_tape_bss	= bjh_look + 1
 	!error "Tape BSS overflows cassette buffer; end=$", end_tape_bss
 }
 
+; --- GAME_STATE symbols (address = end_itm; set after itm binary) --------
+; Layout matches QS file body: hdr(7) + player(23) + doors(64) + count + SoA
+; GAME_STATE itself is assigned after end_itm below.
+gs_player	= GAME_STATE + QS_OFF_PLAYER
+; +0..4 / +9..10 / +22 = ZP / difficulty mirrors (patched around SAVE/LOAD)
+player_hp	= gs_player + 5
+player_lives	= gs_player + 6
+player_ammo	= gs_player + 7
+player_keys	= gs_player + 8
+player_score_l	= gs_player + 11
+player_score_h	= gs_player + 12
+score_1up_l	= gs_player + 13
+score_1up_h	= gs_player + 14
+player_dead	= gs_player + 15
+death_ms_l	= gs_player + 16
+death_ms_h	= gs_player + 17
+hurt_flash	= gs_player + 18
+; +19..21 episode/level_num/secret_from — live in low BSS (KERNAL LOAD);
+; qs_patch_in/out copies them. +22 difficulty ($08FF).
+
+door_x		= GAME_STATE + QS_OFF_DOORS
+door_y		= door_x + 8
+door_pos	= door_y + 8
+door_state	= door_pos + 8
+door_orient	= door_state + 8
+door_tic_l	= door_orient + 8
+door_tic_h	= door_tic_l + 8
+door_tile	= door_tic_h + 8
+
+enemy_count	= GAME_STATE + QS_OFF_ECOUNT
+enemy_xh		= GAME_STATE + QS_OFF_ENEMY
+enemy_xl		= enemy_xh + MAX_ENEMIES
+enemy_yh		= enemy_xl + MAX_ENEMIES
+enemy_yl		= enemy_yh + MAX_ENEMIES
+enemy_facing	= enemy_yl + MAX_ENEMIES
+enemy_flags	= enemy_facing + MAX_ENEMIES
+enemy_state_t	= enemy_flags + MAX_ENEMIES
+enemy_type	= enemy_state_t + MAX_ENEMIES
+enemy_hp		= enemy_type + MAX_ENEMIES
+enemy_state	= enemy_hp + MAX_ENEMIES
+enemy_vel_rem	= enemy_state + MAX_ENEMIES
+enemy_burst	= enemy_vel_rem + MAX_ENEMIES
+
+; Per-frame scratch in I/O window ($01=$34 only)
+col_wallz_h	= ITM_SCRATCH
+item_x		= col_wallz_h + 40
+item_y		= item_x + MAX_VIS
+item_frm	= item_y + MAX_VIS
+vis_depth_l	= item_frm + MAX_VIS
+vis_depth_h	= vis_depth_l + MAX_VIS
+vis_order	= vis_depth_h + MAX_VIS
+vis_kind	= vis_order + MAX_VIS
+col_enemy	= vis_kind + MAX_VIS
+end_itm_bss	= col_enemy + 40
+!if end_itm_bss > TEX_HI_R15 {
+	!error "Item scratch overlaps TEX_HI_R15; end=$", end_itm_bss
+}
+!if TEX_HI_R15 + 256 > TEX_LO {
+	!error "TEX_HI_R15 overlaps TEX_LO"
+}
+
+; Under stack: vis list + perp
+vis_slot	= STACK_BSS			; MAX_VIS entity ids (unsorted; kind in vis_kind)
+vis_perp_l	= vis_slot + MAX_VIS
+vis_perp_h	= vis_perp_l + MAX_VIS
+end_stack_bss	= vis_perp_h + MAX_VIS
+!if end_stack_bss > STACK_GUARD {
+	!error "Stack BSS hits STACK_GUARD; end=$", end_stack_bss
+}
+
 ; =========================================================================
-; sfx — PC sounds @ $3000 (CPU-only; locode–SQTAB gap)
+; sfx — PC sounds in locode→Krill gap
 ; =========================================================================
 *= SFX_BASE
 !source "../generated/src/pcsounds.asm"
@@ -313,7 +364,6 @@ end_tape_bss	= bjh_look + 1
 
 ; Open only the neighbor we are walking into: wish on that axis, and either
 ; already on that keep-out face or this step's dest hi is that neighbor.
-; Loaded with sfx PRG (before BSS overlay).
 player_bump_then_push
 	lda move_dx_h
 	bmi .pbt_west
@@ -401,59 +451,88 @@ player_bump_then_push
 	jmp push_walls
 
 end_sfx = *
-!if end_sfx > SQTAB1 {
-	!error "SFX overlaps SQTAB1; end=$", end_sfx
+!if end_sfx > KRILL_HOLE {
+	!error "SFX overlaps Krill hole; end=$", end_sfx
 }
+!warn "SFX/Krill free $", KRILL_HOLE - end_sfx, " (end_sfx=$", end_sfx, ")"
 
 ; =========================================================================
-; scr — matrix A @ $4000, 24-byte sprite-ptr pad, matrix B @ $4400
+; paint — wall height painters @ $5000 (after Krill)
+; =========================================================================
+*= PAINT_BASE
+PAINTERS = PAINT_BASE
+!source "../generated/src/painters.asm"
+end_paint = *
+ENEMY_GFX_BASE = end_paint
+
+; =========================================================================
+; egfx — enemy pixel blob (follows paint; ≤ SCREEN)
+; =========================================================================
+*= ENEMY_GFX_BASE
+enemy_gfx_data
+!binary "../generated/textures/enemies.bin"
+end_egfx = *
+!if end_egfx > SCREEN {
+	!error "Enemy gfx overlaps SCREEN; end=$", end_egfx
+}
+!warn "Paint/egfx free $", SCREEN - end_egfx, " (end_egfx=$", end_egfx, ")"
+
+; =========================================================================
+; scr — matrix A @ $8000, pad, matrix B @ $8400
 ; =========================================================================
 *= SCREEN
 !binary "../generated/textures/ui/screen.bin", 2024
 end_scr = *
 !if end_scr != SCREEN_B + 1000 {
-	!error "SCR must end at SCREEN_B+1000 ($47E8); end=$", end_scr
+	!error "SCR must end at SCREEN_B+1000; end=$", end_scr
 }
 !if end_scr > BJH_SPRITES {
 	!error "Screen matrices overlap BJH_SPRITES; end=$", end_scr
 }
 
 ; =========================================================================
-; bjh — 10 BJ-head HUD sprites @ $4800 (ptrs $20–$29)
+; bjh — 10 BJ-head HUD sprites @ $8800
 ; =========================================================================
 *= BJH_SPRITES
 !source "../generated/src/bjhead_spr.asm"
 end_bjh = *
-!if end_bjh > KRILL_HOLE {
-	!error "BJH sprites overlap Krill hole $4E00; end=$", end_bjh
+; VIC-visible stage for active weapon (≤8 sprites); 64-byte aligned
+WPN_STAGE = ((end_bjh + 63) / 64) * 64
+WPN_STAGE_PTR0 = (WPN_STAGE - SCREEN) / 64
+!if WPN_STAGE + WPN_STAGE_SLOTS * 64 > WPN_MASTER {
+	!error "WPN_STAGE overlaps char-ROM hole; stage=$", WPN_STAGE
 }
 
 ; =========================================================================
-; wpn — knife/pistol/MG/chaingun HUD sprites
+; wpn — full HUD sprite master in hole @ $9000 (staged into WPN_STAGE)
 ; =========================================================================
-*= WPN_SPRITES
+*= WPN_MASTER
 !source "../generated/src/weapons/wpn_data.asm"
 end_wpn = *
-!if end_wpn > ITEM_SPRITES {
-	!error "Weapon sprites overlap ITEM_SPRITES; end=$", end_wpn
-}
+ITEM_SPRITES = end_wpn
 
 ; =========================================================================
-; itm — world props/pickups (4bpp + LUTs) @ $5880
+; itm — world props/pickups (CPU; may sit in VIC hole); draw code in locode
 ; =========================================================================
 *= ITEM_SPRITES
 !source "../generated/src/items/item_gfx.asm"
 item_gfx_data
 !binary "../generated/textures/items.bin"
-!source "items_draw.asm"
 end_itm = *
 !if end_itm > BITMAP {
-	!error "Item gfx overlap BITMAP; end=$", end_itm
+	!error "Item gfx overlaps BITMAP; end=$", end_itm
+}
+
+; Quicksave state in pre-bitmap pocket (KERNAL SAVE-safe)
+GAME_STATE = end_itm
+QS_GS_END = GAME_STATE + QS_STATE_SIZE
+!if QS_GS_END > BITMAP {
+	!error "GAME_STATE overlaps BITMAP; end=$", QS_GS_END
 }
 
 ; =========================================================================
-; bmp — full MCM bitmap @ $6000 (UI + viewport pattern)
-; Hidden code @ $64B0: row 3 cols 30–39, skip digit bottoms, rest of row 4.
+; bmp — full MCM bitmap @ $A000
+; Hidden code: row 3 cols 30–39, skip digit bottoms, rest of row 4.
 ; =========================================================================
 *= BITMAP
 !binary "../generated/textures/ui/bitmap.bin", 3 * 320 + 30 * 8
@@ -463,21 +542,18 @@ end_score = *
 	!error "Score code overlaps 3D bitmap row 5; end=$", end_score
 }
 !warn "Score code free $", BITMAP + 5 * 320 - end_score, " (end=$", end_score, ")"
-; Digit bottoms (row 4 cols 0–9) into the hole score.asm *= skipped.
 *= BITMAP + 4 * 320
 !binary "../generated/textures/ui/bitmap.bin", 10 * 8, 4 * 320
 *= BITMAP + 5 * 320
 !binary "../generated/textures/ui/bitmap.bin", 20 * 320, 5 * 320
-; Profiler hexfont in unused VIC bitmap tail ($7F40..)
 !source "_hexfont.inc"
 end_bmp = *
-!if end_bmp > TEX_LO {
-	!error "Bitmap+hexfont overlap TEX_LO; end=$", end_bmp
+!if end_bmp > MAP {
+	!error "Bitmap+hexfont overlap MAP; end=$", end_bmp
 }
 
 ; =========================================================================
-; tex_lo — TEX_LO (TechDesignDoc): row*256+texx*16+id, one texel/byte,
-; pre-masked at build time — no AND/shift/SMC needed to sample a texel.
+; tex_lo — TEX_LO @ $E000; TEX_HI @ $F000 filled by init_tex_hi
 ; =========================================================================
 *= TEX_LO
 !binary "../generated/textures/tex_lo.bin", 4096
@@ -485,87 +561,3 @@ end_tex_lo = *
 !if end_tex_lo != TEX_HI {
 	!error "tex_lo.bin size drift; end=$", end_tex_lo, " expected TEX_HI=$", TEX_HI
 }
-
-; TEX_HI is not disk-loaded — init_tex_hi (render.asm; called once from
-; game_start) fills this RAM-only 4K block: TEX_HI[a] = TEX_LO[a] << 4.
-; Fixed address (TEX_LO + 4096, not derived from painters.asm's compiled
-; size) so painters.asm can grow/shrink without moving TEX_HI. Pure address
-; bookkeeping here — NOT code, nothing is emitted into the PRG for TEX_HI
-; itself, so placing any routine's code at this address would have it
-; overwritten by its own output; init_tex_hi lives in locode (render.asm)
-; instead.
-!if TEX_HI + 4096 != PAINTERS {
-	!error "TEX_HI/PAINTERS mismatch; TEX_HI=$", TEX_HI, " PAINTERS=$", PAINTERS
-}
-
-; =========================================================================
-; paint — wall height painters only
-; =========================================================================
-*= PAINTERS
-!source "../generated/src/painters.asm"
-end_paint = *
-
-; Column depth relocated off boot page (room for REBOOT_STUB)
-col_wallz_h	= end_paint
-; Per-frame item scratch + vis depth/order — paint→enemy gap
-item_x		= col_wallz_h + 40
-item_y		= item_x + MAX_VIS
-item_frm	= item_y + MAX_VIS
-vis_depth_l	= item_frm + MAX_VIS
-vis_depth_h	= vis_depth_l + MAX_VIS
-vis_order	= vis_depth_h + MAX_VIS		; sort tokens → vis_slot/vis_depth
-vis_kind	= vis_order + MAX_VIS		; 0=enemy, 1=item (scratch idx in vis_slot)
-; Cold + overflow hot enemy SoA (not in enemy PRG)
-enemy_state_t	= vis_kind + MAX_VIS
-enemy_type	= enemy_state_t + MAX_ENEMIES
-enemy_hp		= enemy_type + MAX_ENEMIES
-enemy_state	= enemy_hp + MAX_ENEMIES
-enemy_vel_rem	= enemy_state + MAX_ENEMIES	; SuperCPU patrol/chase dt remainder
-end_item_soa	= enemy_vel_rem + MAX_ENEMIES
-!if end_item_soa > ENEMY_BASE {
-	!error "Item/vis/enemy BSS overlaps ENEMY_BASE; end=$", end_item_soa
-}
-; Column hit buffer in itm→bitmap slack (freed SFX gap for BONUS1)
-col_enemy	= end_itm
-!if col_enemy + 40 > BITMAP {
-	!error "col_enemy overlaps BITMAP; end=$", col_enemy + 40
-}
-
-; Under stack: vis list + perp + burst (packs to STACK_GUARD)
-vis_slot	= STACK_BSS			; MAX_VIS entity ids (unsorted; kind in vis_kind)
-vis_perp_l	= vis_slot + MAX_VIS		; true forward perp (enemies+items)
-vis_perp_h	= vis_perp_l + MAX_VIS
-enemy_burst	= vis_perp_h + MAX_VIS
-end_stack_bss	= enemy_burst + MAX_ENEMIES
-!if end_stack_bss > STACK_GUARD {
-	!error "Stack BSS hits STACK_GUARD; end=$", end_stack_bss
-}
-
-; =========================================================================
-; enemy — @ $C000 (code, gfx, AI/helpers, painters, pixels, hot SoA)
-; =========================================================================
-*= ENEMY_BASE
-!source "enemy.asm"
-!source "../generated/src/enemy_gfx.asm"
-!source "enemy_ai.asm"
-!source "../generated/src/enemy_painters.asm"
-enemy_gfx_data
-!binary "../generated/textures/enemies.bin"
-; Enemy SoA (pos/facing/flags; hp/state/type/burst/vel_rem elsewhere)
-enemy_xh
-!fill MAX_ENEMIES, 0
-enemy_xl
-!fill MAX_ENEMIES, 0
-enemy_yh
-!fill MAX_ENEMIES, 0
-enemy_yl
-!fill MAX_ENEMIES, 0
-enemy_facing
-!fill MAX_ENEMIES, 0
-enemy_flags
-!fill MAX_ENEMIES, 0
-end_enemy = *
-!if end_enemy > MAP {
-	!error "Enemy block overlaps MAP; end=$", end_enemy
-}
-!warn "Enemy free $", MAP - end_enemy, " (end=$", end_enemy, " limit MAP=$", MAP, ")"

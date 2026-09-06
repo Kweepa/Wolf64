@@ -1,4 +1,4 @@
-; Enemy AI + helpers (LOS/chase/shoot, pick frame, spawn) — ENEMY_BASE block
+; Enemy AI + helpers (LOS/chase/shoot, pick frame, spawn) — linked in locode
 !zone enemy_ai
 
 ; Round-robin: at most one LOS resolve per frame (idle / chase / fire)

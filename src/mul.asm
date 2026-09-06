@@ -1,9 +1,33 @@
 ; Judd / Arndt a²−b² multiply — 2K square tables at SQTAB (disk: sqt)
 !zone mul
 
-; Tables are prebuilt (tools/gen_sqtab.py) and LOADed @ SQTAB1.
-; KERNAL LOAD clobbers ZP — restore hi pointers after all disk loads.
+; Boot LOADs sqt at MAP ($C000). install_sqtabs copies to live $D000 ($01=$34)
+; before LoadLevel. init_sqtabs only patches ZP hi pointers.
 ; From https://6502.org/source/integers/fastmult.htm (Martin Arndt / Stephen Judd)
+install_sqtabs
+	lda #BANK_RAM
+	sta $01
+	lda #<MAP
+	sta aux_l
+	lda #>MAP
+	sta aux_h
+	lda #<SQTAB1
+	sta tmp0
+	lda #>SQTAB1
+	sta tmp1
+	ldx #8				; 8 pages = 2048
+.isq_page
+	ldy #0
+.isq_byte
+	lda (aux_l),y
+	sta (tmp0),y
+	iny
+	bne .isq_byte
+	inc aux_h
+	inc tmp1
+	dex
+	bne .isq_page
+	; fall through
 init_sqtabs
 	lda #>SQTAB1
 	sta sq1_h

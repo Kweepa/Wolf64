@@ -6,7 +6,8 @@ Reads (hand-edited) sheet — not the regenerations:
 
   textures/items/c64/items_c64_sheet_edit.png
 
-Blob + LUTs link at ITEM_SPRITES ($5880), budget to BITMAP ($6000) = 1920 bytes.
+Blob + LUTs link at ITEM_SPRITES (after paint in low CPU); soft budget toward
+SCREEN ($8000). ACME end_itm is the real cap.
 
 Layout per frame (column-major 4bpp, nibble 0 = transparent) — same as enemies:
   For x in 0..w-1:
@@ -58,7 +59,8 @@ CEILING_ITEMS = frozenset(
     {"chandelier", "ceiling_light", "hanged_man", "skeleton_cage"}
 )
 
-ITEM_BUDGET = 0x6000 - 0x5880  # BITMAP - ITEM_SPRITES
+# Generous soft cap until SCREEN; wolf64.asm ITEM_SPRITES..end_itm is authoritative.
+ITEM_BUDGET = 0x8000 - 0x5000
 
 
 def if_symbol(name: str) -> str:
@@ -121,8 +123,8 @@ def main() -> int:
 
     n = len(ITEM_FRAMES)
     # LUTs reside with the blob at ITEM_SPRITES (5 tables × n bytes).
-    # items_draw.asm is linked after the blob; ACME end_itm <= BITMAP is the
-    # real cap. This check only rejects lut+blob that already fill the region.
+    # items_draw.asm is linked after the blob; ACME end_itm is the real cap.
+    # This check only rejects lut+blob that already fill a generous soft region.
     lut_bytes = 5 * n
     total = lut_bytes + len(blob)
     print(f"\nblob={len(blob)}  luts={lut_bytes}  total={total}  region={ITEM_BUDGET}")
@@ -130,7 +132,7 @@ def main() -> int:
     if total > ITEM_BUDGET:
         raise SystemExit(
             f"item gfx does not fit: {total} bytes > {ITEM_BUDGET} "
-            f"($5880-$5FFF)"
+            f"(soft budget toward SCREEN $8000)"
         )
 
     out_bin.write_bytes(blob)

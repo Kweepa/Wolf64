@@ -338,10 +338,9 @@ player_reset_status
 	sta death_ms_l
 	sta death_ms_h
 	sta hurt_flash
-	sta face_tic_l
-	sta face_tic_h
 	lda #1
 	sta bjh_look				; center
+	jsr ui_look_reload			; dt_ms wait until first glance
 	lda #UI_DIRTY_ALL
 	sta ui_dirty
 	rts

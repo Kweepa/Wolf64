@@ -618,38 +618,20 @@ ui_dig
 	bpl -
 	rts
 
-; Wolf look cadence: accumulate dt_ms; when count > rnd8*4, faceframe = rnd8>>6
-; (3 → 1 = center). IRQ reads bjh_look / player_hp for sprite layers.
+; Wolf look cadence: countdown face_tic by dt_ms, then faceframe = rnd8>>6
+; (3 → 1 = center). Interval is rolled once (not per frame) so SuperCPU
+; extra frames cannot speed-glance. IRQ reads bjh_look / player_hp.
 .ui_look_tick
 	lda player_hp
 	beq .ult_rts
-	clc
+	sec
 	lda face_tic_l
-	adc dt_ms
+	sbc dt_ms
 	sta face_tic_l
 	lda face_tic_h
-	adc #0
+	sbc #0
 	sta face_tic_h
-	jsr rnd8
-	sta tmp0
-	lda #0
-	asl tmp0
-	rol
-	asl tmp0
-	rol
-	sta tmp1				; threshold = rnd8 << 2
-	lda face_tic_h
-	cmp tmp1
-	bcc .ult_rts
-	bne .ult_fire
-	lda face_tic_l
-	cmp tmp0
-	bcc .ult_rts
-	beq .ult_rts
-.ult_fire
-	lda #0
-	sta face_tic_l
-	sta face_tic_h
+	bcs .ult_rts
 	jsr rnd8
 	lsr
 	lsr
@@ -662,6 +644,18 @@ ui_dig
 	lda #1
 +
 	sta bjh_look
+	; fall through
+; wait = (rnd8 << 2) + 256 ms  (256–1276)
+ui_look_reload
+	jsr rnd8
+	sta face_tic_l
+	lda #0
+	sta face_tic_h
+	asl face_tic_l
+	rol face_tic_h
+	asl face_tic_l
+	rol face_tic_h
+	inc face_tic_h
 .ult_rts
 	rts
 

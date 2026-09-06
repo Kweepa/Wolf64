@@ -2,9 +2,9 @@
 """Build wolf64.d64 from game_image.prg (+ boot.prg) via c1541.
 
 Splits the fat ACME image (load @ TABLES) into
-tab/locode/scr/sfx/bjh/wpn/itm/bmp/tex_lo/paint/enemy
+tab/locode/scr/sfx/bjh/wpn/itm/bmp/tex_lo/paint/egfx
 using symbols from wolf64.lbl, adds splashc/splash, prebuilt sqtab.prg,
-stages maps at MAP ($EF00). Disk order: boot, splashc, splash, [loader,
+stages maps at MAP ($C000). Disk order: boot, splashc, splash, [loader,
 install], menu, … so the cover KERNAL-loads colour then pixels before MENU.
 --krill also packs krill/loader.prg + install.prg.
 """
@@ -22,7 +22,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-MAP_LOAD = 0xEF00
+MAP_LOAD = 0xC000
 MAP_SIZE = 4096
 
 # (dos_name, start_sym, end_sym)
@@ -32,12 +32,12 @@ SEGMENTS = [
 	("scr", "SCREEN", "end_scr"),
 	("sfx", "SFX_BASE", "end_sfx"),
 	("bjh", "BJH_SPRITES", "end_bjh"),
-	("wpn", "WPN_SPRITES", "end_wpn"),
+	("wpn", "WPN_MASTER", "end_wpn"),
 	("itm", "ITEM_SPRITES", "end_itm"),
+	("egfx", "ENEMY_GFX_BASE", "end_egfx"),
 	("bmp", "BITMAP", "end_bmp"),
 	("texlo", "TEX_LO", "end_tex_lo"),
 	("paint", "PAINTERS", "end_paint"),
-	("enemy", "ENEMY_BASE", "end_enemy"),
 ]
 
 COLORRAM_LOAD = 0xD800
@@ -113,10 +113,10 @@ def main() -> None:
 	ap.add_argument("--out", default="wolf64.d64")
 	ap.add_argument("--image", default="generated/game_image.prg", help="fat ACME CBM image")
 	ap.add_argument("--boot", default="generated/boot.prg")
-	ap.add_argument("--splashc", default="generated/splashc.prg", help="Koala matrix + colour staging @ $4000")
-	ap.add_argument("--splash", default="generated/splash.prg", help="Koala bitmap @ $6000")
+	ap.add_argument("--splashc", default="generated/splashc.prg", help="Koala matrix + colour staging @ $8000")
+	ap.add_argument("--splash", default="generated/splash.prg", help="Koala bitmap @ $A000")
 	ap.add_argument("--menu", default="generated/menu.prg", help="pre-locode MENU overlay @ $0900")
-	ap.add_argument("--sqtab", default="generated/sqtab.prg", help="prebuilt Judd tables @ $3800")
+	ap.add_argument("--sqtab", default="generated/sqtab.prg", help="prebuilt Judd tables @ $C000 (copied to $D000)")
 	ap.add_argument("--labels", default="generated/wolf64.lbl")
 	ap.add_argument("--maps", default="maps")
 	ap.add_argument("--all-maps", action="store_true", help="include all Wolf1 maps")
@@ -170,18 +170,18 @@ def main() -> None:
 		"end_sfx",
 		"BJH_SPRITES",
 		"end_bjh",
-		"WPN_SPRITES",
+		"WPN_MASTER",
 		"end_wpn",
 		"ITEM_SPRITES",
 		"end_itm",
+		"ENEMY_GFX_BASE",
+		"end_egfx",
 		"BITMAP",
 		"end_bmp",
 		"TEX_LO",
 		"end_tex_lo",
 		"PAINTERS",
 		"end_paint",
-		"ENEMY_BASE",
-		"end_enemy",
 	):
 		if need not in syms:
 			print(f"missing label .{need} in {lbl_path}", file=sys.stderr)
@@ -209,12 +209,9 @@ def main() -> None:
 			start = syms[start_sym]
 			end = syms[end_sym]
 			out = tmp_dir / dos_name
-			# Enemy stages at PAINTERS ($A000); boot then copy_enemy → $C000.
-			prg_load = 0xA000 if dos_name == "enemy" else None
-			out.write_bytes(slice_image(body, load_addr, start, end, prg_load))
-			hdr = prg_load if prg_load is not None else start
+			out.write_bytes(slice_image(body, load_addr, start, end))
 			staged.append((dos_name, out))
-			print(f"  {dos_name}: ${start:04X}-${end:04X} header ${hdr:04X} ({end - start} bytes)")
+			print(f"  {dos_name}: ${start:04X}-${end:04X} header ${start:04X} ({end - start} bytes)")
 
 		# Prebuilt Judd tables (not part of fat image)
 		sq_raw = sqtab_path.read_bytes()
@@ -222,16 +219,19 @@ def main() -> None:
 			print(f"sqtab too short: {sqtab_path}", file=sys.stderr)
 			sys.exit(1)
 		sq_load = struct.unpack_from("<H", sq_raw)[0]
-		if sq_load != 0x3800:
+		if sq_load != MAP_LOAD:
 			print(
-				f"sqtab load ${sq_load:04X} != $3800 ({sqtab_path})",
+				f"sqtab load ${sq_load:04X} != MAP ${MAP_LOAD:04X} ({sqtab_path})",
 				file=sys.stderr,
 			)
 			sys.exit(1)
 		sq_out = tmp_dir / "sqt"
 		sq_out.write_bytes(sq_raw)
 		staged.append(("sqt", sq_out))
-		print(f"  sqt: $3800-$3FFF ({len(sq_raw) - 2} bytes from {sqtab_path})")
+		print(
+			f"  sqt: ${MAP_LOAD:04X} staging "
+			f"({len(sq_raw) - 2} bytes from {sqtab_path}; runtime -> $D000)"
+		)
 
 		# Colour RAM (load @ $d800; not in fat image)
 		col_path = Path(COLORRAM_BIN)

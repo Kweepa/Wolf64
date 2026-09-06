@@ -9,7 +9,14 @@ FLOOR_COLOR	= $cc
 ; One-time boot init: TEX_HI is not disk-loaded (only TEX_LO is). Every byte
 ; of TEX_HI is just its TEX_LO counterpart shifted into the high nibble, so
 ; build it here instead of shipping/loading a second 4 KB blob.
+; Rows 0..14 → $F000–$FEFF. Row 15 → TEX_HI_R15 ($DF00): $FF00 is the
+; 6502 vector page; input_irq_init owns $FFFA–$FFFF (texx=15 / ids 10–15).
+; Must run with I/O out ($01=$34).
 init_tex_hi
+	lda $01
+	pha
+	lda #BANK_RAM
+	sta $01
 	lda #<TEX_LO
 	sta tmp0
 	lda #>TEX_LO
@@ -18,7 +25,7 @@ init_tex_hi
 	sta tmp2
 	lda #>TEX_HI
 	sta tmp3
-	ldx #16				; 16 pages (4096 bytes)
+	ldx #15				; rows 0..14
 .page
 	ldy #0
 .byte
@@ -34,6 +41,23 @@ init_tex_hi
 	inc tmp3
 	dex
 	bne .page
+	; row 15 → safe shadow (tmp1 already TEX_LO row 15)
+	lda #<TEX_HI_R15
+	sta tmp2
+	lda #>TEX_HI_R15
+	sta tmp3
+	ldy #0
+.r15
+	lda (tmp0),y
+	asl
+	asl
+	asl
+	asl
+	sta (tmp2),y
+	iny
+	bne .r15
+	pla
+	sta $01
 	rts
 
 ; Paint one column from DDA caches (col_texid / col_half_h / col_texx)

@@ -78,8 +78,9 @@ def main() -> None:
         bchunk("sintab", sintab),
         "costab = sintab + 64\n",
         bchunk("heightab", heightab),
-        bchunk("map_row_lo", [(0xEF00 + y * 64) & 255 for y in range(64)]),
-        bchunk("map_row_hi", [(0xEF00 + y * 64) >> 8 for y in range(64)]),
+        # MAP base must match src/mem.asm (MAP = $C000)
+        bchunk("map_row_lo", [(0xC000 + y * 64) & 255 for y in range(64)]),
+        bchunk("map_row_hi", [(0xC000 + y * 64) >> 8 for y in range(64)]),
     ]
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("".join(parts), encoding="utf-8")

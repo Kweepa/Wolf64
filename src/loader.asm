@@ -78,7 +78,7 @@ LoadPrg
 
 	lda #BANK_LOADER
 	sta $01
-	lda #%00000010
+	lda #VIC_BANK_DD00
 	sta $dd00
 	plp
 	rts
@@ -202,7 +202,7 @@ restart_level
 	jsr play_sound_init
 
 	lda #$34
-	sta $01					; I/O out — enemy block spans $D000–$DFFF
+	sta $01					; I/O out — TEX / SQTAB / scratch
 	jsr doors_clear
 	jsr find_spawn
 	jsr enemies_init
@@ -211,4 +211,416 @@ restart_level
 	jsr refresh_weapon
 	clc
 .rl_fail
+	rts
+
+; ---------------------------------------------------------------------------
+; Quick save (F5) / quick load (F7)
+; Two KERNAL files: QS=GAME_STATE (863), QM=MAP (4K). DEN=0 for I/O.
+; Patch ZP mirrors. SAVE via $FFD8 (no IOINIT). LOAD via LoadPrg.
+; ---------------------------------------------------------------------------
+
+qs_dos_name
+	!text "QS"
+	!byte 0
+qm_dos_name
+	!text "QM"
+	!byte 0
+qs_scratch_cmd
+	!text "S0:QS"
+qm_scratch_cmd
+	!text "S0:QM"
+
+; Snapshot IRQ latches; C=1 if a disk op ran (caller should render).
+poll_quick_keys
+	sei
+	lda in_qsave
+	sta tmp0
+	lda in_qload
+	sta tmp1
+	lda #0
+	sta in_qsave
+	sta in_qload
+	cli
+	lda tmp0
+	beq .pqk_chkload
+	jsr quick_save
+	sec
+	rts
+.pqk_chkload
+	lda tmp1
+	beq .pqk_none
+	jsr quick_load
+	sec
+	rts
+.pqk_none
+	clc
+	rts
+
+; Kill game IRQs + blank. Do not IOINIT (keeps Krill drive code).
+qs_disk_prep
+	sei
+	lda #BANK_LOADER
+	sta $01
+	lda #$7f
+	sta $dc0d
+	lda $dc0d
+	lda #0
+	sta $d01a
+	lda $d019
+	sta $d019
+	jmp blank_screen
+
+; After disk I/O: CIA DDR, Judd ptrs, VIC, IRQs. Leaves $01=$35, SEI held.
+qs_recover_hw
+	sei
+	lda #BANK_LOADER
+	sta $01
+	lda #VIC_BANK_DD00
+	sta $dd00
+	lda #$ff
+	sta $dc02
+	lda #0
+	sta $dc03
+	jsr init_sqtabs
+	jsr init_vic
+	jsr prof_init
+	jsr input_irq_init
+	jmp play_sound_init
+
+; Soft state after QL. Does not re-init doors/enemies/spawn.
+qs_after_load
+	lda #$34
+	sta $01
+	lda #0
+	sta turn_acc_l
+	sta turn_acc_h
+	sta level_want
+	ldx #39
+	lda #$ff
+-
+	sta col_enemy,x
+	dex
+	bpl -
+	lda #1
+	sta bjh_look
+	jsr ui_look_reload
+	lda #UI_DIRTY_ALL
+	sta ui_dirty
+	lda #BANK_LOADER
+	sta $01
+	jsr refresh_weapon
+	lda #0
+	sta $d020
+	rts
+
+qs_fail
+	jsr qs_recover_hw
+	lda #$02
+	sta $d020
+	lda #BANK_RAM
+	sta $01
+	cli
+	sec
+	rts
+
+; Patch hot ZP (+ difficulty) into GAME_STATE player mirrors. $01=$34.
+qs_patch_in
+	lda playerx_l
+	sta gs_player + 0
+	lda playerx_h
+	sta gs_player + 1
+	lda playery_l
+	sta gs_player + 2
+	lda playery_h
+	sta gs_player + 3
+	lda playera
+	sta gs_player + 4
+	lda owned_weapons
+	sta gs_player + 9
+	lda cur_weapon
+	sta gs_player + 10
+	lda episode
+	sta gs_player + 19
+	lda level_num
+	sta gs_player + 20
+	lda secret_from
+	sta gs_player + 21
+	lda difficulty
+	sta gs_player + 22
+	rts
+
+; Scatter mirrors → ZP / difficulty / map index. $01=$34.
+qs_patch_out
+	lda gs_player + 0
+	sta playerx_l
+	lda gs_player + 1
+	sta playerx_h
+	lda gs_player + 2
+	sta playery_l
+	lda gs_player + 3
+	sta playery_h
+	lda gs_player + 4
+	sta playera
+	lda gs_player + 9
+	sta owned_weapons
+	lda gs_player + 10
+	sta cur_weapon
+	lda gs_player + 19
+	sta episode
+	lda gs_player + 20
+	sta level_num
+	lda gs_player + 21
+	sta secret_from
+	lda gs_player + 22
+	sta difficulty
+	rts
+
+; Magic + version + checksum over GS body + MAP. $01=$34.
+qs_write_hdr
+	lda #'W'
+	sta GAME_STATE
+	lda #'6'
+	sta GAME_STATE + 1
+	lda #'4'
+	sta GAME_STATE + 2
+	lda #'S'
+	sta GAME_STATE + 3
+	lda #QS_VERSION
+	sta GAME_STATE + 4
+	jsr qs_checksum
+	lda tmp0
+	sta GAME_STATE + 5
+	lda tmp1
+	sta GAME_STATE + 6
+	rts
+
+; ---------------------------------------------------------------------------
+quick_save
+	jsr qs_disk_prep
+	lda #BANK_RAM
+	sta $01
+	sei
+	jsr qs_patch_in
+	jsr qs_write_hdr
+	lda #BANK_IO
+	sta $01
+	cli
+	ldx #<qs_scratch_cmd
+	ldy #>qs_scratch_cmd
+	jsr qs_scratch_xy
+	ldx #<qm_scratch_cmd
+	ldy #>qm_scratch_cmd
+	jsr qs_scratch_xy
+	jsr qs_kernal_save_gs
+	bcs .qss_fail
+	jsr qs_kernal_save_map
+	bcs .qss_fail
+	jsr qs_recover_hw
+	lda #0
+	sta $d020
+	lda #BANK_RAM
+	sta $01
+	cli
+	clc
+	rts
+.qss_fail
+	jmp qs_fail
+
+; X/Y = scratch cmd text "S0:.." (5 chars)
+qs_scratch_xy
+	lda #5
+	jsr $ffbd
+	lda #15
+	ldx $ba
+	ldy #15
+	jsr $ffba
+	jsr $ffc0
+	lda #15
+	jmp $ffc3
+
+; SAVE GAME_STATE .. QS_GS_END-1
+qs_kernal_save_gs
+	lda #2
+	ldx #<qs_dos_name
+	ldy #>qs_dos_name
+	jsr $ffbd
+	lda #1
+	ldx $ba
+	ldy #1
+	jsr $ffba
+	lda #<GAME_STATE
+	sta tmp0
+	lda #>GAME_STATE
+	sta tmp1
+	ldx #<QS_GS_END
+	ldy #>QS_GS_END
+	lda #tmp0
+	jmp $ffd8
+
+; SAVE MAP .. MAP_END-1
+qs_kernal_save_map
+	lda #2
+	ldx #<qm_dos_name
+	ldy #>qm_dos_name
+	jsr $ffbd
+	lda #1
+	ldx $ba
+	ldy #1
+	jsr $ffba
+	lda #<MAP
+	sta tmp0
+	lda #>MAP
+	sta tmp1
+	ldx #<MAP_END
+	ldy #>MAP_END
+	lda #tmp0
+	jmp $ffd8
+
+; ---------------------------------------------------------------------------
+quick_load
+	lda #1
+	sta load_in_play
+	jsr qs_disk_prep
+!if USE_KRILL {
+	ldx #<qs_dos_name
+	ldy #>qs_dos_name
+	jsr LoadPrg
+	bcs .qsl_fail
+} else {
+	lda #BANK_IO
+	sta $01
+	cli
+	jsr load_cia2_nmi_off
+	lda #2
+	ldx #<qs_dos_name
+	ldy #>qs_dos_name
+	jsr LoadPrg
+	bcs .qsl_fail
+}
+	lda #BANK_RAM
+	sta $01
+	sei
+	jsr qs_verify_hdr			; magic/version only — MAP may still be post-restart
+	bcs .qsl_fail
+!if USE_KRILL {
+	ldx #<qm_dos_name
+	ldy #>qm_dos_name
+	jsr LoadPrg
+} else {
+	lda #BANK_IO
+	sta $01
+	cli
+	lda #2
+	ldx #<qm_dos_name
+	ldy #>qm_dos_name
+	jsr LoadPrg
+}
+	lda #0
+	sta load_in_play
+	bcs .qsl_fail2
+	lda #BANK_RAM
+	sta $01
+	sei
+	jsr qs_verify				; checksum needs QS + QM both loaded
+	bcs .qsl_fail2
+	jsr qs_patch_out
+	jsr qs_recover_hw
+	jsr qs_after_load
+	lda #BANK_RAM
+	sta $01
+	cli
+	clc
+	rts
+.qsl_fail
+	lda #0
+	sta load_in_play
+	jmp qs_fail
+.qsl_fail2
+	jmp qs_fail
+
+; Magic + version only. C=0 ok. $01=$34.
+qs_verify_hdr
+	lda GAME_STATE
+	cmp #'W'
+	bne .qsvh_bad
+	lda GAME_STATE + 1
+	cmp #'6'
+	bne .qsvh_bad
+	lda GAME_STATE + 2
+	cmp #'4'
+	bne .qsvh_bad
+	lda GAME_STATE + 3
+	cmp #'S'
+	bne .qsvh_bad
+	lda GAME_STATE + 4
+	cmp #QS_VERSION
+	bne .qsvh_bad
+	clc
+	rts
+.qsvh_bad
+	sec
+	rts
+
+; Magic + version + checksum (GS body + MAP). C=0 ok. $01=$34.
+qs_verify
+	jsr qs_verify_hdr
+	bcs .qsv_bad
+	jsr qs_checksum
+	lda tmp0
+	cmp GAME_STATE + 5
+	bne .qsv_bad
+	lda tmp1
+	cmp GAME_STATE + 6
+	bne .qsv_bad
+	clc
+	rts
+.qsv_bad
+	sec
+	rts
+
+; Sum (GAME_STATE+HDR .. QS_GS_END) + MAP → tmp0/tmp1
+qs_checksum
+	lda #<(GAME_STATE + QS_HDR_LEN)
+	sta aux_l
+	lda #>(GAME_STATE + QS_HDR_LEN)
+	sta aux_h
+	lda #0
+	sta tmp0
+	sta tmp1
+	lda #<(QS_STATE_SIZE - QS_HDR_LEN)
+	sta tmp2
+	lda #>(QS_STATE_SIZE - QS_HDR_LEN)
+	sta tmp3
+	jsr .qsc_add
+	lda #<MAP
+	sta aux_l
+	lda #>MAP
+	sta aux_h
+	lda #<MAP_SIZE
+	sta tmp2
+	lda #>MAP_SIZE
+	sta tmp3
+.qsc_add
+	lda tmp2
+	ora tmp3
+	beq .qsc_done
+	ldy #0
+	lda (aux_l),y
+	clc
+	adc tmp0
+	sta tmp0
+	bcc +
+	inc tmp1
++
+	inc aux_l
+	bne +
+	inc aux_h
++
+	lda tmp2
+	bne +
+	dec tmp3
++
+	dec tmp2
+	jmp .qsc_add
+.qsc_done
 	rts

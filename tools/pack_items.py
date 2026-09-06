@@ -97,6 +97,8 @@ def main() -> int:
     heights: list[int] = []
     offsets: list[int] = []
     ceilings: list[int] = []
+    sheet_unmatched = 0
+    sheet_opaque_black = 0
 
     for i, name in enumerate(ITEM_FRAMES):
         col = i % OUT_COLS
@@ -108,7 +110,9 @@ def main() -> int:
         if bbox is None:
             raise ValueError(f"empty cell for {name} at col={col} row={row}")
         frame = cell.crop(bbox)
-        w, h, idx = frame_indices(frame)
+        w, h, idx, unmatched, opaque_black = frame_indices(frame)
+        sheet_unmatched += unmatched
+        sheet_opaque_black += opaque_black
         off = len(blob)
         chunk = pack_columns(w, h, idx)
         blob.extend(chunk)
@@ -119,6 +123,21 @@ def main() -> int:
         print(
             f"  {name:16} {w:2}x{h:<2}  off={off:4}  bytes={len(chunk)}"
             f"{'  ceil' if ceilings[-1] else ''}"
+        )
+        if unmatched or opaque_black:
+            print(
+                f"    unmatched={unmatched}  opaque_black={opaque_black}"
+            )
+
+    if sheet_unmatched:
+        print(
+            f"  WARNING: {sheet_unmatched} opaque pixels are not exact "
+            f"pepto-ntsc/Colodore RGB (snapped to nearest in either palette)"
+        )
+    if sheet_opaque_black:
+        print(
+            f"  WARNING: {sheet_opaque_black} opaque black pixels "
+            f"(nibble 0 = transparent)"
         )
 
     n = len(ITEM_FRAMES)

@@ -11,6 +11,9 @@ Reads (hand-edited) sheets — not the *_c64_16_sheet.png regenerations:
 
 Blob is linked at SFX_BASE (copied from the bitmap load image at start).
 
+Exact VICE pepto-ntsc or Colodore RGB both map to C64 indices 0–15.
+Other opaque RGB snaps to the nearest index in either palette (not black).
+
 Layout per frame (column-major 4bpp, nibble 0 = transparent):
   For x in 0..w-1:
     for y in 0..h-1 step 2:
@@ -45,7 +48,31 @@ from process_guard_c64 import (  # noqa: E402
     SELECTED as GUARD_SELECTED,
 )
 
-RGB_TO_IDX = {rgb: i for i, rgb in enumerate(C64_PALETTE)}
+# Lospec / colodore.com defaults (Pepto 2017). Same C64 indices as C64_PALETTE
+# (VICE pepto-ntsc). Packer accepts either RGB set; nibble 0 stays transparent.
+COLODORE_PALETTE = [
+    (0x00, 0x00, 0x00),  # 0 black
+    (0xFF, 0xFF, 0xFF),  # 1 white
+    (0x81, 0x33, 0x38),  # 2 red
+    (0x75, 0xCE, 0xC8),  # 3 cyan
+    (0x8E, 0x3C, 0x97),  # 4 purple
+    (0x56, 0xAC, 0x4D),  # 5 green
+    (0x2E, 0x2C, 0x9B),  # 6 blue
+    (0xED, 0xF1, 0x71),  # 7 yellow
+    (0x8E, 0x50, 0x29),  # 8 orange
+    (0x55, 0x38, 0x00),  # 9 brown
+    (0xC4, 0x6C, 0x71),  # 10 light red
+    (0x4A, 0x4A, 0x4A),  # 11 dark grey
+    (0x7B, 0x7B, 0x7B),  # 12 medium grey
+    (0xA9, 0xFF, 0x9F),  # 13 light green
+    (0x70, 0x6D, 0xEB),  # 14 light blue
+    (0xB2, 0xB2, 0xB2),  # 15 light grey
+]
+
+RGB_TO_IDX: dict[tuple[int, int, int], int] = {}
+for _pal in (C64_PALETTE, COLODORE_PALETTE):
+    for _i, _rgb in enumerate(_pal):
+        RGB_TO_IDX.setdefault(_rgb, _i)
 
 SETS: list[tuple[str, Path, list[tuple[str, int, int]], int, int]] = [
     (
@@ -94,20 +121,51 @@ def opaque_bbox(img: Image.Image) -> tuple[int, int, int, int] | None:
     return min(xs), min(ys), max(xs) + 1, max(ys) + 1
 
 
-def frame_indices(img: Image.Image) -> tuple[int, int, list[int]]:
-    """RGBA → (w, h, row-major indices; transparent → 0). Exact Pepto RGB only."""
+def nearest_palette_idx(rgb: tuple[int, int, int]) -> int:
+    """Closest C64 index 1–15 in pepto-ntsc or Colodore (never snap to black)."""
+    r, g, b = rgb
+    best_i = 1
+    best_d = 1 << 30
+    for pal in (C64_PALETTE, COLODORE_PALETTE):
+        for i, (cr, cg, cb) in enumerate(pal):
+            if i == 0:
+                continue
+            dr, dg, db = r - cr, g - cg, b - cb
+            d = dr * dr + dg * dg + db * db
+            if d < best_d:
+                best_d = d
+                best_i = i
+    return best_i
+
+
+def frame_indices(img: Image.Image) -> tuple[int, int, list[int], int, int]:
+    """RGBA → (w, h, indices, unmatched_opaque, opaque_black).
+
+    Exact VICE pepto-ntsc or Colodore RGB → C64 index. Other opaque RGB
+    snaps to the nearest index in either palette (not black). Opaque black
+    and alpha < 128 → 0 (transparent).
+    """
     img = img.convert("RGBA")
     w, h = img.size
     px = img.load()
     out: list[int] = []
+    unmatched = 0
+    opaque_black = 0
     for y in range(h):
         for x in range(w):
             r, g, b, a = px[x, y]
             if a < 128:
                 out.append(0)
+                continue
+            idx = RGB_TO_IDX.get((r, g, b))
+            if idx is None:
+                unmatched += 1
+                out.append(nearest_palette_idx((r, g, b)) & 0x0F)
             else:
-                out.append(RGB_TO_IDX.get((r, g, b), 0) & 0x0F)
-    return w, h, out
+                if idx == 0:
+                    opaque_black += 1
+                out.append(idx & 0x0F)
+    return w, h, out, unmatched, opaque_black
 
 
 def pack_columns(w: int, h: int, row_major: list[int]) -> bytes:
@@ -145,6 +203,8 @@ def pack_sheet(
     cell_h = sh // rows
     print(f"\n{sheet_path.name}  {sw}x{sh}  cells {cell_w}x{cell_h}")
 
+    sheet_unmatched = 0
+    sheet_opaque_black = 0
     for i, (name, _, _) in enumerate(selected):
         col = i % cols
         row = i // cols
@@ -155,7 +215,9 @@ def pack_sheet(
         if bbox is None:
             raise ValueError(f"empty cell for {name} at col={col} row={row}")
         frame = cell.crop(bbox)
-        w, h, idx = frame_indices(frame)
+        w, h, idx, unmatched, opaque_black = frame_indices(frame)
+        sheet_unmatched += unmatched
+        sheet_opaque_black += opaque_black
         off = len(blob)
         chunk = pack_columns(w, h, idx)
         blob.extend(chunk)
@@ -163,7 +225,24 @@ def pack_sheet(
         heights.append(h)
         offsets.append(off)
         names.append(name)
+        n0 = sum(1 for p in idx if p == 0)
         print(f"  {name:16} {w:2}x{h:<2}  off={off:4}  bytes={len(chunk)}")
+        if unmatched or opaque_black:
+            print(
+                f"    unmatched={unmatched}  opaque_black={opaque_black}  "
+                f"transparent_texels={n0}/{w * h}"
+            )
+
+    if sheet_unmatched:
+        print(
+            f"  WARNING: {sheet_unmatched} opaque pixels are not exact "
+            f"pepto-ntsc/Colodore RGB (snapped to nearest in either palette)"
+        )
+    if sheet_opaque_black:
+        print(
+            f"  WARNING: {sheet_opaque_black} opaque black pixels "
+            f"(nibble 0 = transparent)"
+        )
 
 
 def main() -> int:

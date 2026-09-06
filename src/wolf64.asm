@@ -125,7 +125,7 @@ main_loop
 	jsr handle_level_want
 	jmp .ml_render
 .ml_alive
-	jsr poll_quick_keys			; F5/F7; works while dead too
+	jsr poll_quick_keys			; F5/F7 / F3+W warp; works while dead too
 	bcs .ml_render				; disk op done — repaint
 	lda player_dead
 	beq .ml_play
@@ -213,7 +213,7 @@ item_considered	= TAPE_BSS
 los_rr		= item_considered + 1
 walk_anim_t	= los_rr + 1			; global walk A/B ms accumulator
 walk_phase	= walk_anim_t + 1		; 0=A, nonzero=B
-level_want	= walk_phase + 1		; 0=none 1=restart 2=next 3=new 4=secret
+level_want	= walk_phase + 1		; 0=none 1=restart 2=next 3=new 4=secret 5=warp
 ai_dx		= level_want + 1
 ai_dy		= ai_dx + 1
 ai_steps	= ai_dy + 1
@@ -280,7 +280,10 @@ casc_now	= frame_cy + 4
 face_tic_l	= casc_now + 4			; Wolf look cadence (dt_ms countdown)
 face_tic_h	= face_tic_l + 1
 bjh_look	= face_tic_h + 1		; 0=left 1=center 2=right
-end_tape_bss	= bjh_look + 1
+warp_armed	= bjh_look + 1			; F3+W chord waiting for 1–8/B/S
+warp_w_prev	= warp_armed + 1
+warp_dig_prev	= warp_w_prev + 1
+end_tape_bss	= warp_dig_prev + 1
 !if end_tape_bss > TAPE_BSS_END {
 	!error "Tape BSS overflows cassette buffer; end=$", end_tape_bss
 }
@@ -467,10 +470,12 @@ ENEMY_GFX_BASE = end_paint
 
 ; =========================================================================
 ; egfx — enemy pixel blob (follows paint; ≤ SCREEN)
+; warp.asm sits in the leftover bytes before SCREEN ($8000).
 ; =========================================================================
 *= ENEMY_GFX_BASE
 enemy_gfx_data
 !binary "../generated/textures/enemies.bin"
+!source "warp.asm"
 end_egfx = *
 !if end_egfx > SCREEN {
 	!error "Enemy gfx overlaps SCREEN; end=$", end_egfx

@@ -230,7 +230,7 @@ qs_scratch_cmd
 qm_scratch_cmd
 	!text "S0:QM"
 
-; Snapshot IRQ latches; C=1 if a disk op ran (caller should render).
+; Snapshot IRQ latches; C=1 if a disk op ran or warp fired (caller should render).
 poll_quick_keys
 	sei
 	lda in_qsave
@@ -248,13 +248,12 @@ poll_quick_keys
 	rts
 .pqk_chkload
 	lda tmp1
-	beq .pqk_none
+	beq .pqk_warp
 	jsr quick_load
 	sec
 	rts
-.pqk_none
-	clc
-	rts
+.pqk_warp
+	jmp poll_warp				; C=1 if warp fired
 
 ; Kill game IRQs + blank. Do not IOINIT (keeps Krill drive code).
 qs_disk_prep

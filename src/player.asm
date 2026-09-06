@@ -396,13 +396,13 @@ player_check_exit
 .pce_rts
 	rts
 
-; level_want: 1=restart 2=next 3=new game 4=secret — disk reload + re-init
+; level_want: 1=restart 2=next 3=new game 4=secret 5=warp — disk reload + re-init
 ; Player init after successful load so a failed LoadLevel can restore VIC.
 handle_level_want
 	lda level_want
-	pha					; 1=restart 2=next 3=new 4=secret
+	pha					; 1=restart 2=next 3=new 4=secret 5=warp
 	lsr
-	bcs .hlw_gotwant			; odd: restart / new game
+	bcs .hlw_gotwant			; odd: restart / new game / warp
 	; 2 or 4: 15,000 then jingle, hold until SID idle
 	lda #150
 	jsr score_add_hud_and_redraw
@@ -446,11 +446,16 @@ handle_level_want
 	jmp .hlw_load
 .hlw_chknew
 	cmp #3
-	bne .hlw_load
+	bne .hlw_chkwarp
 	lda #0
 	sta secret_from
 	lda #1					; out of lives — back to level 1
 	sta level_num
+	jmp .hlw_load
+.hlw_chkwarp
+	cmp #5
+	bne .hlw_load
+	jsr player_reset_status
 .hlw_load
 	lda #0
 	sta level_want
@@ -480,7 +485,7 @@ handle_level_want
 	cmp #1
 	beq .hlw_life
 	cmp #3
-	bne .hlw_done				; 2 or 4: status already reset
+	bne .hlw_done				; 2 / 4 / 5: status already reset
 	jsr player_init_game
 	bne .hlw_wpn				; A = UI_DIRTY_ALL
 .hlw_life

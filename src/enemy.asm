@@ -22,7 +22,7 @@ EF_AMBUSH	= $02
 EF_MOVING	= $08				; moved this frame → walk anim
 EF_FIRSTATTACK	= $10				; allow 180° on first chase dir pick
 EF_SHOT_DONE	= $20				; shoot recover / bite already applied
-EF_DODGE_FACE	= $40				; RR dodge: keep facing for next chase move
+EF_DODGE_FACE	= $40				; pending dodge dir pick on next repath
 ES_ALIVE	= 0
 ES_CHASE	= 1
 ES_SHOOT	= 2
@@ -477,6 +477,9 @@ eu_state_hi
 	beq .eu_los
 	jmp .eu_loop
 .eu_los
+	; SuperCPU dt_ms 1..7 → dt8=0 most frames; skip so think stays wall-clock
+	lda dt8
+	beq .eu_done
 	jsr enemy_los_rr
 .eu_done
 	rts

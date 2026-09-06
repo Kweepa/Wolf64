@@ -1,7 +1,7 @@
 ; Enemy AI + helpers (LOS/chase/shoot, pick frame, spawn) — linked in locode
 !zone enemy_ai
 
-; Round-robin: at most one LOS resolve per frame (idle / chase / fire)
+; Round-robin: at most one LOS resolve per dt8 tick (idle / chase / fire)
 ; ---------------------------------------------------------------------------
 enemy_los_rr
 	lda enemy_count
@@ -145,12 +145,18 @@ enemy_rr_chase
 	plp
 }
 	bcc .erc_rts			; no LOS → slot used, keep chasing
-	; chance: close → 48; else min(40, max(1, (dt8<<2)/dist))
+	; chance: close → min(48, dt8<<3); else min(40, (dt8<<2)/dist)
 	lda ai_dist
 	beq .erc_shot
 	cmp #1
 	bne .erc_ch
 .erc_shot
+	lda dt8
+	asl
+	asl
+	asl
+	cmp #49
+	bcc .erc_roll
 	lda #48
 	bne .erc_roll
 .erc_ch
@@ -175,9 +181,6 @@ enemy_rr_chase
 	dex
 	bne .erc_bd
 	lda tmp0
-	bne +
-	lda #1
-+
 	cmp #41
 	bcc .erc_roll
 	lda #40
@@ -185,7 +188,7 @@ enemy_rr_chase
 	sta tmp3				; chance
 	jsr rnd8
 	cmp tmp3
-	bcs .erc_dodge			; rnd >= chance → dodge face
+	bcs .erc_dodge			; rnd >= chance → pending dodge
 	; enter shoot with type burst count
 	ldx enemy_idx
 	lda #ES_SHOOT
@@ -201,7 +204,6 @@ enemy_rr_chase
 .erc_rts
 	rts
 .erc_dodge
-	jsr select_dodge_dir
 	ldx enemy_idx
 	lda enemy_flags,x
 	ora #EF_DODGE_FACE
@@ -537,19 +539,23 @@ first_sighting
 	jmp play_sound
 
 ; ---------------------------------------------------------------------------
-; Chase: path + CHASE_SPEED move (shoot / dodge face via enemy_los_rr)
+; Chase: path + CHASE_SPEED move (shoot / pending dodge via enemy_los_rr)
 ; ---------------------------------------------------------------------------
 enemy_chase_one
 	stx enemy_idx
-	lda enemy_flags,x
-	and #EF_DODGE_FACE
-	beq .ec_was
-	; RR set dodge facing last frame — walk it, then clear
-	lda enemy_flags,x
-	and #$ff-EF_DODGE_FACE
-	sta enemy_flags,x
-	jmp .ec_domove
+	; stand first — don't repath while hugging the player
+	lda enemy_type,x
+	cmp #ET_DOG
+	bne .ec_humstop
+	jsr dog_in_bite_range
+	bcs .ec_was				; too far — chase
+	jmp .ec_do_stand
+.ec_humstop
+	jsr enemy_inside_minactor
+	bcc .ec_was
+	jmp .ec_do_stand
 .ec_was
+	ldx enemy_idx
 	lda enemy_type,x
 	cmp #ET_DOG
 	beq .ec_dog_was
@@ -573,7 +579,18 @@ enemy_chase_one
 	sta enemy_burst,x
 	bne .ec_domove
 .ec_pick
+	ldx enemy_idx
+	lda enemy_flags,x
+	and #EF_DODGE_FACE
+	beq .ec_chasepick
+	lda enemy_flags,x
+	and #$ff-EF_DODGE_FACE
+	sta enemy_flags,x
+	jsr select_dodge_dir
+	jmp .ec_picked
+.ec_chasepick
 	jsr select_chase_dir
+.ec_picked
 	ldx enemy_idx
 	lda enemy_type,x
 	cmp #ET_DOG
@@ -582,26 +599,9 @@ enemy_chase_one
 	sta enemy_burst,x
 .ec_domove
 	ldx enemy_idx
-	; stand when close enough — dogs: melee; humans: Wolf MINACTORDIST box
-	lda enemy_type,x
-	cmp #ET_DOG
-	bne .ec_humstop
-	jsr dog_in_bite_range
-	bcs .ec_go				; too far — chase
-.ec_do_stand
-	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_FIRSTATTACK | EF_SHOT_DONE)
-	sta enemy_flags,x			; clear MOVING
-	lda #0
-	sta enemy_burst,x			; dog: repath when chase resumes
-	jmp .ec_out
-.ec_humstop
-	jsr enemy_inside_minactor
-	bcs .ec_do_stand
-.ec_go
 	jsr enemy_set_door_pass
 	lda enemy_flags,x
-	and #(EF_ACTIVE | EF_FIRSTATTACK | EF_SHOT_DONE)
+	and #(EF_ACTIVE | EF_FIRSTATTACK | EF_SHOT_DONE | EF_DODGE_FACE)
 	sta enemy_flags,x
 	lda #0
 	sta move_dx_l
@@ -693,6 +693,14 @@ enemy_chase_one
 	sta probe_doors_pass
 	ldx enemy_idx
 	rts
+.ec_do_stand
+	ldx enemy_idx
+	lda enemy_flags,x
+	and #(EF_ACTIVE | EF_FIRSTATTACK | EF_SHOT_DONE)
+	sta enemy_flags,x			; clear MOVING
+	lda #0
+	sta enemy_burst,x			; dog: repath when chase resumes
+	jmp .ec_out
 
 ; C=1 if |dx|<1.0 and |dy|<1.0 (Wolf MINACTORDIST — 8.8 hi in {0,$FF})
 enemy_inside_minactor

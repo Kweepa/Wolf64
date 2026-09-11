@@ -13,6 +13,15 @@ run-game.bat         rem launch wolf64.d64 (VICE virtual device traps)
 run-game.bat krill   rem launch wolf64-krill.d64 (true drive emulation)
 ```
 
+On Linux/macOS use the shell counterparts (ACME, Python 3 and `c1541` on PATH):
+
+```sh
+./build.sh          # produces wolf64.d64 (KERNAL) and wolf64-krill.d64
+./make.sh           # build + launch KERNAL disk in VICE
+./run-game.sh       # launch wolf64.d64 (VICE virtual device traps)
+./run-game.sh krill # launch wolf64-krill.d64 (true drive emulation)
+```
+
 The Krill disk needs a real 1541-class drive or VICE true drive emulation (`run-game.bat krill` turns traps off and TDE on). Virtual device traps will not run drive code. EasyFlash stays on the KERNAL disk. Rebuild Krill binaries with `python tools/build_krill.py` only when the resident address or `krill/config` changes.
 
 ## EasyFlash cartridge
@@ -20,7 +29,7 @@ The Krill disk needs a real 1541-class drive or VICE true drive emulation (`run-
 To pack the disk image into an EasyFlash `.crt` for real hardware or emulation:
 
 1. Download **Disk2Easyflash v1.1** from [milasoft64/Disk2Easyflash-v1](https://github.com/milasoft64/Disk2Easyflash-v1) (file: `v1.1/disk2easyflash_v1.1.py`) or [CSDb](https://csdb.dk/release/?id=260920).
-2. Save it as `3rdparty/disk2easyflash.py`. Keep this file locally for `make-cart.bat`; the whole `3rdparty/` directory is gitignored and not pushed to GitHub.
+2. Save it as `3rdparty/disk2easyflash.py`. Keep this file locally for `make-cart.bat` / `make-cart.sh`; the whole `3rdparty/` directory is gitignored and not pushed to GitHub.
 3. Run after building the disk:
 
 ```bat
@@ -28,7 +37,7 @@ build.bat
 make-cart.bat
 ```
 
-Output: `wolf64.crt`.
+or on Linux/macOS `./build.sh` then `./make-cart.sh`. Output: `wolf64.crt`.
 
 ### Third-party tool — Disk2Easyflash
 

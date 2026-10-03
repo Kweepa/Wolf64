@@ -1,0 +1,10 @@
+---
+description: Do not launch or drive VICE unless the user asks
+alwaysApply: true
+---
+
+# VICE testing
+
+Do not launch VICE, attach a disk, inject input, or take emulator screenshots unless the user explicitly asks for a VICE run.
+
+Verify assembler and renderer changes by rebuilding and by checking generated output or a host-side simulation. Leave play-testing in VICE to the user.

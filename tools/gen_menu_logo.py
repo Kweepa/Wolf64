@@ -1,79 +1,45 @@
 #!/usr/bin/env python3
-"""Build src/menu_logo.asm from textures/h_wolflogo_twocolour.png.
+"""Build the menu brand band from a full Koala screen.
 
-White pixels → hires bitmap ink; non-black non-white (red/pink) → sprite ink.
-Badge is 2 columns wider than the logo on each side.
+Logo cells are copied unchanged from the top of the Koala. Around them,
+the old strap (full-width black bar) and badge (taller centered plaque)
+are filled in as multicolor cells, because those rows are MCM.
+
+Koala layout is 10003 bytes: load address, 8000 bitmap, 1000 screen,
+1000 colour, 1 background.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-from PIL import Image
-
 ROOT = Path(__file__).resolve().parent.parent
-PNG = ROOT / "textures" / "h_wolflogo_twocolour.png"
+KLA = ROOT / "textures" / "help" / "h_wolflogo.kla"
 OUT = ROOT / "generated" / "src" / "menu_logo.asm"
-PREVIEW = ROOT / "generated" / "assets" / "menu_logo_preview.png"
 
-LOGO_W = 160
-LOGO_H = 28
-BADGE_PAD_COLS = 2			# each side
-BADGE_COLS = LOGO_W // 8 + BADGE_PAD_COLS * 2	# 24
-BADGE_ROWS = 5
-SPR_COUNT = 7
-SPR_W = 24
-SPR_H = 21
+ROWS = 7
+COLS = 40
+BMP_LEN = 8000
+SCR_LEN = 1000
+COL_LEN = 1000
+# load address + bitmap + screen + colour + background
+KLA_LEN = 2 + BMP_LEN + SCR_LEN + COL_LEN + 1
 
-
-def classify(im: Image.Image) -> tuple[list[list[int]], list[list[int]]]:
-	"""Return (white_grid, red_grid) 0/1 masks, logo size."""
-	rgb = im.convert("RGB")
-	w, h = rgb.size
-	px = rgb.load()
-	white = [[0] * w for _ in range(h)]
-	red = [[0] * w for _ in range(h)]
-	for y in range(h):
-		for x in range(w):
-			r, g, b = px[x, y]
-			if r + g + b < 24:
-				continue
-			# Near-white → bitmap; anything else lit → sprite red
-			if r >= 240 and g >= 240 and b >= 240:
-				white[y][x] = 1
-			else:
-				red[y][x] = 1
-	return white, red
+# Light-blue row, then a 4-row strap and a 6-row badge (one row of
+# plaque above the strap and one below). The 4-row logo sits in the
+# middle of the badge.
+BAR_TOP = 2
+BAR_ROWS = 4
+BADGE_TOP = 1
+BADGE_ROWS = 6
+BADGE_LEFT = 8
+BADGE_COLS = 24
+COL_MAIN = 14
+# Logo art occupies Koala rows 0–3, centered in the 6-row badge.
+LOGO_SRC_ROWS = 4
+LOGO_DST_ROW = 2
 
 
-def pack_hires_cell(grid: list[list[int]], cx: int, cy: int) -> list[int]:
-	out = []
-	for row in range(8):
-		b = 0
-		py = cy * 8 + row
-		for bit in range(8):
-			px = cx * 8 + bit
-			if 0 <= py < len(grid) and 0 <= px < len(grid[0]) and grid[py][px]:
-				b |= 0x80 >> bit
-		out.append(b)
-	return out
-
-
-def pack_sprite(grid: list[list[int]], ox: int, oy: int) -> list[int]:
-	raw = []
-	for row in range(SPR_H):
-		for col in range(3):
-			b = 0
-			for bit in range(8):
-				x = ox + col * 8 + bit
-				y = oy + row
-				if 0 <= y < len(grid) and 0 <= x < len(grid[0]) and grid[y][x]:
-					b |= 0x80 >> bit
-			raw.append(b)
-	raw.append(0)
-	return raw
-
-
-def fmt_bytes(data: list[int], per_line: int = 16) -> list[str]:
+def fmt_bytes(data: bytes, per_line: int = 16) -> list[str]:
 	lines = []
 	for i in range(0, len(data), per_line):
 		chunk = data[i : i + per_line]
@@ -81,78 +47,129 @@ def fmt_bytes(data: list[int], per_line: int = 16) -> list[str]:
 	return lines
 
 
-def pad_into_badge(src: list[list[int]], pad_x: int, pad_y: int, bw: int, bh: int) -> list[list[int]]:
-	grid = [[0] * bw for _ in range(bh)]
-	for y, row in enumerate(src):
-		for x, v in enumerate(row):
-			if v:
-				grid[pad_y + y][pad_x + x] = 1
-	return grid
+def cell_off(cy: int, cx: int) -> int:
+	return cy * COLS * 8 + cx * 8
+
+
+def cell_has_ink(bmp: bytes, scr: bytes, col: bytes, cy: int, cx: int) -> bool:
+	off = cell_off(cy, cx)
+	if any(bmp[off : off + 8]):
+		return True
+	i = cy * COLS + cx
+	return scr[i] != 0 or col[i] != 0
+
+
+def put_cell(
+	bmp: bytearray, scr: bytearray, col: bytearray, cy: int, cx: int, data: bytes, s: int, c: int
+) -> None:
+	off = cell_off(cy, cx)
+	bmp[off : off + 8] = data
+	scr[cy * COLS + cx] = s
+	col[cy * COLS + cx] = c
+
+
+def compose(src_bmp: bytes, src_scr: bytes, src_col: bytes) -> tuple[bytes, bytes, bytes]:
+	"""Light-blue field, black strap, black badge, then the logo cells."""
+	bmp = bytearray(ROWS * COLS * 8)
+	scr = bytearray(ROWS * COLS)
+	col = bytearray(ROWS * COLS)
+	light = bytes([0x55]) * 8
+	light_scr = (COL_MAIN << 4) | COL_MAIN
+
+	for cy in range(ROWS):
+		for cx in range(COLS):
+			on_badge = (
+				BADGE_TOP <= cy < BADGE_TOP + BADGE_ROWS
+				and BADGE_LEFT <= cx < BADGE_LEFT + BADGE_COLS
+			)
+			on_bar = BAR_TOP <= cy < BAR_TOP + BAR_ROWS
+			if on_badge or on_bar:
+				continue
+			put_cell(bmp, scr, col, cy, cx, light, light_scr, 0)
+
+	for sy in range(LOGO_SRC_ROWS):
+		dy = LOGO_DST_ROW + sy
+		if dy >= ROWS:
+			raise SystemExit(f"logo row {sy} lands on band row {dy}")
+		for cx in range(COLS):
+			if not cell_has_ink(src_bmp, src_scr, src_col, sy, cx):
+				continue
+			off = cell_off(sy, cx)
+			i = sy * COLS + cx
+			put_cell(bmp, scr, col, dy, cx, src_bmp[off : off + 8], src_scr[i], src_col[i])
+	return bytes(bmp), bytes(scr), bytes(col)
+
+
+def write_preview(bmp: bytes, scr: bytes, col: bytes, bg: int) -> None:
+	import sys
+
+	from PIL import Image
+
+	sys.path.insert(0, str(Path(__file__).resolve().parent))
+	from extract_walls import C64_PALETTE
+
+	im = Image.new("RGB", (COLS * 8, ROWS * 8), C64_PALETTE[bg])
+	px = im.load()
+	for cy in range(ROWS):
+		for cx in range(COLS):
+			i = cy * COLS + cx
+			lut = (bg, scr[i] >> 4, scr[i] & 15, col[i] & 15)
+			base = cell_off(cy, cx)
+			for y in range(8):
+				b = bmp[base + y]
+				for p in range(4):
+					bits = (b >> (6 - p * 2)) & 3
+					c = C64_PALETTE[lut[bits]]
+					xx = cx * 8 + p * 2
+					yy = cy * 8 + y
+					px[xx, yy] = c
+					px[xx + 1, yy] = c
+	path = ROOT / "generated" / "assets" / "menu_logo_band.png"
+	path.parent.mkdir(parents=True, exist_ok=True)
+	im.save(path)
 
 
 def main() -> None:
-	im = Image.open(PNG)
-	if im.size != (LOGO_W, LOGO_H):
-		im = im.resize((LOGO_W, LOGO_H), Image.Resampling.NEAREST)
-	white, red = classify(im)
+	raw = KLA.read_bytes()
+	if len(raw) != KLA_LEN:
+		raise SystemExit(f"{KLA.name}: expected {KLA_LEN} bytes, got {len(raw)}")
+	load = raw[0] | (raw[1] << 8)
+	if load != 0x6000:
+		raise SystemExit(f"{KLA.name}: expected load address $6000, got ${load:04x}")
 
-	badge_h = BADGE_ROWS * 8
-	badge_w = BADGE_COLS * 8
-	pad_y = (badge_h - LOGO_H) // 2
-	pad_x = BADGE_PAD_COLS * 8
+	bmp = raw[2 : 2 + BMP_LEN]
+	scr = raw[2 + BMP_LEN : 2 + BMP_LEN + SCR_LEN]
+	col = raw[2 + BMP_LEN + SCR_LEN : 2 + BMP_LEN + SCR_LEN + COL_LEN]
+	bg = raw[-1]
 
-	white_g = pad_into_badge(white, pad_x, pad_y, badge_w, badge_h)
-	red_g = pad_into_badge(red, pad_x, pad_y, badge_w, badge_h)
-
-	# Sprite Y: cover red's vertical span (fits in 21px)
-	red_rows = [y for y in range(LOGO_H) if any(red[y])]
-	spr_off_y = min(red_rows) if red_rows else 0
-	if red_rows and max(red_rows) - spr_off_y + 1 > SPR_H:
-		spr_off_y = max(0, max(red_rows) - SPR_H + 1)
-	spr_oy = pad_y + spr_off_y
-
-	cells: list[int] = []
-	for cy in range(BADGE_ROWS):
-		for cx in range(BADGE_COLS):
-			cells.extend(pack_hires_cell(white_g, cx, cy))
-
-	sprites: list[int] = []
-	for i in range(SPR_COUNT):
-		ox = pad_x + i * SPR_W
-		sprites.extend(pack_sprite(red_g, ox, spr_oy))
-
-	prev = Image.new("RGB", (badge_w, badge_h), (0, 0, 0))
-	pp = prev.load()
-	for y in range(badge_h):
-		for x in range(badge_w):
-			if red_g[y][x]:
-				pp[x, y] = (136, 0, 0)
-			elif white_g[y][x]:
-				pp[x, y] = (255, 255, 255)
-	PREVIEW.parent.mkdir(parents=True, exist_ok=True)
-	prev.save(PREVIEW)
+	bmp_rows, scr_rows, col_rows = compose(bmp, scr, col)
 
 	lines = [
-		"; Auto-generated by tools/gen_menu_logo.py from h_wolflogo_twocolour.png",
-		f"MENU_LOGO_COLS\t= {BADGE_COLS}",
-		f"MENU_LOGO_ROWS\t= {BADGE_ROWS}",
-		f"MENU_LOGO_SPR_COUNT\t= {SPR_COUNT}",
-		f"MENU_LOGO_PAD_Y\t= {pad_y}\t; px from badge top to logo",
-		f"MENU_LOGO_SPR_OFF_Y\t= {spr_off_y}\t; px from logo top to sprite top",
+		f"; Auto-generated by tools/gen_menu_logo.py from {KLA.name}",
+		"; Rows 0–6: light-blue margin, black strap, badge, Koala logo cells.",
+		f"MENU_LOGO_ROWS\t= {ROWS}",
+		f"MENU_LOGO_BG\t= {bg}",
+		f"MENU_LOGO_BMP_PAGES\t= {len(bmp_rows) // 256}",
+		f"MENU_LOGO_BMP_TAIL\t= {len(bmp_rows) % 256}",
+		f"MENU_LOGO_SCR_TAIL\t= {len(scr_rows) - 256}",
 		"",
-		"menu_logo_data",
+		"menu_logo_bmp",
 	]
-	lines.extend(fmt_bytes(cells))
+	lines.extend(fmt_bytes(bmp_rows))
 	lines.append("")
-	lines.append("menu_logo_spr")
-	lines.extend(fmt_bytes(sprites))
+	lines.append("menu_logo_scr")
+	lines.extend(fmt_bytes(scr_rows))
+	lines.append("")
+	lines.append("menu_logo_col")
+	lines.extend(fmt_bytes(col_rows))
 	lines.append("")
 
 	OUT.parent.mkdir(parents=True, exist_ok=True)
 	OUT.write_text("\n".join(lines), encoding="utf-8")
+	write_preview(bmp_rows, scr_rows, col_rows, bg)
 	print(
-		f"wrote {OUT.relative_to(ROOT)} cols={BADGE_COLS} "
-		f"spr_off_y={spr_off_y} + {PREVIEW.relative_to(ROOT)}"
+		f"wrote {OUT.relative_to(ROOT)} rows={ROWS} "
+		f"bmp={len(bmp_rows)} scr={len(scr_rows)} col={len(col_rows)} bg={bg}"
 	)
 
 

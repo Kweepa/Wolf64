@@ -294,7 +294,10 @@ map_ar_row	= map_arrow_on + 1		; viewport row 0..19
 map_ar_col	= map_ar_row + 1		; viewport col 0..37
 map_row		= map_ar_col + 1
 map_wpn_was	= map_row + 1			; wpn_visible saved across the map
-end_tape_bss	= map_wpn_was + 1
+map_sdir	= map_wpn_was + 1		; bit0 +Y, bit1 −Y, bit2 −X, bit3 +X
+map_osx		= map_sdir + 1			; scroll origin before this step
+map_osy		= map_osx + 1
+end_tape_bss	= map_osy + 1
 !if end_tape_bss > TAPE_BSS_END {
 	!error "Tape BSS overflows cassette buffer; end=$", end_tape_bss
 }

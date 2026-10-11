@@ -137,7 +137,7 @@ mapscreen
 	bcs .ms_exit
 	jsr map_apply_scroll
 	beq .ms_loop
-	jsr map_draw
+	jsr map_scroll
 	jmp .ms_loop
 .ms_exit
 	jsr map_arrow_restore
@@ -252,9 +252,16 @@ map_read_keys
 	clc
 	rts
 
-; Z=1 if scroll did not change.
+; Z=1 if scroll did not change. map_sdir: $01 +Y $02 −Y $04 −X $08 +X.
 map_apply_scroll
-	ldx #0
+	lda #0
+	sta map_sdir
+	lda map_sx
+	sta map_osx
+	lda map_sy
+	sta map_osy
+	lda map_sy
+	sta tmp4
 	lda map_keys
 	and #$01			; W: toward +Y (top of the map)
 	beq .as_s
@@ -262,34 +269,51 @@ map_apply_scroll
 	cmp #MAP_SY_MAX
 	bcs .as_s
 	inc map_sy
-	ldx #1
 .as_s
 	lda map_keys
 	and #$02			; S: toward −Y (bottom of the map)
-	beq .as_a
+	beq .as_sy
 	lda map_sy
-	beq .as_a
+	beq .as_sy
 	dec map_sy
-	ldx #1
-.as_a
+.as_sy
+	lda map_sy
+	cmp tmp4
+	beq .as_x0
+	lda #$01
+	bcs .as_sybit
+	lda #$02
+.as_sybit
+	sta map_sdir
+.as_x0
+	lda map_sx
+	sta tmp4
 	lda map_keys
 	and #$04
 	beq .as_d
 	lda map_sx
 	beq .as_d
 	dec map_sx
-	ldx #1
 .as_d
 	lda map_keys
 	and #$08
-	beq .as_z
+	beq .as_sx
 	lda map_sx
 	cmp #MAP_SX_MAX
-	bcs .as_z
+	bcs .as_sx
 	inc map_sx
-	ldx #1
+.as_sx
+	lda map_sx
+	cmp tmp4
+	beq .as_z
+	lda #$08
+	bcs .as_sxbit
+	lda #$04
+.as_sxbit
+	ora map_sdir
+	sta map_sdir
 .as_z
-	txa
+	lda map_sdir
 	rts
 
 ; ------------------------------------------------------------------
@@ -298,43 +322,249 @@ map_apply_scroll
 map_draw
 	jsr map_arrow_restore
 	jsr set_scr_front
-	lda #0
-	sta map_row
+	ldx #0
 .md_row
-	lda map_row
+	txa
+	pha
+	jsr map_paint_viewrow
+	pla
+	tax
+	inx
+	cpx #20
+	bne .md_row
+	jmp map_draw_player
+
+; Shift the viewport one tile and paint the new edge. map_sx/sy already updated.
+map_scroll
+	jsr set_scr_front
+	jsr map_put_under
+	ldx #0
+.sc1	lda map_sdir
+	and map_shmask,x
+	beq .sc1n
+	lda map_shlo,x
+	sta .sc1g+1
+	lda map_shhi,x
+	sta .sc1g+2
+	txa
+	pha
+.sc1g	jsr $ffff
+	pla
+	tax
+.sc1n	inx
+	cpx #4
+	bne .sc1
+	ldx #0
+.sc2	lda map_sdir
+	and map_shmask,x
+	beq .sc2n
+	lda map_edarg,x
+	stx tmp4
+	cpx #2
+	bcs .sc2c
+	jsr map_paint_viewrow
+	jmp .sc2r
+.sc2c	jsr map_paint_col
+.sc2r	ldx tmp4
+.sc2n	inx
+	cpx #4
+	bne .sc2
+	jmp map_draw_player
+
+map_shmask
+	!byte $01, $02, $04, $08
+map_edarg
+	!byte 0, 19, 1, 38
+map_shlo
+	!byte <map_shift_down, <map_shift_up, <map_shift_right, <map_shift_left
+map_shhi
+	!byte >map_shift_down, >map_shift_up, >map_shift_right, >map_shift_left
+
+; Arrow cell is still at the pre-scroll screen spot. Put its tile back.
+map_put_under
+	lda map_arrow_on
+	beq .pu_rts
+	lda map_osx
+	clc
+	adc map_ar_col
+	sta mapx
+	lda #19
+	sec
+	sbc map_ar_row
+	clc
+	adc map_osy
+	sta mapy
+	jsr map_tile_color
+	jsr map_pack_color
+	pha
+	lda map_ar_row
 	clc
 	adc #5
-	jsr map_row_ptr			; tmp0 → screen row, col 0
-	lda #19				; +Y is up the screen (world −Y is down)
+	jsr map_row_ptr
+	ldy map_ar_col
+	iny
+	pla
+	sta (tmp0),y
+	jmp map_arrow_restore
+.pu_rts
+	rts
+
+; A = dest view row, X = src view row. Columns 1..38. Preserves tmp6.
+map_copy_viewrow
+	sta tmp5
+	txa
+	clc
+	adc #5
+	jsr map_row_ptr
+	lda tmp0
+	sta aux_l
+	lda tmp1
+	sta aux_h
+	lda tmp5
+	clc
+	adc #5
+	jsr map_row_ptr
+	ldy #1
+-	lda (aux_l),y
+	sta (tmp0),y
+	iny
+	cpy #39
+	bne -
+	rts
+
+; +Y: content moves down the screen. Copy from the bottom.
+map_shift_down
+	ldx #18
+-	stx tmp6
+	inx
+	txa
+	ldx tmp6
+	jsr map_copy_viewrow
+	ldx tmp6
+	dex
+	bpl -
+	rts
+
+; −Y: content moves up. src = dest+1, top first.
+map_shift_up
+	ldx #0
+-	stx tmp6
+	inx
+	stx tmp5
+	lda tmp6
+	ldx tmp5
+	jsr map_copy_viewrow
+	ldx tmp6
+	inx
+	cpx #19
+	bne -
+	rts
+
+map_shift_right
+	lda #0
+	sta tmp4
+	beq map_shift_h
+map_shift_left
+	lda #1
+	sta tmp4
+map_shift_h
+	lda #0
+	sta map_row
+.sh	lda map_row
+	clc
+	adc #5
+	jsr map_row_ptr
+	lda tmp4
+	bne .sh_left
+	ldy #37
+-	lda (tmp0),y
+	iny
+	sta (tmp0),y
+	dey
+	dey
+	bne -
+	beq .sh_nx
+.sh_left
+	ldy #2
+-	lda (tmp0),y
+	dey
+	sta (tmp0),y
+	iny
+	iny
+	cpy #39
+	bne -
+.sh_nx	inc map_row
+	lda map_row
+	cmp #20
+	bne .sh
+	rts
+
+; A = view row 0..19 (0 = top = map_sy+19).
+map_paint_viewrow
+	sta map_row
+	clc
+	adc #5
+	jsr map_row_ptr
+	lda #19
 	sec
 	sbc map_row
 	clc
 	adc map_sy
 	sta mapy
 	ldy #1
-.md_col
-	tya
+-	tya
 	clc
 	adc map_sx
 	sec
 	sbc #1
 	sta mapx
 	jsr map_tile_color
+	jsr map_pack_color
+	sta (tmp0),y
+	iny
+	cpy #39
+	bne -
+	rts
+
+; A = screen column 1 or 38.
+map_paint_col
+	sta tmp6
+	sec
+	sbc #1
+	clc
+	adc map_sx
+	sta mapx
+	lda #0
+	sta map_row
+-	lda map_row
+	clc
+	adc #5
+	jsr map_row_ptr
+	lda #19
+	sec
+	sbc map_row
+	clc
+	adc map_sy
+	sta mapy
+	ldy tmp6
+	jsr map_tile_color
+	jsr map_pack_color
+	sta (tmp0),y
+	inc map_row
+	lda map_row
+	cmp #20
+	bne -
+	rts
+
+; Colour nibble in A → both nibbles in A. Clobbers tmp2.
+map_pack_color
 	sta tmp2
 	asl
 	asl
 	asl
 	asl
 	ora tmp2
-	sta (tmp0),y
-	iny
-	cpy #39
-	bne .md_col
-	inc map_row
-	lda map_row
-	cmp #20
-	bne .md_row
-	jmp map_draw_player
+	rts
 
 ; A = screen row → tmp0/tmp1 = scr_front + row*40. Clobbers tmp2/tmp3.
 map_row_ptr
@@ -475,7 +705,7 @@ map_draw_player
 	jsr map_row_ptr
 	ldy map_ar_col
 	iny
-	lda #$11			; white / white
+	lda #$10 | MAP_COL_FLOOR	; white arrow, floor-grey ground
 	sta (tmp0),y
 	jsr map_player_bmp
 	lda playera
@@ -576,13 +806,13 @@ map_player_bmp
 	rts
 
 ; 4×8 MCM arrows from textures/maparrows.png (right, up, left, down).
-; %01 = white, %00 = background. Order E, N, W, S.
+; %01 = white (high nibble), %10 = floor grey (low nibble). Order E, N, W, S.
 ; +Y is up the screen, so N (−Y) uses the down arrow and S the up arrow.
 map_arrow_glyph
-	!byte $10, $10, $44, $45, $45, $44, $10, $10	; E (sheet right)
-	!byte $14, $14, $41, $41, $14, $14, $04, $04	; N (sheet down)
-	!byte $04, $04, $11, $51, $51, $11, $04, $04	; W (sheet left)
-	!byte $10, $10, $14, $14, $41, $41, $14, $14	; S (sheet up)
+	!byte $9a, $9a, $66, $65, $65, $66, $9a, $9a	; E (sheet right)
+	!byte $96, $96, $69, $69, $96, $96, $a6, $a6	; N (sheet down)
+	!byte $a6, $a6, $99, $59, $59, $99, $a6, $a6	; W (sheet left)
+	!byte $9a, $9a, $96, $96, $69, $69, $96, $96	; S (sheet up)
 
 ; Texture slot 0..15 → automap colour. Tile id is the slot for walls 1..14.
 map_wall_col

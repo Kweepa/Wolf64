@@ -2,7 +2,7 @@
 ; and all three SID voices belong to it. VBI tunes are ~50 Hz (latch $4FFF
 ; after init); CIA-timed tunes keep the rate their init programmed.
 ; Otherwise Timer A stays ~50 Hz for menu blips (voice 2).
-; Raster IRQ muxes the logo / cursor / hint sprites.
+; Raster IRQ: Koala MCM on the logo rows, then cursor / hint sprites.
 ; Banks KERNAL out ($01=$35) so $fffe is live; boot restores $36 after menu.
 
 !zone menu_sfx
@@ -156,14 +156,20 @@ menu_sfx_irq
 	lda $d019
 	sta $d019
 	and #1
-	beq .msi_cia
+	bne .msi_ras
+	jmp .msi_cia
+.msi_ras
 	lda menu_raster_en
-	beq .msi_cia
+	bne .msi_phase
+	jmp .msi_cia
+.msi_phase
 	lda menu_mux_phase
 	beq .msi_logo
 	cmp #1
 	beq .msi_cur
-	; phase 2 — hint keys, then wrap
+	cmp #2
+	beq .msi_mcmoff
+	; phase 3 — hint keys, then wrap to the logo split
 	jsr mux_hint_spr
 	lda #0
 	sta menu_mux_phase
@@ -174,7 +180,7 @@ menu_sfx_irq
 	sta $d012
 	jmp .msi_cia
 .msi_logo
-	jsr mux_logo_spr
+	jsr mux_logo_mcm_on
 	lda #1
 	sta menu_mux_phase
 	lda $d011
@@ -187,7 +193,23 @@ menu_sfx_irq
 	lda cursor_spr_en
 	beq .msi_skip_cur
 	jsr mux_cursor_spr
+	jmp .msi_to_off
+.msi_skip_cur
+	jsr mux_hint_spr
+.msi_to_off
 	lda #2
+	sta menu_mux_phase
+	lda $d011
+	and #%01111111
+	sta $d011
+	lda #MUX_MCM_OFF
+	sta $d012
+	jmp .msi_cia
+.msi_mcmoff
+	jsr mux_logo_mcm_off			; before any other work this phase
+	lda cursor_spr_en
+	beq .msi_mcm_wrap
+	lda #3
 	sta menu_mux_phase
 	lda $d011
 	and #%01111111
@@ -197,8 +219,7 @@ menu_sfx_irq
 	adc #21
 	sta $d012
 	jmp .msi_cia
-.msi_skip_cur
-	jsr mux_hint_spr
+.msi_mcm_wrap
 	lda #0
 	sta menu_mux_phase
 	lda $d011

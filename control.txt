@@ -2,6 +2,7 @@
 ^IJKL....^ Forward/backward/turn
 Space^...^ Fire
 ^1234....^ Change weapon
+^F1......^ Toggle map
 ^F5/F7...^ Quick save/quick load
 
 Walk into doors to open them.

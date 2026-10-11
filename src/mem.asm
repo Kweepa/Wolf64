@@ -75,7 +75,8 @@ SQTAB4		= SQTAB1 + $600
 ITM_SCRATCH	= $D800			; vis/item temps; $01=$34 only
 MAPCODE		= $D9A0			; automap body; copied from MAPCODE_STASH
 MAPCODE_STASH	= $C800			; boot loads mapc here (above the 2K SQT stage)
-MAPCODE_PAGES	= 5			; copy length; must cover end_mapcode-MAPCODE
+MAPCODE_PAGES	= 6			; copy length. Page 6 can brush TEX_HI_R15;
+					; init_tex_hi runs after the copy and rebuilds it.
 TEX_LO		= $E000
 TEX_HI		= $F000			; RAM-built rows 0..14; $FF00 is IRQ vector page
 TEX_HI_R15	= $DF00			; row 15 shadow ($01=$34); avoids $FFFA–$FFFF

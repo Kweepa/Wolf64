@@ -1,5 +1,6 @@
 ; Wolf64 MENU overlay — load @ LOCODE_BASE ($0900), JSR from boot, then overwritten by LOCODE.
 ; Entry: +0 run_menu; +3 pad (boot no longer calls). Hires bitmap UI + full menufont.
+; Rows 0–6 are the Koala strap and badge (raster split); the body below stays hires.
 ; difficulty → $08FF; effects_vol/game_complete → $08FD/$08FE (survive LOCODE overwrite).
 ; Menu music: MUS1..MUSN at $9000 (random at entry, Jukebox switches).
 ; All 3 SID voices. Blips only if the load fails.
@@ -15,32 +16,27 @@ BOX_PAD		= 2
 BOX_VGAP	= 1			; empty rows inside box top/bottom
 CURSOR_GAP	= 1			; blank cols between pistol and text
 CURSOR_CELLS	= 3			; 24px pistol cursor (was 1 for '@' glyph)
-BAR_TOP		= 2			; leave 2 rows of main bg above bar
-BAR_ROWS	= 3
-BADGE_TOP	= BAR_TOP - 1		; 5-row logo plaque overlaps bar
-BADGE_LEFT	= 8			; (40 - 24) / 2 — 2 cols pad each side of logo
-BRAND_KEEP_ROWS	= 6			; rows 0..5 fixed (bar + badge); skip on repaint
+BRAND_KEEP_ROWS	= 7			; strap + badge rows 0..6; skip on repaint
 HINT_ROW	= 23
 HINT_COL	= 0			; black help text
 HINT_GAP	= 8			; px between key sprite and label
 HINT_SPR_Y	= 228			; 21px sprite centered on row 23
-MUX_LOGO_RASTER	= 30
-MUX_HINT_RASTER	= 90
-LOGO_SPR_RAM	= BJH_SPRITES		; 7×64 in VIC bank $8000 (menu-only)
-LOGO_SPR_PTR0	= (LOGO_SPR_RAM - SCREEN) / 64
-HINT_SPR_RAM	= LOGO_SPR_RAM + MENU_LOGO_SPR_COUNT * 64
+MUX_LOGO_RASTER	= 30			; MCM on, before row 0 badline
+MUX_HINT_RASTER	= 90			; cursor sprites
+; IRQ prologue lands ~1 line late. 105 so MCM off is written on line 106,
+; before row 7's badline at 107 (YSCROLL=3).
+MUX_MCM_OFF	= 105
+HINT_SPR_RAM	= BJH_SPRITES		; cursor/hint only; logo is bitmap
 HINT_SPR_PTR0	= (HINT_SPR_RAM - SCREEN) / 64
 CURSOR_SPR_RAM	= HINT_SPR_RAM + HINT_SPR_COUNT * 64
 CURSOR_SPR_PTR0	= (CURSOR_SPR_RAM - SCREEN) / 64
 
 TEXT_COL	= 12			; grey options
-HILITE_COL	= 1			; white selected / logo ink
+HILITE_COL	= 1			; white selected
 TITLE_COL	= 7			; yellow titles
 MENU_BORDER	= 6			; blue
 COL_MAIN	= 14			; light blue
-COL_BAR		= 0			; black
 COL_BOX		= 6			; dark blue
-COL_LOGO_RED	= 2			; sprite fill under logo
 STORY_BG	= 12			; grey screen around story panel
 STORY_BOX	= 1			; white story panel
 STORY_TEXT	= 0			; black story text
@@ -698,7 +694,7 @@ draw_track_credit
 .dtc_go
 	lda #COL_MAIN
 	sta cell_bg
-	lda #TEXT_COL
+	lda #TITLE_COL
 	sta ui_text_col
 	lda box_top
 	clc
@@ -909,7 +905,7 @@ calc_box
 	adc #BOX_VGAP
 	adc #BOX_VGAP
 	sta tmp5				; box_height
-	lda #BADGE_TOP + MENU_LOGO_ROWS + 1
+	lda #BRAND_KEEP_ROWS + 1
 	sta box_top
 	lda #HINT_ROW
 	sec
@@ -1011,7 +1007,6 @@ show_story_screen
 	sty txt_ptr_h
 	lda #STORY_BG
 	sta clear_bg
-	sta $d021
 	lda #STORY_BOX
 	sta cell_bg
 	lda #STORY_TEXT
@@ -1119,7 +1114,7 @@ calc_text_box
 	adc #BOX_VGAP
 	adc #BOX_VGAP
 	sta tmp5
-	lda #BADGE_TOP + MENU_LOGO_ROWS + 1
+	lda #BRAND_KEEP_ROWS + 1
 	sta box_top
 	lda #HINT_ROW
 	sec
@@ -1179,8 +1174,8 @@ init_menu_vic
 	lda #VIC_BANK_DD00			; VIC bank $8000; absolute — RMW poisons Krill IEC
 	sta $dd00
 	lda $d011
-	and #%10000111			; clear ECM/BMM/DEN/RSEL
-	ora #%00101011			; hires bitmap + 25 rows, DEN off until first draw
+	and #%10000000			; keep raster MSB; force YSCROLL below
+	ora #%00101011			; YSCROLL=3, hires bitmap, 25 rows; DEN off
 	sta $d011
 	lda $d016
 	and #%11100111			; hires (not MCM), 40 cols
@@ -1191,12 +1186,15 @@ init_menu_vic
 	lda #0
 	sta $d015
 	sta $d021
+	sta $d01b				; sprites in front of bitmap
+	sta $d017
+	sta $d01d
 	sta $d01a				; no leftover VIC IRQs
 	lda #MENU_BORDER
 	sta $d020
 	rts
 
-; Clear rows BRAND_KEEP_ROWS..24 only — bar/badge stay put.
+; Clear rows BRAND_KEEP_ROWS..24 only — Koala logo stays put.
 clear_screen
 	lda #<BITMAP + BRAND_KEEP_ROWS * 320
 	sta ptr_l
@@ -1231,7 +1229,7 @@ clear_screen
 	lda #0
 	beq .cs_p
 .cs_col
-	; colour matrix from row 6: 760 bytes (do not touch sprite ptrs @ SCREEN+$3F8)
+	; colour matrix below the brand (do not touch sprite ptrs @ SCREEN+$3F8)
 	ldx #0
 	lda clear_bg
 .cs_c
@@ -1243,7 +1241,7 @@ clear_screen
 .cs_c2
 	sta SCREEN + BRAND_KEEP_ROWS * 40 + $200,x
 	inx
-	cpx #248				; 240+512+248 = 1000
+	cpx #(1000 - BRAND_KEEP_ROWS * 40 - $200)
 	bne .cs_c2
 	rts
 
@@ -1275,126 +1273,56 @@ clear_screen_all
 	bne .csa_c
 	rts
 
-fill_top_bar
-	ldx #BAR_TOP
-.ftb_r
-	stx tmp4
-	lda #0
-	ldx tmp4
-	jsr bmp_cell_addr
-	ldy #39
-.ftb_c
-	jsr bmp_blank_cell_y
-	lda #COL_BAR
-	sta (aux_l),y
-	dey
-	bpl .ftb_c
-	ldx tmp4
-	inx
-	cpx #BAR_TOP + BAR_ROWS
-	bcc .ftb_r
-	rts
-
-; 3-row bar + 5-row badge + white logo + red sprite fill
+; Koala logo inside the strap and badge. $d021 = Koala background.
 draw_brand
-	jsr fill_top_bar
-	jsr fill_logo_badge
-	jsr blit_menu_logo
-	jmp setup_logo_sprites
-
-fill_logo_badge
-	ldx #0
-.flb_r
-	stx tmp4
-	txa
-	clc
-	adc #BADGE_TOP
-	tax
-	lda #BADGE_LEFT
-	jsr bmp_cell_addr
+	lda #MENU_LOGO_BG
+	sta $d021
+	lda #<menu_logo_bmp
+	sta ptr_l
+	lda #>menu_logo_bmp
+	sta ptr_h
+	lda #<BITMAP
+	sta gptr_l
+	lda #>BITMAP
+	sta gptr_h
+	ldx #MENU_LOGO_BMP_PAGES
 	ldy #0
-.flb_c
-	jsr bmp_blank_cell_y
-	lda #COL_BAR
-	sta (aux_l),y
+.db_pg
+	lda (ptr_l),y
+	sta (gptr_l),y
 	iny
-	cpy #MENU_LOGO_COLS
-	bcc .flb_c
-	ldx tmp4
-	inx
-	cpx #MENU_LOGO_ROWS
-	bcc .flb_r
-	rts
-
-blit_menu_logo
-	lda #<menu_logo_data
-	sta .bld + 1
-	lda #>menu_logo_data
-	sta .bld + 2
-	ldx #0
-.blr
-	stx tmp4
-	txa
-	clc
-	adc #BADGE_TOP
-	tax
-	lda #BADGE_LEFT
-	jsr bmp_cell_addr
-	ldx #0
-.blc
-	stx tmp5
-	txa
-	asl
-	asl
-	asl
-	tay
-	ldx #0
-.blb
-.bld	lda $ffff,x
-	sta (ptr_l),y
+	bne .db_pg
+	inc ptr_h
+	inc gptr_h
+	dex
+	bne .db_pg
+	ldx #MENU_LOGO_BMP_TAIL
+.db_tl
+	lda (ptr_l),y
+	sta (gptr_l),y
 	iny
+	dex
+	bne .db_tl
+	ldx #0
+.db_sc
+	lda menu_logo_scr,x
+	sta SCREEN,x
+	lda menu_logo_col,x
+	sta KOALA_COL_RAM,x
 	inx
-	cpx #8
-	bne .blb
-	lda .bld + 1
-	clc
-	adc #8
-	sta .bld + 1
-	bcc .bln
-	inc .bld + 2
-.bln
-	lda #HILITE_COL
-	asl
-	asl
-	asl
-	asl
-	ora #COL_BAR
-	ldy tmp5
-	sta (aux_l),y
-	ldx tmp5
+	bne .db_sc
+	ldx #0
+.db_sc2
+	lda menu_logo_scr + $100,x
+	sta SCREEN + $100,x
+	lda menu_logo_col + $100,x
+	sta KOALA_COL_RAM + $100,x
 	inx
-	cpx #MENU_LOGO_COLS
-	bcc .blc
-	ldx tmp4
-	inx
-	cpx #MENU_LOGO_ROWS
-	bcc .blr
+	cpx #MENU_LOGO_SCR_TAIL
+	bne .db_sc2
 	rts
 
 copy_menu_sprites
-	ldx #0
-.cms0
-	lda menu_logo_spr,x
-	sta LOGO_SPR_RAM,x
-	inx
-	bne .cms0
-	ldx #0
-.cms1
-	lda menu_logo_spr + $100,x
-	sta LOGO_SPR_RAM + $100,x
-	inx
-	cpx #$c0
-	bne .cms1
 	ldx #0
 .cms2
 	lda menu_hint_spr,x
@@ -1416,57 +1344,19 @@ copy_menu_sprites
 	bne .cms4
 	rts
 
-setup_logo_sprites
-	jsr copy_menu_sprites
-	jsr mux_logo_spr
-	lda #0
-	sta $d01b				; sprites in front of bitmap
-	sta $d017
-	sta $d01d
+; Raster split — Koala band. menu_sfx calls these.
+mux_logo_mcm_on
+	lda $d016
+	ora #%00010000				; MCM
+	sta $d016
+	lda #MENU_LOGO_BG
+	sta $d021
 	rts
 
-; Raster IRQ A — red logo fill (sprites 0–6).
-mux_logo_spr
-	ldx #0
-	lda #LOGO_SPR_PTR0
-.mlp
-	sta SCREEN + $3f8,x
-	clc
-	adc #1
-	inx
-	cpx #MENU_LOGO_SPR_COUNT
-	bne .mlp
-	lda #COL_LOGO_RED
-	ldx #0
-.mlcol
-	sta $d027,x
-	inx
-	cpx #MENU_LOGO_SPR_COUNT
-	bne .mlcol
-	ldx #0
-	ldy #0
-.mlx
-	lda logo_spr_x,x
-	sta $d000,y
-	iny
-	iny
-	inx
-	cpx #MENU_LOGO_SPR_COUNT
-	bne .mlx
-	lda #0
-	sta $d010
-	lda #50 + BADGE_TOP * 8 + MENU_LOGO_PAD_Y + MENU_LOGO_SPR_OFF_Y
-	ldx #0
-	ldy #1
-.mly
-	sta $d000,y
-	iny
-	iny
-	inx
-	cpx #MENU_LOGO_SPR_COUNT
-	bne .mly
-	lda #%01111111
-	sta $d015
+mux_logo_mcm_off
+	lda $d016
+	and #%11101111				; hires
+	sta $d016
 	rts
 
 ; Raster IRQ mid — pistol cursor (4 colour layers, white in front).
@@ -1555,9 +1445,6 @@ mux_hint_spr
 	lda #%00111111
 	sta $d015
 	rts
-
-logo_spr_x
-	!byte 104, 128, 152, 176, 200, 224, 248
 
 fill_option_box
 	lda pr_setcol
@@ -2497,17 +2384,16 @@ menu_blank
 	sta cursor_spr_en
 	rts
 
-; Reveal after paint. $d021 from clear_bg (story pages use STORY_BG).
+; Reveal after paint. $d021 stays the Koala background (hires body
+; ignores it). Sprites stay off until the raster mux arms cursor or hints.
 menu_unblank
 	lda #MENU_BORDER
 	sta $d020
-	lda clear_bg
+	lda #MENU_LOGO_BG
 	sta $d021
 	lda $d011
 	ora #%00010000				; DEN on
 	sta $d011
-	lda #%01111111
-	sta $d015
 	rts
 
 wait_raster

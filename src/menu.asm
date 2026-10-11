@@ -1,7 +1,8 @@
 ; Wolf64 MENU overlay — load @ LOCODE_BASE ($0900), JSR from boot, then overwritten by LOCODE.
 ; Entry: +0 run_menu; +3 pad (boot no longer calls). Hires bitmap UI + full menufont.
 ; difficulty → $08FF; effects_vol/game_complete → $08FD/$08FE (survive LOCODE overwrite).
-; Menu SFX: CIA1 Timer A + playsound (MOVEGUN/SHOOT/ESC from AUDIOT).
+; Menu music: MUS1..MUSN at $9000 (random at entry, Jukebox switches).
+; All 3 SID voices. Blips only if the load fails.
 !cpu 6502
 !to "../generated/menu.prg", cbm
 
@@ -55,6 +56,7 @@ NM_CTRL		= 256 - 4
 NM_HELP		= 256 - 5
 NM_CREDITS	= 256 - 7
 NM_QUIT		= 256 - 6
+NM_JUKE		= 256 - 8
 
 UI_UP		= 1
 UI_DOWN		= 2
@@ -98,6 +100,7 @@ joy_en		= $39			; Joy Port 2 on/off (mutex with mouse_en)
 	nop
 
 run_menu
+	jsr music_pick_load			; before SEI: KERNAL/Krill load, splash still up
 	sei
 	jsr init_font_tabs
 	jsr init_menu_vic
@@ -113,6 +116,7 @@ run_menu
 	lda #15
 	sta effects_vol
 	jsr copy_menu_sprites
+	jsr sync_juke_title
 	jsr menu_sfx_init
 	jsr detect_mouse
 	jsr clear_screen_all
@@ -275,7 +279,10 @@ vol_fx_inc
 	lda effects_vol
 	and #15
 	sta effects_vol
+	ldx music_en
+	bne .vfi_mus			; player stub applies it on the next tick
 	sta $d418
+.vfi_mus
 	jsr sfx_movegun1
 	jmp sync_redraw
 vol_fx_dec
@@ -283,7 +290,10 @@ vol_fx_dec
 	lda effects_vol
 	and #15
 	sta effects_vol
+	ldx music_en
+	bne .vfd_mus			; player stub applies it on the next tick
 	sta $d418
+.vfd_mus
 	jsr sfx_movegun1
 sync_redraw
 	jsr sync_vol_strings
@@ -493,6 +503,11 @@ menu_select
 	sta menu_item
 	lda tmp0
 	sta menu_id
+	cmp #4					; Jukebox: cursor starts on the playing track
+	bne .ms_nj
+	lda music_track
+	sta menu_item
+.ms_nj
 	jsr draw_menu
 	jmp .ms_st
 .ms_po
@@ -518,6 +533,14 @@ menu_select
 	beq .ms_crd
 	cmp #NM_QUIT
 	beq quit_to_basic
+	cmp #NM_JUKE
+	beq .ms_juke
+	jmp .ms_st
+.ms_juke
+	lda menu_item
+	cmp music_track
+	beq .ms_st				; already playing
+	jsr jukebox_select			; ends in draw_menu; carry stays clear
 	jmp .ms_st
 .ms_ord
 	jsr sfx_shoot
@@ -592,15 +615,18 @@ quit_to_basic
 	cli
 	jmp ($a002)				; BASIC warm start
 
-; Root→eps/options/ctrl/help/credits/quit; E1→skill; E2-6→order; skill→start; options stay/back
+; Root→eps/options/ctrl/help/credits/jukebox/quit; E1→skill; E2-6→order;
+; skill→start; options stay/back; jukebox tracks→NM_JUKE (item = track)
+!source "../generated/src/menu_tracks.asm"
 next_menu
-	!byte 1, 3, NM_CTRL, NM_HELP, NM_CREDITS, NM_QUIT, 0, 0
+	!byte 1, 3, NM_CTRL, NM_HELP, NM_CREDITS, 4, NM_QUIT, 0
 	!byte 2, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_BACK, 0
 	!byte NM_START, NM_START, NM_START, NM_START, NM_BACK, 0, 0, 0
 	!byte 3, 3, 3, NM_BACK, 0, 0, 0, 0
+	+juke_next_row
 
 menu_sizes
-	!byte 6, 7, 5, 4
+	!byte 7, 7, 5, 4, MUSIC_TRACKS + 1
 
 ; --- drawing ---------------------------------------------------------------
 
@@ -630,6 +656,7 @@ draw_menu
 	bcc .dm_l
 
 	jsr draw_hint
+	jsr draw_track_credit
 	lda #1
 	sta cursor_spr_en
 	jmp menu_unblank
@@ -650,6 +677,38 @@ draw_section_title
 	lda section_hi,y
 	tay
 	pla
+	jmp print_centered
+
+; Jukebox only: author one blank row under the option box.
+draw_track_credit
+	lda menu_id
+	cmp #4
+	beq .dtc
+	rts
+.dtc
+	ldx music_track
+	lda juke_auth_lo,x
+	sta ui_str_l
+	lda juke_auth_hi,x
+	sta ui_str_h
+	ldy #0
+	lda (ui_str_l),y
+	bne .dtc_go
+	rts
+.dtc_go
+	lda #COL_MAIN
+	sta cell_bg
+	lda #TEXT_COL
+	sta ui_text_col
+	lda box_top
+	clc
+	adc menu_size
+	adc #BOX_VGAP
+	adc #BOX_VGAP
+	adc #1
+	tax
+	lda ui_str_l
+	ldy ui_str_h
 	jmp print_centered
 
 ; Key sprites + "move / adjust / select" on HINT_ROW.
@@ -2666,6 +2725,10 @@ ui_read_keys
 
 ; --- state / strings --------------------------------------------------------
 menu_id		!byte 0
+music_en	!byte 0
+music_ok	!byte 0				; 1 = MUSn resident at $9000
+music_track	!byte 0				; 0 .. MUSIC_TRACKS-1
+music_due	!byte 0				; CIA tick waiting for the long mux gap
 menu_item	!byte 0
 menu_prev	!byte 0
 menu_size	!byte 0
@@ -2736,6 +2799,7 @@ str_sound	!scr "Options",0
 str_control	!scr "Controls",0
 str_read_this	!scr "Read This!",0
 str_credits	!scr "Credits",0
+str_juke	!scr "Jukebox",0
 str_quit	!scr "Quit",0
 str_back	!scr "Back",0
 str_e1		!scr "Escape from Wolfenstein",0
@@ -2758,36 +2822,39 @@ str_sec_skill	!scr "How tough are you?",0
 str_sec_sound	!scr "Options",0
 
 section_lo
-	!byte <str_sec_main, <str_sec_new, <str_sec_skill, <str_sec_sound
+	!byte <str_sec_main, <str_sec_new, <str_sec_skill, <str_sec_sound, <str_now1
 section_hi
-	!byte >str_sec_main, >str_sec_new, >str_sec_skill, >str_sec_sound
+	!byte >str_sec_main, >str_sec_new, >str_sec_skill, >str_sec_sound, >str_now1
 
 !source "../generated/src/menu_text.asm"
 
 menu_str_lo
 	!byte <str_new_game, <str_sound, <str_control, <str_read_this
-	!byte <str_credits, <str_quit, 0, 0
+	!byte <str_credits, <str_juke, <str_quit, 0
 	!byte <str_e1, <str_e2, <str_e3, <str_e4
 	!byte <str_e5, <str_e6, <str_back, 0
 	!byte <str_itytd, <str_dhm, <str_hmp, <str_uv
 	!byte <str_back, 0, 0, 0
 	!byte <str_fx_vol, <str_mouse, <str_joy, <str_back
 	!byte 0, 0, 0, 0
+	+juke_menu_lo
 menu_str_hi
 	!byte >str_new_game, >str_sound, >str_control, >str_read_this
-	!byte >str_credits, >str_quit, 0, 0
+	!byte >str_credits, >str_juke, >str_quit, 0
 	!byte >str_e1, >str_e2, >str_e3, >str_e4
 	!byte >str_e5, >str_e6, >str_back, 0
 	!byte >str_itytd, >str_dhm, >str_hmp, >str_uv
 	!byte >str_back, 0, 0, 0
 	!byte >str_fx_vol, >str_mouse, >str_joy, >str_back
 	!byte 0, 0, 0, 0
+	+juke_menu_hi
 
 !source "../generated/src/menu_logo.asm"
 !source "../generated/src/menu_hint_spr.asm"
 !source "../generated/src/menu_cursor_spr.asm"
 !source "../generated/assets/menufont.asm"
 !source "playsound.asm"
+!source "menu_music.asm"
 !source "menu_sfx.asm"
 !source "../generated/src/menu_pcsounds.asm"
 !source "../generated/src/pcsfreq.asm"

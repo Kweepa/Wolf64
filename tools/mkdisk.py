@@ -33,7 +33,7 @@ SEGMENTS = [
 	("sfx", "SFX_BASE", "end_sfx"),
 	("bjh", "BJH_SPRITES", "end_bjh"),
 	("wpn", "WPN_MASTER", "end_wpn"),
-	("itm", "ITEM_SPRITES", "end_itm"),
+		("itm", "ITEM_SPRITES", "end_mapio"),
 	("egfx", "ENEMY_GFX_BASE", "end_egfx"),
 	("bmp", "BITMAP", "end_bmp"),
 	("texlo", "TEX_LO", "end_tex_lo"),
@@ -96,6 +96,28 @@ def slice_image(body: bytes, load_addr: int, start: int, end: int, prg_load: Opt
 		)
 	hdr = start if prg_load is None else prg_load
 	return struct.pack("<H", hdr) + body[off0:off1]
+
+
+def menu_music_files() -> list[tuple[str, Path]]:
+	"""mus1..musN from tools/genmusic.py. Contiguous from 1, at most 4.
+
+	Names stay lowercase: c1541 turns them into PETSCII MUS1.., which is
+	what menu_music.asm loads. An already-uppercase name gets the high bit set.
+	"""
+	found: list[tuple[str, Path]] = []
+	root = Path("generated")
+	for n in range(1, 5):
+		path = root / f"mus{n}.prg"
+		if not path.is_file():
+			break
+		found.append((f"mus{n}", path))
+	if not found:
+		print(
+			"missing menu music (generated/mus1.prg). Run tools/genmusic.py",
+			file=sys.stderr,
+		)
+		sys.exit(1)
+	return found
 
 
 def stage_map(bin_path: Path, out_path: Path) -> None:
@@ -174,6 +196,9 @@ def main() -> None:
 		"end_wpn",
 		"ITEM_SPRITES",
 		"end_itm",
+		"end_mapio",
+		"MAPCODE",
+		"end_mapcode",
 		"ENEMY_GFX_BASE",
 		"end_egfx",
 		"BITMAP",
@@ -212,6 +237,17 @@ def main() -> None:
 			out.write_bytes(slice_image(body, load_addr, start, end))
 			staged.append((dos_name, out))
 			print(f"  {dos_name}: ${start:04X}-${end:04X} header ${start:04X} ({end - start} bytes)")
+
+		# Automap body is linked under I/O ($D9A0). Load it above the SQT
+		# stage ($C800); locode copies it before LoadLevel fills $C000.
+		map_start = syms["MAPCODE"]
+		map_end = syms["end_mapcode"]
+		map_out = tmp_dir / "mapc"
+		map_out.write_bytes(slice_image(body, load_addr, map_start, map_end, prg_load=0xC800))
+		staged.append(("mapc", map_out))
+		print(
+			f"  mapc: ${map_start:04X}-${map_end:04X} header $C800 ({map_end - map_start} bytes)"
+		)
 
 		# Prebuilt Judd tables (not part of fat image)
 		sq_raw = sqtab_path.read_bytes()
@@ -294,13 +330,16 @@ def main() -> None:
 				]
 			)
 		cmd.extend(["-write", str(menu_path), "menu,p"])
+		for dos_name, path in menu_music_files():
+			cmd.extend(["-write", str(path), f"{dos_name},p"])
+			print(f"  {dos_name}: {path.name}")
 		for dos_name, path in staged:
 			cmd.extend(["-write", str(path), f"{dos_name},p"])
 		subprocess.check_call(cmd)
 
 	kind = "krill" if args.krill else "kernal"
 	print(
-		f"Wrote {d64} via {c1541} ({kind}, {len(staged)} files + boot + splashc + splash + menu)"
+		f"Wrote {d64} via {c1541} ({kind}, {len(staged)} files + boot + splashc + splash + menu + music)"
 	)
 
 

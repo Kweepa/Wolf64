@@ -29,6 +29,8 @@ input_irq_init
 	sta in_wpn_chaingun
 	sta in_qsave
 	sta in_qload
+	sta map_open
+	sta map_f1
 	sta turn_acc_l
 	sta turn_acc_h
 	sta mux_phase
@@ -115,7 +117,7 @@ input_irq
 	lda $d419
 	sta potx_raw
 	jsr update_sfx
-
+	jsr map_irq_gate			; map open → irq_done (no move latches)
 	lda joy_en
 	bne .irq_joy
 	lda mouse_en
@@ -389,6 +391,7 @@ input_irq
 	lda #1
 	sta in_qload
 .irq_nof7
+irq_done
 	lda #$7f
 	ldx joy_en
 	beq .irq_park

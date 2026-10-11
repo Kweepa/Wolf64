@@ -183,3 +183,5 @@ ps_save_y		= $c5
 ; Quick save/load IRQ OR-latches (F5/F7). Above $cf; leave $90–$A4 and Krill $60–$64 alone.
 in_qsave		= $d0
 in_qload		= $d1
+map_open		= $d2			; 1 = automap overlay; IRQ skips movement
+map_f1			= $d3			; previous F1 level (1 = down)

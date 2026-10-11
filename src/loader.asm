@@ -215,7 +215,7 @@ restart_level
 
 ; ---------------------------------------------------------------------------
 ; Quick save (F5) / quick load (F7)
-; Two KERNAL files: QS=GAME_STATE (863), QM=MAP (4K). DEN=0 for I/O.
+; Two KERNAL files: QS=GAME_STATE (991), QM=MAP (4K). DEN=0 for I/O.
 ; Patch ZP mirrors. SAVE via $FFD8 (no IOINIT). LOAD via LoadPrg.
 ; ---------------------------------------------------------------------------
 
@@ -230,7 +230,7 @@ qs_scratch_cmd
 qm_scratch_cmd
 	!text "S0:QM"
 
-; Snapshot IRQ latches; C=1 if a disk op ran or warp fired (caller should render).
+; Snapshot IRQ latches; C=1 if a disk op, warp, or map screen ran (caller should render).
 poll_quick_keys
 	sei
 	lda in_qsave
@@ -253,7 +253,12 @@ poll_quick_keys
 	sec
 	rts
 .pqk_warp
-	jmp poll_warp				; C=1 if warp fired
+	jsr poll_warp				; C=1 if warp fired
+	bcs .pqk_fired
+	jmp map_poll_f1
+.pqk_fired
+	sec
+	rts
 
 ; Kill game IRQs + blank. Do not IOINIT (keeps Krill drive code).
 qs_disk_prep

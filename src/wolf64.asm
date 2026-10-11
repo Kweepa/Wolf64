@@ -23,10 +23,11 @@ NEAR_LO		= 51				; first looped (Bresenham) height; below this, TEX_HI/TEX_LO, n
 ; $4805…$4E00 SFX in locode→Krill gap (exact start = end_locode)
 ; $5000  paint → enemy pixels (≤$8000); scratch BSS after egfx
 ; $8000  VIC bank (%01): scr A/B, BJH, WPN_STAGE; WPN_MASTER+itm in $9000 hole
-; $9BAD  GAME_STATE (863 B, QS file); scratch @ $D800
+; $9BAD  GAME_STATE (991 B, QS file, includes map_visited); scratch @ $D800
 ; $A000  MCM bitmap 8K (disk: bmp); score in UI hole
 ; $C000  MAP 4K (disk: e1m*; also SQT load staging → copy to $D000)
-; $D000  Judd SQTAB 2K (RAM after install_sqtabs); $D800 item/vis scratch
+; $C800  mapc stash (above SQT); copy_mapcode → $D9A0 before LoadLevel
+; $D000  Judd SQTAB 2K (RAM after install_sqtabs); $D800 item/vis scratch; $D9A0 automap
 ; $E000  TEX_LO (disk: texlo); $F000 TEX_HI (RAM-built)
 ; $0100  vis_slot + vis_perp; STACK_GUARD=$01D0
 
@@ -59,6 +60,7 @@ locode_entry
 	lda #1
 	sta level_num
 	jsr install_sqtabs			; $C000 → $D000 before LoadLevel
+	jsr copy_mapcode			; $C800 stash → $D9A0 (under I/O)
 	jsr LoadLevel
 	bcs .le_fail
 	jmp game_start
@@ -114,6 +116,7 @@ game_start
 	sta $01					; I/O out — TEX_HI / SQTAB / scratch under I/O hole
 	jsr doors_clear
 	jsr find_spawn
+	jsr map_reset
 	jsr enemies_init
 	cli
 	jmp main_loop
@@ -283,13 +286,21 @@ bjh_look	= face_tic_h + 1		; 0=left 1=center 2=right
 warp_armed	= bjh_look + 1			; F3+W chord waiting for 1–8/B/S
 warp_w_prev	= warp_armed + 1
 warp_dig_prev	= warp_w_prev + 1
-end_tape_bss	= warp_dig_prev + 1
+map_sx		= warp_dig_prev + 1		; automap scroll, tile
+map_sy		= map_sx + 1
+map_keys	= map_sy + 1			; bit0 W, bit1 S, bit2 A, bit3 D
+map_arrow_on	= map_keys + 1
+map_ar_row	= map_arrow_on + 1		; viewport row 0..19
+map_ar_col	= map_ar_row + 1		; viewport col 0..37
+map_row		= map_ar_col + 1
+map_wpn_was	= map_row + 1			; wpn_visible saved across the map
+end_tape_bss	= map_wpn_was + 1
 !if end_tape_bss > TAPE_BSS_END {
 	!error "Tape BSS overflows cassette buffer; end=$", end_tape_bss
 }
 
 ; --- GAME_STATE symbols (address = end_itm; set after itm binary) --------
-; Layout matches QS file body: hdr(7) + player(23) + doors(64) + count + SoA
+; Layout matches QS file body: hdr(7) + player(23) + doors(64) + count + SoA + visited(128)
 ; GAME_STATE itself is assigned after end_itm below.
 gs_player	= GAME_STATE + QS_OFF_PLAYER
 ; +0..4 / +9..10 / +22 = ZP / difficulty mirrors (patched around SAVE/LOAD)
@@ -330,6 +341,7 @@ enemy_hp		= enemy_type + MAX_ENEMIES
 enemy_state	= enemy_hp + MAX_ENEMIES
 enemy_vel_rem	= enemy_state + MAX_ENEMIES
 enemy_burst	= enemy_vel_rem + MAX_ENEMIES
+map_visited	= GAME_STATE + QS_OFF_VISITED	; 128 B automap fog (in QS)
 
 ; Per-frame scratch in I/O window ($01=$34 only)
 col_wallz_h	= ITM_SCRATCH
@@ -342,8 +354,8 @@ vis_order	= vis_depth_h + MAX_VIS
 vis_kind	= vis_order + MAX_VIS
 col_enemy	= vis_kind + MAX_VIS
 end_itm_bss	= col_enemy + 40
-!if end_itm_bss > TEX_HI_R15 {
-	!error "Item scratch overlaps TEX_HI_R15; end=$", end_itm_bss
+!if end_itm_bss > MAPCODE {
+	!error "Item scratch overlaps map code; end=$", end_itm_bss
 }
 !if TEX_HI_R15 + 256 > TEX_LO {
 	!error "TEX_HI_R15 overlaps TEX_LO"
@@ -383,9 +395,8 @@ player_bump_then_push
 	beq .pbt_y
 .pbt_east
 	lda playerx_h
-	clc
-	adc #1
 	sta mapx
+	inc mapx
 	lda playery_h
 	sta mapy
 	jsr try_open_door
@@ -426,9 +437,8 @@ player_bump_then_push
 	lda playerx_h
 	sta mapx
 	lda playery_h
-	clc
-	adc #1
 	sta mapy
+	inc mapy
 	jsr try_open_door
 	jmp .pbt_push
 .pbt_north
@@ -535,6 +545,14 @@ QS_GS_END = GAME_STATE + QS_STATE_SIZE
 	!error "GAME_STATE overlaps BITMAP; end=$", QS_GS_END
 }
 
+; CIA/raster helpers for the automap. Body lives at MAPCODE (under I/O).
+*= QS_GS_END
+!source "mapio.asm"
+end_mapio = *
+!if end_mapio > BITMAP {
+	!error "Map I/O stub overlaps BITMAP; end=$", end_mapio
+}
+
 ; =========================================================================
 ; bmp — full MCM bitmap @ $A000
 ; Hidden code: row 3 cols 30–39, skip digit bottoms, rest of row 4.
@@ -555,6 +573,20 @@ end_score = *
 end_bmp = *
 !if end_bmp > MAP {
 	!error "Bitmap+hexfont overlap MAP; end=$", end_bmp
+}
+
+; =========================================================================
+; map code — linked under I/O; boot loads the bytes at $C800, copy_mapcode
+; moves them here before the level map occupies $C000.
+; =========================================================================
+*= MAPCODE
+!source "mapscreen.asm"
+end_mapcode = *
+!if end_mapcode > MAPCODE + MAPCODE_PAGES * 256 {
+	!error "Map code exceeds copy length; end=$", end_mapcode
+}
+!if end_mapcode > TEX_HI_R15 {
+	!error "Map code overlaps TEX_HI_R15; end=$", end_mapcode
 }
 
 ; =========================================================================

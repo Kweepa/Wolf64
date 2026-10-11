@@ -18,10 +18,12 @@ Jay Wilbur, and Jason Blochowiak.
 Wall painter optimizations by
 bigfootbrz.
 
-Fastloader by Krill / Plush.
+Fastloader by Krill/Plush.
 
 Two button joystick support by
 Ursiny Games.
+
+Music by Piotr Rakint (Dr Piotr).
 
 Thanks all!
 

@@ -73,10 +73,13 @@ SQTAB2		= SQTAB1 + $200
 SQTAB3		= SQTAB1 + $400
 SQTAB4		= SQTAB1 + $600
 ITM_SCRATCH	= $D800			; vis/item temps; $01=$34 only
+MAPCODE		= $D9A0			; automap body; copied from MAPCODE_STASH
+MAPCODE_STASH	= $C800			; boot loads mapc here (above the 2K SQT stage)
+MAPCODE_PAGES	= 5			; copy length; must cover end_mapcode-MAPCODE
 TEX_LO		= $E000
 TEX_HI		= $F000			; RAM-built rows 0..14; $FF00 is IRQ vector page
 TEX_HI_R15	= $DF00			; row 15 shadow ($01=$34); avoids $FFFA–$FFFF
-QS_STATE_SIZE	= 7 + 23 + 8 * 8 + 1 + 12 * MAX_ENEMIES	; 863
+; QS_STATE_SIZE is the quicksave layout below (includes map_visited).
 
 ; Cassette / stack BSS
 TAPE_BSS	= $033C
@@ -132,16 +135,19 @@ LEVEL_MAX	= 9
 LEVEL_SECRET	= 10
 
 ; Quicksave — two KERNAL files: QS=GAME_STATE, QM=MAP
-QS_VERSION	= 3
+QS_VERSION	= 4
 QS_HDR_LEN	= 7
 QS_PLAYER_LEN	= 23
 QS_DOOR_LEN	= 8 * 8
 QS_ENEMY_SOA	= 12 * MAX_ENEMIES
+QS_VISITED_LEN	= 128			; 32×32 bits, one bit per 2×2 map cells
 QS_OFF_PLAYER	= QS_HDR_LEN
 QS_OFF_DOORS	= QS_OFF_PLAYER + QS_PLAYER_LEN
 QS_OFF_ECOUNT	= QS_OFF_DOORS + QS_DOOR_LEN
 QS_OFF_ENEMY	= QS_OFF_ECOUNT + 1
-QS_STATE_END	= QS_OFF_ENEMY + QS_ENEMY_SOA
+QS_OFF_VISITED	= QS_OFF_ENEMY + QS_ENEMY_SOA
+QS_STATE_END	= QS_OFF_VISITED + QS_VISITED_LEN
+QS_STATE_SIZE	= 7 + 23 + 8 * 8 + 1 + 12 * MAX_ENEMIES + QS_VISITED_LEN	; 991
 !if QS_STATE_END != QS_STATE_SIZE {
 	!error "QS_STATE_SIZE mismatch"
 }

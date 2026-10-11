@@ -144,6 +144,8 @@ file_tab
 	!byte 0
 	!text "SQT"
 	!byte 0
+	!text "MAPC"
+	!byte 0
 	!text "TEXLO"
 	!byte 0
 	!text "PAINT"
@@ -173,6 +175,8 @@ file_tab
 	!text "BMP"
 	!byte 3
 	!text "SQT"
+	!byte 4
+	!text "MAPC"
 	!byte 5
 	!text "TEXLO"
 	!byte 5

@@ -11,9 +11,9 @@ Two disks from `build.bat`: **`wolf64.d64`** (KERNAL `$FFD5`, VICE virtual traps
 3. KERNAL-load **`splash`** at `$A000` (bitmap paints in already coloured).
    - **Krill disk:** KERNAL-load **`loader`** at `$4E00` and **`install`** at `$2000`, `JSR install`, absolute `$dd00=VIC_BANK_DD00` (`%01`), then `loadraw` **`menu`**.
    - **KERNAL disk:** KERNAL-load **`menu`** at `$0900`. Restore `$dd00` after each KERNAL LOAD (RMW of `$dd00` during IEC).
-4. Boot `JSR $0900` — difficulty select. MENU draws hires over the cover (sprites at `BJH_SPRITES` `$8800`). Selectors: `effects_vol` `$08FD`, `game_complete` `$08FE`, `difficulty` `$08FF`.
-5. Remaining files via `loadraw` (Krill, `$01=$35`, no `IOINIT`) or KERNAL SETNAM/SETLFS/LOAD: `locode`, `scr`, `sfx`, `bjh`, `wpn`, `itm`, `egfx`, `bmp`, `sqt`, `texlo`, `paint`, `tab`, `col`. **LOCODE** overwrites MENU at `$0900` (enemy code is in locode; no stage/copy).
-6. `TXS $FF`, `JMP $0900` (`locode_entry`): `install_sqtabs` (SQT `$C000`→`$D000`), `LoadLevel` → **`e1m1`** at `$C000`, `game_start`.
+4. Boot `JSR $0900` — menu loads a random **`MUS1`–`MUSN`** to `$9000` (char-ROM hole; the splash bitmap stays at `$A000`), then difficulty select. MENU draws hires over the cover (sprites at `BJH_SPRITES` `$8800`). Selectors: `effects_vol` `$08FD`, `game_complete` `$08FE`, `difficulty` `$08FF`. The tune is overwritten when **`wpn`** loads into the same hole.
+5. Remaining files via `loadraw` (Krill, `$01=$35`, no `IOINIT`) or KERNAL SETNAM/SETLFS/LOAD: `locode`, `scr`, `sfx`, `bjh`, `wpn`, `itm`, `egfx`, `bmp`, `sqt`, `mapc`, `texlo`, `paint`, `tab`, `col`. **LOCODE** overwrites MENU at `$0900` (enemy code is in locode; no stage/copy). `mapc` loads at `$C800` (above the 2K SQT stage).
+6. `TXS $FF`, `JMP $0900` (`locode_entry`): `install_sqtabs` (SQT `$C000`→`$D000`), `copy_mapcode` (`$C800`→`$D9A0`), `LoadLevel` → **`e1m1`** at `$C000`, `game_start`.
 
 Game over (lives expired) jumps `$08C0` → `reboot_game` (in locode): `IOINIT` (tears down Krill), KERNAL-load **`wolf64`**, `JMP $080D`. Deaths with lives remaining `restart_level` (reload map only). On the Krill disk, **never `IOINIT`/`RESTOR` on the in-play `LoadLevel` path**. Krill ZP is `$60`–`$64` (`view_row8–10` scratch; dead across a load).
 
@@ -51,7 +51,7 @@ Sizes drift; prefer symbols in `generated/wolf64.lbl`. Ranges inclusive of start
 | 52–55 | `$D000`–`$DFFF` | **`sqt`** 2K @ `$D000` + item/vis scratch @ `$D800` (`$01=$34`). |
 | 56–63 | `$E000`–`$FFFF` | **`TEX_LO`** / **`TEX_HI`** (derived); IRQ vectors rewritten after `init_tex_hi`. |
 
-Quicksave (F5/F7): two KERNAL files — **`QS`** = `GAME_STATE` (863 B), **`QM`** = `MAP` (4K). DEN=0; checksum in QS header covers GS body + map.
+Quicksave (F5/F7): two KERNAL files — **`QS`** = `GAME_STATE` (991 B), **`QM`** = `MAP` (4K). DEN=0; checksum in QS header covers GS body + map.
 
 ---
 
@@ -76,7 +76,8 @@ Quicksave (F5/F7): two KERNAL files — **`QS`** = `GAME_STATE` (863 B), **`QM`*
 | `$A000`–`$BF3F` | MCM bitmap |
 | `$C000`–`$CFFF` | `MAP` |
 | `$D000`–`$D7FF` | Judd SQTAB |
-| `$D800`–… | Item/vis scratch (`$01=$34`) |
+| `$D800`–`$D9A0` | Item/vis scratch (`$01=$34`) |
+| `$D9A0`–… | Automap body (`mapc` loads at `$C800`, copied here before the level) |
 | `$E000`–`$EFFF` | `TEX_LO` |
 | `$F000`–`$FFFF` | `TEX_HI` (derived) |
 
@@ -90,13 +91,15 @@ Quicksave (F5/F7): two KERNAL files — **`QS`** = `GAME_STATE` (863 B), **`QM`*
 | `loader` / `install` | `$4E00` / `$2000` | Krill disk only |
 | `splashc` | `$8000` | matrix + colour + `do_splash` |
 | `splash` | `$A000` | 8000-byte MCM bitmap |
-| `menu` | `$0900` | overwritten by locode |
+| `menu` | `$0900` | overwritten by locode; loads `MUS1`–`MUSN` itself |
+| `MUS1`…`MUS4` | `$9000` | menu music, one resident at a time (char-ROM hole) |
 | `locode` | `$0900` | all game code |
 | `scr` / `bjh` / `wpn` / `itm` | VIC bank | |
 | `sfx` | `end_locode` | pre-Krill gap |
 | `paint` / `egfx` | `$5000` / after paint | |
 | `bmp` | `$A000` | |
 | `sqt` | `$C000` | copied to `$D000` by `install_sqtabs` |
+| `mapc` | `$C800` | automap body; `copy_mapcode` → `$D9A0` before `LoadLevel` |
 | `texlo` | `$E000` | |
 | `tab` / `col` | `$0400` / `$D800` | |
 | `e1m1`…`e1ms` | `$C000` | |
@@ -118,17 +121,18 @@ Quicksave (F5/F7): two KERNAL files — **`QS`** = `GAME_STATE` (863 B), **`QM`*
 
 ---
 
-## GAME_STATE (after `end_itm`, 863 B)
+## GAME_STATE (after `end_itm`, 991 B)
 
 Live saveable slab / **`QS`** file body (MAP is separate **`QM`** file @ `$C000`):
 
 | Offset | Contents |
 |--------|----------|
-| +0 | Header (magic `W64S`, version 3, checksum over GS body + MAP) |
+| +0 | Header (magic `W64S`, version 4, checksum over GS body + MAP) |
 | +7 | Player blob (23 B); ZP/`difficulty` mirrors patched around I/O |
 | +30 | Doors (8×8) |
 | +94 | `enemy_count` |
 | +95 | 12×64 enemy SoA (`enemy_xh`…`enemy_burst`) |
+| +863 | `map_visited` (128 B, 32×32 bits, one bit per 2×2 map cells) |
 
 ---
 
@@ -170,7 +174,7 @@ IRQ/NMI save `$01`, set `$35`, ack, restore. Play IRQ is CIA1 Timer A (input/SFX
 | After `itm` → bitmap | scratch BSS + slack |
 | Locode → Krill | ACME `!warn` after locode / after SFX |
 | Paint/egfx → `$8000` | ~202 B |
-| After GAME_STATE → bitmap | slack before `$A000` |
+| After GAME_STATE → bitmap | map CIA/raster stub, then slack before `$A000` |
 | `$FF00`–`$FFF9` | above map; keep vectors |
 
 Assemble overlap errors: locode/SFX vs `KRILL_HOLE`, paint/egfx vs `SCREEN`, itm/`GAME_STATE` vs `BITMAP`, tape vs `$03FC`, stack vs `$01D0`.

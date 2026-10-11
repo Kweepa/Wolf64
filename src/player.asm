@@ -76,7 +76,7 @@ player_move
 	ora move_dy_l
 	ora move_dy_h
 	bne .apply
-	rts
+	jmp map_reveal
 
 .apply
 	; X axis
@@ -121,7 +121,8 @@ player_move
 	sta playery_h
 .push
 	; Contact open (margin / this-step tile cross) then WALL_MARGIN push
-	jmp player_bump_then_push
+	jsr player_bump_then_push
+	jmp map_reveal
 
 ; A = keep-out frac. tmp2 = lo, tmp3 = $100−A; tmp4/5 = tile (probe_solid clobbers tmp0/1).
 push_walls
@@ -483,7 +484,8 @@ handle_level_want
 .hlw_ok
 	pla
 	cmp #1
-	beq .hlw_life
+	beq .hlw_life				; death: keep map_visited
+	jsr map_reset				; new level / warp / out of lives; preserves A
 	cmp #3
 	bne .hlw_done				; 2 / 4 / 5: status already reset
 	jsr player_init_game

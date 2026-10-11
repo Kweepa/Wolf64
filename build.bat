@@ -48,15 +48,12 @@ python tools\gen_ui_bitmap.py
 if errorlevel 1 exit /b 1
 python tools\gen_splash.py
 if errorlevel 1 exit /b 1
+python tools\genmusic.py
+if errorlevel 1 exit /b 1
 
 pushd src
-"%ACME%" -v3 menu.asm
-if errorlevel 1 (
-  popd
-  exit /b 1
-)
-
 rem Krill disk first (236-byte loadraw @ $4E00, needs TDE / real 1541)
+rem MENU is assembled per disk: it loadraws music on Krill, KERNAL-loads otherwise.
 "%ACME%" -DUSE_KRILL=1 -v3 --vicelabels ..\generated\wolf64-krill.lbl wolf64.asm
 if errorlevel 1 (
   popd
@@ -69,6 +66,11 @@ if errorlevel 1 (
   exit /b 1
 )
 "%ACME%" -DUSE_KRILL=1 boot.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" -DUSE_KRILL=1 -v3 menu.asm
 if errorlevel 1 (
   popd
   exit /b 1
@@ -90,6 +92,11 @@ if errorlevel 1 (
   exit /b 1
 )
 "%ACME%" -v3 boot.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" -v3 menu.asm
 if errorlevel 1 (
   popd
   exit /b 1

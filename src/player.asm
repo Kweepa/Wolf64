@@ -485,7 +485,11 @@ handle_level_want
 	pla
 	cmp #1
 	beq .hlw_life				; death: keep map_visited
+	ldx #$34				; MAPCODE sits under I/O; restart_level left $35
+	stx $01
 	jsr map_reset				; new level / warp / out of lives; preserves A
+	ldx #$35				; border clear still writes $d020
+	stx $01
 	cmp #3
 	bne .hlw_done				; 2 / 4 / 5: status already reset
 	jsr player_init_game

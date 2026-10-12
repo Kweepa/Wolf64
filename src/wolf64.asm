@@ -397,9 +397,9 @@ player_bump_then_push
 	cmp playerx_h
 	beq .pbt_y
 .pbt_east
-	lda playerx_h
-	sta mapx
-	inc mapx
+	ldx playerx_h
+	inx
+	stx mapx
 	lda playery_h
 	sta mapy
 	jsr try_open_door
@@ -415,10 +415,9 @@ player_bump_then_push
 	cmp playerx_h
 	beq .pbt_y
 .pbt_westgo
-	lda playerx_h
-	sec
-	sbc #1
-	sta mapx
+	ldx playerx_h
+	dex
+	stx mapx
 	lda playery_h
 	sta mapy
 	jsr try_open_door
@@ -439,9 +438,9 @@ player_bump_then_push
 .pbt_south
 	lda playerx_h
 	sta mapx
-	lda playery_h
-	sta mapy
-	inc mapy
+	ldx playery_h
+	inx
+	stx mapy
 	jsr try_open_door
 	jmp .pbt_push
 .pbt_north
@@ -457,10 +456,9 @@ player_bump_then_push
 .pbt_northgo
 	lda playerx_h
 	sta mapx
-	lda playery_h
-	sec
-	sbc #1
-	sta mapy
+	ldx playery_h
+	dex
+	stx mapy
 	jsr try_open_door
 .pbt_push
 	lda #WALL_MARGIN

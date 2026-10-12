@@ -1,0 +1,54 @@
+{
+  "title": "Get Them Before They Get You",
+  "author": "Bobby Prince",
+  "lines": {
+    "1": {
+      "mute": true,
+      "voice": 0
+    },
+    "2": {
+      "mute": false,
+      "voice": 1
+    },
+    "4": {
+      "mute": true,
+      "voice": 0
+    },
+    "5": {
+      "mute": false,
+      "voice": 2
+    },
+    "6": {
+      "mute": true,
+      "voice": 2
+    },
+    "7": {
+      "mute": true,
+      "voice": 2
+    },
+    "9": {
+      "mute": false,
+      "voice": 3
+    }
+  },
+  "voices": {
+    "1": {
+      "instrument": "BASS-ARTICUL",
+      "arp": false,
+      "percussion": false,
+      "kit": {}
+    },
+    "2": {
+      "instrument": "SOLO-PICOBAS",
+      "arp": false,
+      "percussion": false,
+      "kit": {}
+    },
+    "3": {
+      "instrument": "CELESTA",
+      "arp": false,
+      "percussion": true,
+      "kit": {}
+    }
+  }
+}

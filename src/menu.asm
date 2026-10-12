@@ -2,7 +2,7 @@
 ; Entry: +0 run_menu; +3 pad (boot no longer calls). Hires bitmap UI + full menufont.
 ; Rows 0–6 are the Koala strap and badge (raster split); the body below stays hires.
 ; difficulty → $08FF; effects_vol/game_complete → $08FD/$08FE (survive LOCODE overwrite).
-; Menu music: MUS1..MUSN at $9000 (random at entry, Jukebox switches).
+; Menu music: MUS1..MUSN at $5000 (random at entry, Jukebox switches).
 ; All 3 SID voices. Blips only if the load fails.
 !cpu 6502
 !to "../generated/menu.prg", cbm
@@ -619,6 +619,7 @@ next_menu
 	!byte 2, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_BACK, 0
 	!byte NM_START, NM_START, NM_START, NM_START, NM_BACK, 0, 0, 0
 	!byte 3, 3, 3, NM_BACK, 0, 0, 0, 0
+	; Last row, so genmusic may emit more than MENU_SLOTS entries.
 	+juke_next_row
 
 menu_sizes
@@ -2612,7 +2613,7 @@ ui_read_keys
 ; --- state / strings --------------------------------------------------------
 menu_id		!byte 0
 music_en	!byte 0
-music_ok	!byte 0				; 1 = MUSn resident at $9000
+music_ok	!byte 0				; 1 = MUSn resident at MUSIC_INIT
 music_track	!byte 0				; 0 .. MUSIC_TRACKS-1
 music_due	!byte 0				; CIA tick waiting for the long mux gap
 menu_item	!byte 0
@@ -2748,4 +2749,7 @@ menu_str_hi
 end_menu = *
 !if end_menu > SCREEN {
 	!error "Menu overlaps SCREEN; end=$", end_menu
+}
+!if end_menu > KRILL_HOLE {
+	!error "Menu overlaps the Krill hole / MUSn at $5000; end=$", end_menu
 }

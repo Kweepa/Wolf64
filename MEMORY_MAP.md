@@ -11,7 +11,7 @@ Two disks from `build.bat`: **`wolf64.d64`** (KERNAL `$FFD5`, VICE virtual traps
 3. KERNAL-load **`splash`** at `$A000` (bitmap paints in already coloured).
    - **Krill disk:** KERNAL-load **`loader`** at `$4E00` and **`install`** at `$2000`, `JSR install`, absolute `$dd00=VIC_BANK_DD00` (`%01`), then `loadraw` **`menu`**.
    - **KERNAL disk:** KERNAL-load **`menu`** at `$0900`. Restore `$dd00` after each KERNAL LOAD (RMW of `$dd00` during IEC).
-4. Boot `JSR $0900` — menu loads a random **`MUS1`–`MUSN`** to `$9000` (char-ROM hole; the splash bitmap stays at `$A000`), then difficulty select. MENU draws hires over the cover (sprites at `BJH_SPRITES` `$8800`). Selectors: `effects_vol` `$08FD`, `game_complete` `$08FE`, `difficulty` `$08FF`. The tune is overwritten when **`wpn`** loads into the same hole.
+4. Boot `JSR $0900` — menu loads a random **`MUS1`–`MUSN`** to `$5000`–`$7FFF` (above the Krill hole, below the VIC bank; up to 12 KB), then difficulty select. MENU draws hires over the cover (sprites at `BJH_SPRITES` `$8800`). Selectors: `effects_vol` `$08FD`, `game_complete` `$08FE`, `difficulty` `$08FF`. The menu silences the tune before the asset loads; **`paint`** later overwrites it.
 5. Remaining files via `loadraw` (Krill, `$01=$35`, no `IOINIT`) or KERNAL SETNAM/SETLFS/LOAD: `locode`, `scr`, `sfx`, `bjh`, `wpn`, `itm`, `egfx`, `bmp`, `sqt`, `mapc`, `texlo`, `paint`, `tab`, `col`. **LOCODE** overwrites MENU at `$0900` (enemy code is in locode; no stage/copy). `mapc` loads at `$C800` (above the 2K SQT stage).
 6. `TXS $FF`, `JMP $0900` (`locode_entry`): `install_sqtabs` (SQT `$C000`→`$D000`), `copy_mapcode` (`$C800`→`$D9A0`), `LoadLevel` → **`e1m1`** at `$C000`, `game_start`.
 
@@ -92,7 +92,7 @@ Quicksave (F5/F7): two KERNAL files — **`QS`** = `GAME_STATE` (991 B), **`QM`*
 | `splashc` | `$8000` | matrix + colour + `do_splash` |
 | `splash` | `$A000` | 8000-byte MCM bitmap |
 | `menu` | `$0900` | overwritten by locode; loads `MUS1`–`MUSN` itself |
-| `MUS1`…`MUS4` | `$9000` | menu music, one resident at a time (char-ROM hole) |
+| `MUS1`…`MUSN` | `$5000` | menu music, one resident at a time, must end by `$8000` |
 | `locode` | `$0900` | all game code |
 | `scr` / `bjh` / `wpn` / `itm` | VIC bank | |
 | `sfx` | `end_locode` | pre-Krill gap |

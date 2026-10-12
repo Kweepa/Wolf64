@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Menu music: music/*.sid → generated/mus1.prg .. musN.prg (load @ $9000).
+"""Menu music: music/*.sid → generated/mus1.prg .. musN.prg (load @ $5000).
 
-Filename order is the jukebox order (at most four). Each PSID is relocated
-with sidreloc to init $9000 / play $9003, zero page parked at $E0–$F4.
-Every STA $D418 becomes JSR vol_stub, which keeps the filter high nibble
-and ORs effects_vol ($08FD). A VBI tune (PSID speed bit clear) is flagged
-so the menu forces the ~50 Hz CIA latch after init.
+Filename order is the jukebox order. Each PSID is relocated with sidreloc
+to init $5000 / play $5003, zero page parked at $E0–$F4, and must end by
+$8000 (the menu's VIC bank). Every STA $D418
+becomes JSR vol_stub, which keeps the filter high nibble and ORs
+effects_vol ($08FD). A VBI tune (PSID speed bit clear) is flagged so the
+menu forces the ~50 Hz CIA latch after init.
 
 Also writes generated/src/menu_tracks.asm (titles, authors, MUSIC_TRACKS).
 """
@@ -26,16 +27,15 @@ MUSIC = ROOT / "music"
 OUT_DIR = ROOT / "generated"
 ASM_OUT = OUT_DIR / "src" / "menu_tracks.asm"
 
-LOAD = 0x9000
-INIT = 0x9000
-PLAY = 0x9003
-LIMIT = 0xA000
+LOAD = 0x5000
+INIT = 0x5000
+PLAY = 0x5003
+LIMIT = 0x8000
 EFFECTS_VOL = 0x08FD
 ZP_LO = 0xE0
 ZP_HI = 0xF4
-MAX_TRACKS = 4
 MAX_VOL_STORES = 4
-SIDRELOC_PAGE = "90"
+SIDRELOC_PAGE = f"{LOAD >> 8:02x}"
 SIDRELOC_ZP = "e0-f4"
 
 VOL_STA = bytes((0x8D, 0x18, 0xD4))
@@ -198,7 +198,8 @@ def emit_asm(tracks: list[dict]) -> None:
         lines.append(asm_scr(f"str_now{i}", f"Now playing: {t['title']}").rstrip())
     lines.append("")
     for i, t in enumerate(tracks, start=1):
-        lines.append(asm_scr(f"str_auth{i}", t["author"]).rstrip())
+        credit = f"Track by {t['author']}" if t["author"] else ""
+        lines.append(asm_scr(f"str_auth{i}", credit).rstrip())
     lines.append("")
     lines.append("juke_now_lo")
     lines.append("\t!byte " + ", ".join(f"<str_now{i}" for i in range(1, n + 1)))
@@ -209,13 +210,16 @@ def emit_asm(tracks: list[dict]) -> None:
     lines.append("juke_auth_hi")
     lines.append("\t!byte " + ", ".join(f">str_auth{i}" for i in range(1, n + 1)))
     lines.append("")
-    # 8-byte rows. Expanded from menu.asm after these labels exist.
-    items_lo = [f"<str_trk{i}" for i in range(1, n + 1)] + ["<str_back"]
-    items_hi = [f">str_trk{i}" for i in range(1, n + 1)] + [">str_back"]
-    items_lo += ["0"] * (8 - len(items_lo))
-    items_hi += ["0"] * (8 - len(items_hi))
-    nxt = ["NM_JUKE"] * n + ["NM_BACK"]
-    nxt += ["0"] * (8 - len(nxt))
+    # Menus before the jukebox are 8-byte rows (menu_id * 8 + item).
+    # The jukebox is the last row, so it keeps every track plus Back.
+    def pad8(items: list[str]) -> list[str]:
+        if len(items) < 8:
+            return items + ["0"] * (8 - len(items))
+        return items
+
+    items_lo = pad8([f"<str_trk{i}" for i in range(1, n + 1)] + ["<str_back"])
+    items_hi = pad8([f">str_trk{i}" for i in range(1, n + 1)] + [">str_back"])
+    nxt = pad8(["NM_JUKE"] * n + ["NM_BACK"])
     lines.append("!macro juke_next_row {")
     lines.append("\t!byte " + ", ".join(nxt))
     lines.append("}")
@@ -234,14 +238,12 @@ def main() -> None:
     sids = sorted(MUSIC.glob("*.sid"), key=lambda p: p.name.lower())
     if not sids:
         die(f"no .sid files in {MUSIC}")
-    if len(sids) > MAX_TRACKS:
-        die(f"{len(sids)} SID files in {MUSIC}; menu holds at most {MAX_TRACKS}")
     sidreloc = find_sidreloc()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     # Drop a stale higher slot if the folder shrank.
-    for n in range(len(sids) + 1, MAX_TRACKS + 1):
-        stale = OUT_DIR / f"mus{n}.prg"
-        if stale.is_file():
+    for stale in OUT_DIR.glob("mus*.prg"):
+        m = re.fullmatch(r"mus(\d+)", stale.stem, re.IGNORECASE)
+        if m and int(m.group(1)) > len(sids):
             stale.unlink()
     tracks = []
     for n, src in enumerate(sids, start=1):

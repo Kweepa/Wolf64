@@ -20,8 +20,10 @@ bigfootbrz.
 Fastloader by Krill/Plush.
 Two button joystick support by
 Ursiny Games.
-Music by Piotr Rakint (Dr Piotr).
+Music by Dr. Piotr/De-Koder.
+SID instrument definitions from
+Hermit/SID-Wizard 1.5.
 
-Thanks all!
+Thanks y'all!
 
-v2.0
+v2.0, built 11 Oct 2026

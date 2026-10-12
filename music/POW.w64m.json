@@ -1,0 +1,58 @@
+{
+  "title": "P.O.W.",
+  "author": "Bobby Prince",
+  "lines": {
+    "0": {
+      "mute": true,
+      "voice": 2
+    },
+    "1": {
+      "mute": false,
+      "voice": 1
+    },
+    "2": {
+      "mute": true,
+      "voice": 0
+    },
+    "3": {
+      "mute": true,
+      "voice": 0
+    },
+    "4": {
+      "mute": true,
+      "voice": 0
+    },
+    "5": {
+      "mute": false,
+      "voice": 3
+    },
+    "6": {
+      "mute": false,
+      "voice": 2
+    },
+    "7": {
+      "mute": true,
+      "voice": 3
+    }
+  },
+  "voices": {
+    "1": {
+      "instrument": "BRASSTRUMPET",
+      "arp": false,
+      "percussion": false,
+      "kit": {}
+    },
+    "2": {
+      "instrument": "BASS-ARTICUL",
+      "arp": false,
+      "percussion": false,
+      "kit": {}
+    },
+    "3": {
+      "instrument": "BRASS-TUBA",
+      "arp": false,
+      "percussion": false,
+      "kit": {}
+    }
+  }
+}

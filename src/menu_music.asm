@@ -1,12 +1,14 @@
 ; Menu music loader + Jukebox switch. MUS1..MUSN (tools/genmusic.py) load at
-; $9000 from disk. Krill vs KERNAL is chosen at assemble time (build.bat
-; assembles menu.asm once per disk). Players are relocated to init $9000 /
-; play $9003 with zero page at $E0–$F4, so the menu's $F5–$FE pointers stay.
+; $5000-$7FFF from disk: above the Krill hole, below the menu's VIC bank, and
+; dead once the menu hands over to the asset loads. Krill vs KERNAL is chosen
+; at assemble time (build.bat assembles menu.asm once per disk). Players are
+; relocated to init $5000 / play $5003 with zero page at $E0–$F4, so the
+; menu's $F5–$FE pointers stay.
 
 !zone menu_music
 
-MUSIC_INIT	= $9000
-MUSIC_PLAY	= $9003
+MUSIC_INIT	= $5000
+MUSIC_PLAY	= $5003
 
 ; run_menu entry, before SEI: splash still up. Krill arrives I=1, $01=$35;
 ; KERNAL arrives I=0, $01=$36. Leaves $01=$36, I=0.
@@ -22,12 +24,38 @@ music_pick_load
 	sta music_track
 	; fall through
 
-; A = track 0..MUSIC_TRACKS-1 → MUSn at $9000. Leaves $01=$36, I=0.
-; music_ok = 1 when the file loaded.
+; A = track 0..MUSIC_TRACKS-1 → MUSn at MUSIC_INIT. Leaves $01=$36, I=0.
+; Names are MUS1, MUS2, … (two digits from MUS10). music_ok = 1 when loaded.
 music_load
 	clc
-	adc #'1'
+	adc #1
+	ldx #'0'
+.ml_div
+	cmp #10
+	bcc .ml_dig
+	sbc #10
+	inx
+	bcs .ml_div
+.ml_dig
+	cpx #'0'
+	beq .ml_one
+	stx music_name + 3
+	clc
+	adc #'0'
+	sta music_name + 4
+	lda #0
+	sta music_name + 5
+	lda #5
+	bne .ml_go
+.ml_one
+	clc
+	adc #'0'
 	sta music_name + 3
+	lda #0
+	sta music_name + 4
+	lda #4
+.ml_go
+	sta music_namelen
 	lda #0
 	sta music_ok
 !if USE_KRILL {
@@ -44,7 +72,7 @@ music_load
 	plp
 	cli
 } else {
-	lda #4
+	lda music_namelen
 	ldx #<music_name
 	ldy #>music_name
 	jsr $ffbd				; SETNAM
@@ -86,4 +114,5 @@ sync_juke_title
 	sta section_hi + 4
 	rts
 
-music_name	!text "MUS1", 0
+music_name	!text "MUS1", 0, 0
+music_namelen	!byte 4

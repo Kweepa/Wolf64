@@ -1,0 +1,47 @@
+{
+  "title": "SUSPENSE",
+  "author": "Wolf64",
+  "lines": {
+    "2": {
+      "mute": true,
+      "voice": 0
+    },
+    "3": {
+      "mute": false,
+      "voice": 2
+    },
+    "4": {
+      "mute": true,
+      "voice": 0
+    },
+    "5": {
+      "mute": false,
+      "voice": 1
+    },
+    "6": {
+      "mute": true,
+      "voice": 0
+    },
+    "9": {
+      "mute": false,
+      "voice": 3
+    }
+  },
+  "voices": {
+    "1": {
+      "instrument": "BRASS-FILTSW",
+      "arp": false,
+      "percussion": false
+    },
+    "2": {
+      "instrument": "BELL-GLASSY2",
+      "arp": false,
+      "percussion": false
+    },
+    "3": {
+      "instrument": "SNARE-TIGHT",
+      "arp": false,
+      "percussion": true
+    }
+  }
+}

@@ -99,18 +99,20 @@ def slice_image(body: bytes, load_addr: int, start: int, end: int, prg_load: Opt
 
 
 def menu_music_files() -> list[tuple[str, Path]]:
-	"""mus1..musN from tools/genmusic.py. Contiguous from 1, at most 4.
+	"""mus1..musN from tools/genmusic.py. Contiguous from 1.
 
 	Names stay lowercase: c1541 turns them into PETSCII MUS1.., which is
 	what menu_music.asm loads. An already-uppercase name gets the high bit set.
 	"""
 	found: list[tuple[str, Path]] = []
 	root = Path("generated")
-	for n in range(1, 5):
+	n = 1
+	while True:
 		path = root / f"mus{n}.prg"
 		if not path.is_file():
 			break
 		found.append((f"mus{n}", path))
+		n += 1
 	if not found:
 		print(
 			"missing menu music (generated/mus1.prg). Run tools/genmusic.py",

@@ -1,0 +1,46 @@
+{
+  "title": "Horst-Wessel-Lied",
+  "author": "Bobby Prince",
+  "lines": {
+    "1": {
+      "mute": false,
+      "voice": 1
+    },
+    "2": {
+      "mute": false,
+      "voice": 2
+    },
+    "3": {
+      "mute": true,
+      "voice": 3
+    },
+    "4": {
+      "mute": false,
+      "voice": 3
+    },
+    "9": {
+      "mute": true,
+      "voice": 3
+    }
+  },
+  "voices": {
+    "1": {
+      "instrument": "BRASSTRUMPET",
+      "arp": false,
+      "percussion": false,
+      "kit": {}
+    },
+    "2": {
+      "instrument": "BRASS-TUBA",
+      "arp": false,
+      "percussion": false,
+      "kit": {}
+    },
+    "3": {
+      "instrument": "BRASSTRUMPET",
+      "arp": false,
+      "percussion": true,
+      "kit": {}
+    }
+  }
+}

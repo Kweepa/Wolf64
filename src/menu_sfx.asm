@@ -10,7 +10,7 @@
 SAMPLE_TA_LO	= <$4FFF
 SAMPLE_TA_HI	= >$4FFF
 
-; Needs: music_ok (MUSn resident at $9000). Runs with I=1 on exit I=0.
+; Needs: music_ok (MUSn resident at MUSIC_INIT). Runs with I=1 on exit I=0.
 menu_sfx_init
 	sei
 	lda #$35

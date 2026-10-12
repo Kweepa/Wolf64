@@ -598,7 +598,10 @@ enemy_chase_one
 	lda #DOG_REPATH
 	sta enemy_burst,x
 .ec_domove
-	ldx enemy_idx
+	lda enemy_xl,x				; pre-step fracs; push may clamp back
+	pha
+	lda enemy_yl,x
+	pha
 	jsr enemy_set_door_pass
 	lda enemy_flags,x
 	and #(EF_ACTIVE | EF_FIRSTATTACK | EF_SHOT_DONE | EF_DODGE_FACE)
@@ -636,58 +639,20 @@ enemy_chase_one
 	sta move_dy_l
 	lda tmp1
 	sta move_dy_h
-	; try X
+	jsr enemy_step_axes
+	; Clamp back to the margin leaves the fracs unchanged (a frame cannot
+	; move a whole tile). That still sets EF_MOVING, so humans never repath.
 	ldx enemy_idx
-	clc
-	lda enemy_xl,x
-	adc move_dx_l
-	sta tmp2
-	lda enemy_xh,x
-	adc move_dx_h
-	sta tmp3
-	sta mapx
-	lda enemy_yh,x
-	sta mapy
-	jsr probe_solid
-	bne .ec_y
-	ldx enemy_idx
-	lda tmp2
-	sta enemy_xl,x
-	lda tmp3
-	sta enemy_xh,x
+	pla
+	eor enemy_yl,x
+	sta tmp0
+	pla
+	eor enemy_xl,x
+	ora tmp0
+	bne .ec_out
 	lda enemy_flags,x
-	ora #EF_MOVING
+	and #$ff-EF_MOVING
 	sta enemy_flags,x
-.ec_y
-	ldx enemy_idx
-	clc
-	lda enemy_yl,x
-	adc move_dy_l
-	sta tmp2
-	lda enemy_yh,x
-	adc move_dy_h
-	sta tmp3
-	lda enemy_xh,x
-	sta mapx
-	lda tmp3
-	sta mapy
-	jsr probe_solid
-	bne .ec_door
-	ldx enemy_idx
-	lda tmp2
-	sta enemy_yl,x
-	lda tmp3
-	sta enemy_yh,x
-	lda enemy_flags,x
-	ora #EF_MOVING
-	sta enemy_flags,x
-.ec_door
-	ldx enemy_idx
-	lda enemy_flags,x
-	and #EF_MOVING
-	beq .ec_out				; no step → skip push_walls
-	jsr enemy_push_walls
-	jsr enemy_try_door_open
 .ec_out
 	lda #0
 	sta probe_doors_pass

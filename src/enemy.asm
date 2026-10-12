@@ -533,6 +533,62 @@ enemy_try_door_open
 .etdo_rts
 	rts
 
+; move_dx/dy already set. Commit X then Y, set EF_MOVING, push + door if a step landed.
+enemy_step_axes
+	ldx enemy_idx
+	clc
+	lda enemy_xl,x
+	adc move_dx_l
+	sta tmp2
+	lda enemy_xh,x
+	adc move_dx_h
+	sta tmp3
+	sta mapx
+	lda enemy_yh,x
+	sta mapy
+	jsr probe_solid
+	bne .esa_y
+	ldx enemy_idx
+	lda tmp2
+	sta enemy_xl,x
+	lda tmp3
+	sta enemy_xh,x
+	lda enemy_flags,x
+	ora #EF_MOVING
+	sta enemy_flags,x
+.esa_y
+	ldx enemy_idx
+	clc
+	lda enemy_yl,x
+	adc move_dy_l
+	sta tmp2
+	lda enemy_yh,x
+	adc move_dy_h
+	sta tmp3
+	lda enemy_xh,x
+	sta mapx
+	lda tmp3
+	sta mapy
+	jsr probe_solid
+	bne .esa_door
+	ldx enemy_idx
+	lda tmp2
+	sta enemy_yl,x
+	lda tmp3
+	sta enemy_yh,x
+	lda enemy_flags,x
+	ora #EF_MOVING
+	sta enemy_flags,x
+.esa_door
+	ldx enemy_idx
+	lda enemy_flags,x
+	and #EF_MOVING
+	beq .esa_rts
+	jsr enemy_push_walls
+	jsr enemy_try_door_open
+.esa_rts
+	rts
+
 ; X = enemy index — step along facing, honor turn tiles
 enemy_patrol_one
 	stx enemy_idx
@@ -573,60 +629,7 @@ enemy_patrol_one
 	sta move_dy_l
 	lda tmp1
 	sta move_dy_h
-
-	; try X
-	ldx enemy_idx
-	clc
-	lda enemy_xl,x
-	adc move_dx_l
-	sta tmp2
-	lda enemy_xh,x
-	adc move_dx_h
-	sta tmp3
-	sta mapx
-	lda enemy_yh,x
-	sta mapy
-	jsr probe_solid
-	bne .ep_y
-	ldx enemy_idx
-	lda tmp2
-	sta enemy_xl,x
-	lda tmp3
-	sta enemy_xh,x
-	lda enemy_flags,x
-	ora #EF_MOVING
-	sta enemy_flags,x
-.ep_y
-	ldx enemy_idx
-	clc
-	lda enemy_yl,x
-	adc move_dy_l
-	sta tmp2
-	lda enemy_yh,x
-	adc move_dy_h
-	sta tmp3
-	lda enemy_xh,x
-	sta mapx
-	lda tmp3
-	sta mapy
-	jsr probe_solid
-	bne .ep_door
-	ldx enemy_idx
-	lda tmp2
-	sta enemy_yl,x
-	lda tmp3
-	sta enemy_yh,x
-	lda enemy_flags,x
-	ora #EF_MOVING
-	sta enemy_flags,x
-.ep_door
-	ldx enemy_idx
-	lda enemy_flags,x
-	and #EF_MOVING
-	beq .ep_turn				; no step → skip push
-	jsr enemy_push_walls
-	; on a door cell → open / hold (not bump-triggered; dogs skip)
-	jsr enemy_try_door_open
+	jsr enemy_step_axes
 .ep_turn
 	; pre-step fracs → tmp0/tmp1; apply T_TURN only on center-cross
 	pla

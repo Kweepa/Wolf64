@@ -28,6 +28,7 @@ REBOOT_STUB	= $08C0			; 3-byte JMP reboot_game
 effects_vol	= $08FD
 game_complete	= $08FE
 difficulty	= $08FF
+QS_MENU_CONT	= $80			; difficulty value: menu Continue resumes QS/QM
 
 TABLES		= $0400
 

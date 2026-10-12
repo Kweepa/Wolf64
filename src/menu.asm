@@ -53,6 +53,7 @@ NM_HELP		= 256 - 5
 NM_CREDITS	= 256 - 7
 NM_QUIT		= 256 - 6
 NM_JUKE		= 256 - 8
+NM_CONT		= 256 - 9			; resume last quicksave
 
 UI_UP		= 1
 UI_DOWN		= 2
@@ -97,6 +98,7 @@ joy_en		= $39			; Joy Port 2 on/off (mutex with mouse_en)
 
 run_menu
 	jsr music_pick_load			; before SEI: KERNAL/Krill load, splash still up
+	jsr probe_quicksave			; QS+QM? insert Continue (still no menu IRQ)
 	sei
 	jsr init_font_tabs
 	jsr init_menu_vic
@@ -214,7 +216,8 @@ update_selection
 	jsr draw_menu_item
 	ldx menu_item
 	stx tmp4
-	jmp draw_menu_item
+	jsr draw_menu_item
+	jmp draw_qs_hint
 
 menu_esc
 	jsr sfx_esc
@@ -456,6 +459,7 @@ menu_select
 .ms_go
 	jsr sfx_shoot
 	lda menu_item
+.ms_leave
 	sta difficulty
 	jsr menu_raster_off
 	lda $d011
@@ -500,8 +504,14 @@ menu_select
 	lda tmp0
 	sta menu_id
 	cmp #4					; Jukebox: cursor starts on the playing track
-	bne .ms_nj
+	bne .ms_nsk
 	lda music_track
+	sta menu_item
+	jmp .ms_nj
+.ms_nsk
+	cmp #2					; skill: Bring 'em on!
+	bne .ms_nj
+	lda #2
 	sta menu_item
 .ms_nj
 	jsr draw_menu
@@ -519,6 +529,8 @@ menu_select
 	jmp .ms_st
 .ms_tx
 	lda tmp0
+	cmp #NM_CONT
+	beq .ms_cont
 	cmp #NM_ORDER
 	beq .ms_ord
 	cmp #NM_CTRL
@@ -538,6 +550,10 @@ menu_select
 	beq .ms_st				; already playing
 	jsr jukebox_select			; ends in draw_menu; carry stays clear
 	jmp .ms_st
+.ms_cont
+	jsr sfx_shoot
+	lda #QS_MENU_CONT
+	jmp .ms_leave
 .ms_ord
 	jsr sfx_shoot
 	lda #<order_text
@@ -611,8 +627,210 @@ quit_to_basic
 	cli
 	jmp ($a002)				; BASIC warm start
 
+; Splash still up, menu IRQs not armed. Sets qs_present and inserts Continue
+; after New Game when both QS and QM are on disk. Any error leaves 7 items.
+probe_quicksave
+	lda #0
+	sta qs_present
+!if USE_KRILL {
+	jsr probe_qs_krill
+} else {
+	jsr probe_qs_kernal
+}
+	lda #VIC_BANK_DD00			; OPEN/loadraw RMW $dd00
+	sta $dd00
+	rts
+
+!if USE_KRILL {
+; Load to MAP ($C000, above the bitmap). Carry set: ignore the PRG address.
+; QS must be W64S + QS_VERSION (or those bytes at +2). QM only has to load.
+probe_qs_krill
+	lda #<MAP
+	sta loadaddrlo
+	lda #>MAP
+	sta loadaddrhi
+	ldx #<qs_name_qs
+	ldy #>qs_name_qs
+	jsr qs_krill_load
+	bcs .pqk_rts
+	jsr qs_hdr_ok
+	bcs .pqk_rts
+	lda #<MAP
+	sta loadaddrlo
+	lda #>MAP
+	sta loadaddrhi
+	ldx #<qs_name_qm
+	ldy #>qs_name_qm
+	jsr qs_krill_load
+	bcs .pqk_rts
+	jmp qs_offer
+.pqk_rts
+	rts
+
+; X/Y = 0-terminated name. loadaddrlo/hi already set. C=0 loaded.
+qs_krill_load
+	sei
+	lda #BANK_LOADER
+	sta $01
+	sec
+	jsr loadraw
+	php
+	lda #BANK_IO
+	sta $01
+	lda #VIC_BANK_DD00
+	sta $dd00
+	plp
+	cli
+	rts
+
+; C=0 if MAP holds W64S + QS_VERSION at +0 or +2 (header stored with the body).
+qs_hdr_ok
+	lda #0
+	jsr .qho_at
+	bcc .qho_rts
+	lda #2
+.qho_at
+	sta tmp0
+	tay
+	lda MAP,y
+	cmp #'W'
+	bne .qho_bad
+	iny
+	lda MAP,y
+	cmp #'6'
+	bne .qho_bad
+	iny
+	lda MAP,y
+	cmp #'4'
+	bne .qho_bad
+	iny
+	lda MAP,y
+	cmp #'S'
+	bne .qho_bad
+	iny
+	lda MAP,y
+	cmp #QS_VERSION
+	bne .qho_bad
+	clc
+.qho_rts
+	rts
+.qho_bad
+	sec
+	rts
+}
+
+!if USE_KRILL = 0 {
+; OPEN + command channel. Only DOS error "00" counts. Do not LOAD the bodies.
+probe_qs_kernal
+	jsr qs_k_open15
+	bcs .pqn_rts
+	lda #2
+	ldx #<qs_name_qs
+	ldy #>qs_name_qs
+	jsr qs_k_open2
+	jsr qs_k_err00
+	php
+	lda #2
+	jsr $ffc3
+	plp
+	bcs .pqn_c15
+	lda #2
+	ldx #<qs_name_qm
+	ldy #>qs_name_qm
+	jsr qs_k_open2
+	jsr qs_k_err00
+	php
+	lda #2
+	jsr $ffc3
+	plp
+	bcs .pqn_c15
+	jsr qs_offer
+.pqn_c15
+	lda #15
+	jsr $ffc3
+.pqn_rts
+	rts
+
+qs_k_open15
+	lda #0
+	jsr $ffbd
+	lda #15
+	ldx $ba
+	tay
+	jsr $ffba
+	jmp $ffc0
+
+; A = length, X/Y = name. Logical file 2, secondary 2.
+qs_k_open2
+	jsr $ffbd
+	lda #2
+	ldx $ba
+	ldy #2
+	jsr $ffba
+	jmp $ffc0
+
+; C=0 when channel 15 reports "00". Drains through CR.
+qs_k_err00
+	ldx #15
+	jsr $ffc6
+	bcs .qke_noch
+	jsr $ffcf
+	sta tmp0
+	jsr $ffcf
+	sta tmp1
+.qke_d
+	jsr $ffcf
+	cmp #$0d
+	beq .qke_clr
+	lda $90
+	beq .qke_d
+.qke_clr
+	jsr $ffcc
+	lda tmp0
+	cmp #'0'
+	bne .qke_bad
+	lda tmp1
+	cmp #'0'
+	bne .qke_bad
+	clc
+	rts
+.qke_noch
+	jsr $ffcc
+.qke_bad
+	sec
+	rts
+}
+
+; Shift root slots 1..6 to 2..7 and plant Continue at slot 1.
+qs_offer
+	ldx #6
+.qof
+	lda next_menu,x
+	sta next_menu + 1,x
+	lda menu_str_lo,x
+	sta menu_str_lo + 1,x
+	lda menu_str_hi,x
+	sta menu_str_hi + 1,x
+	dex
+	bne .qof
+	lda #NM_CONT
+	sta next_menu + 1
+	lda #<str_continue
+	sta menu_str_lo + 1
+	lda #>str_continue
+	sta menu_str_hi + 1
+	lda #8
+	sta menu_sizes
+	lda #1
+	sta qs_present
+	rts
+
+qs_name_qs	!text "QS", 0
+qs_name_qm	!text "QM", 0
+
 ; Root→eps/options/ctrl/help/credits/jukebox/quit; E1→skill; E2-6→order;
-; skill→start; options stay/back; jukebox tracks→NM_JUKE (item = track)
+; skill→start; options stay/back; jukebox tracks→NM_JUKE (item = track).
+; probe_quicksave inserts Continue (NM_CONT) after New Game when QS+QM exist.
 !source "../generated/src/menu_tracks.asm"
 next_menu
 	!byte 1, 3, NM_CTRL, NM_HELP, NM_CREDITS, 4, NM_QUIT, 0
@@ -654,6 +872,7 @@ draw_menu
 
 	jsr draw_hint
 	jsr draw_track_credit
+	jsr draw_qs_hint
 	lda #1
 	sta cursor_spr_en
 	jmp menu_unblank
@@ -707,6 +926,56 @@ draw_track_credit
 	lda ui_str_l
 	ldy ui_str_h
 	jmp print_centered
+
+; Main menu, Continue highlighted: two rows above the key legend.
+; Blank the line (and the descender row) whenever the highlight moves.
+draw_qs_hint
+	lda qs_present
+	beq .dqh
+	lda menu_id
+	bne .dqh
+	jsr qs_hint_blank
+	lda menu_item
+	cmp #1					; Continue is slot 1
+	bne .dqh
+	lda #COL_MAIN
+	sta cell_bg
+	lda #HINT_COL
+	sta ui_text_col
+	ldx #HINT_ROW - 2
+	lda #<str_qs_hint
+	ldy #>str_qs_hint
+	jmp print_centered
+.dqh
+	rts
+
+; (ptr),y cell offsets wrap after 32 columns, so step the bitmap pointer.
+qs_hint_blank
+	lda #HINT_ROW - 2
+	jsr .qhb
+	lda #HINT_ROW - 1			; 'q' descender
+.qhb
+	tax
+	lda #0
+	jsr bmp_cell_addr
+	ldx #40
+.qhb_c
+	ldy #7
+	lda #0
+.qhb_b
+	sta (ptr_l),y
+	dey
+	bpl .qhb_b
+	lda ptr_l
+	clc
+	adc #8
+	sta ptr_l
+	bcc .qhb_n
+	inc ptr_h
+.qhb_n
+	dex
+	bne .qhb_c
+	rts
 
 ; Key sprites + "move / adjust / select" on HINT_ROW.
 draw_hint
@@ -2625,6 +2894,7 @@ hint_spr_en	!byte 0
 cursor_spr_en	!byte 0
 menu_mux_phase	!byte 0
 menu_raster_en	!byte 0
+qs_present	!byte 0				; 1 = Continue is on the root menu
 hint_spr_x	!byte 0, 0, 0
 cursor_spr_x	!byte 0
 cursor_spr_y	!byte 0
@@ -2682,6 +2952,8 @@ str_hint_move	!scr "move",0
 str_hint_adjust	!scr "adjust",0
 str_hint_select	!scr "select",0
 str_new_game	!scr "New Game",0
+str_continue	!scr "Continue",0
+str_qs_hint	!scr "Continue from last quick save",0
 str_sound	!scr "Options",0
 str_control	!scr "Controls",0
 str_read_this	!scr "Read This!",0

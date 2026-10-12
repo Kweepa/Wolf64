@@ -50,9 +50,13 @@ end_tab = *
 ; =========================================================================
 *= LOCODE_BASE
 
-; Boot jumps here after LOADing locode + assets (SQT staged at MAP; map still on disk)
+; Boot jumps here after LOADing locode + assets (SQT staged at MAP; map still on disk).
+; difficulty = QS_MENU_CONT resumes the menu's quicksave instead of E1M1.
 locode_entry
 	jsr install_reboot_stub
+	lda difficulty
+	cmp #QS_MENU_CONT
+	beq .le_cont
 	lda #0
 	sta episode
 	sta load_in_play
@@ -64,6 +68,14 @@ locode_entry
 	jsr LoadLevel
 	bcs .le_fail
 	jmp game_start
+.le_cont
+	jsr install_sqtabs			; SQT off $C000 before QM overwrites MAP
+	jsr copy_mapcode			; $C800 stash before QM covers it
+	jsr clear_tape
+	jsr init_tex_hi
+	jsr quick_load				; verify, patch out, weapon refresh
+	bcs .le_fail
+	jmp main_loop
 .le_fail
 	lda #$35
 	sta $01
@@ -83,6 +95,17 @@ install_reboot_stub
 	sta REBOOT_STUB+2
 	rts
 
+; Tape BSS is absolute RAM (not in the locode PRG).
+clear_tape
+	ldx #0
+	txa
+.ct_loop
+	sta TAPE_BSS,x
+	inx
+	cpx #(end_tape_bss - TAPE_BSS)
+	bne .ct_loop
+	rts
+
 game_start
 	sei
 	lda #$35
@@ -94,14 +117,7 @@ game_start
 	lda #0
 	sta $dc03
 
-	; Tape BSS is absolute RAM (not in locode PRG) — clear once
-	ldx #0
-	txa
-.gs_cltape
-	sta TAPE_BSS,x
-	inx
-	cpx #(end_tape_bss - TAPE_BSS)
-	bne .gs_cltape
+	jsr clear_tape				; absolute RAM, not in the locode PRG
 
 	; KERNAL LOAD clobbered ZP — Judd table hi ptrs (tables LOADed by boot)
 	jsr init_sqtabs
@@ -382,87 +398,74 @@ end_stack_bss	= vis_perp_h + MAX_VIS
 
 ; Open only the neighbor we are walking into: wish on that axis, and either
 ; already on that keep-out face or this step's dest hi is that neighbor.
+; X axis first, then Y. Packed so menu Continue still fits under the Krill hole.
 player_bump_then_push
-	lda move_dx_h
-	bmi .pbt_west
-	ora move_dx_l
-	beq .pbt_y
-	lda playerx_l
+	ldy #0
+.pbt_ax
+	ldx pbt_dl,y
+	lda 0,x
+	sta tmp0				; delta lo/hi
+	lda 1,x
+	sta tmp1
+	ldx pbt_pos,y
+	lda 0,x
+	sta tmp2				; pos lo/hi
+	lda 1,x
+	sta tmp3
+	lda tmp1
+	bmi .pbt_neg
+	ora tmp0
+	beq .pbt_next
+	lda tmp2
 	cmp #$100 - WALL_MARGIN
-	bcs .pbt_east
-	clc
-	adc move_dx_l
-	lda playerx_h
-	adc move_dx_h
-	cmp playerx_h
-	beq .pbt_y
-.pbt_east
-	ldx playerx_h
+	bcs .pbt_pos
+	jsr .pbt_same
+	beq .pbt_next
+.pbt_pos
+	ldx tmp3
 	inx
-	stx mapx
-	lda playery_h
-	sta mapy
+.pbt_open
+	stx mapx,y
+	ldx pbt_oth,y
+	lda 0,x
+	pha
+	tya
+	eor #1
+	tax
+	pla
+	sta mapx,x
+	sty tmp4				; try_open_door clobbers Y
 	jsr try_open_door
-	jmp .pbt_y
-.pbt_west
-	lda playerx_l
-	cmp #WALL_MARGIN + 1
-	bcc .pbt_westgo
-	clc
-	adc move_dx_l
-	lda playerx_h
-	adc move_dx_h
-	cmp playerx_h
-	beq .pbt_y
-.pbt_westgo
-	ldx playerx_h
-	dex
-	stx mapx
-	lda playery_h
-	sta mapy
-	jsr try_open_door
-.pbt_y
-	lda move_dy_h
-	bmi .pbt_north
-	ora move_dy_l
-	beq .pbt_push
-	lda playery_l
-	cmp #$100 - WALL_MARGIN
-	bcs .pbt_south
-	clc
-	adc move_dy_l
-	lda playery_h
-	adc move_dy_h
-	cmp playery_h
-	beq .pbt_push
-.pbt_south
-	lda playerx_h
-	sta mapx
-	ldx playery_h
-	inx
-	stx mapy
-	jsr try_open_door
-	jmp .pbt_push
-.pbt_north
-	lda playery_l
-	cmp #WALL_MARGIN + 1
-	bcc .pbt_northgo
-	clc
-	adc move_dy_l
-	lda playery_h
-	adc move_dy_h
-	cmp playery_h
-	beq .pbt_push
-.pbt_northgo
-	lda playerx_h
-	sta mapx
-	ldx playery_h
-	dex
-	stx mapy
-	jsr try_open_door
-.pbt_push
+	ldy tmp4
+.pbt_next
+	iny
+	cpy #2
+	bcc .pbt_ax
 	lda #WALL_MARGIN
 	jmp push_walls
+.pbt_neg
+	lda tmp2
+	cmp #WALL_MARGIN + 1
+	bcc .pbt_ngo
+	jsr .pbt_same
+	beq .pbt_next
+.pbt_ngo
+	ldx tmp3
+	dex
+	jmp .pbt_open
+; Z=1 when pos_hi + delta stays in the same tile.
+.pbt_same
+	lda tmp2
+	clc
+	adc tmp0
+	lda tmp3
+	adc tmp1
+	cmp tmp3
+	rts
+
+pbt_dl	!byte move_dx_l, move_dy_l
+pbt_pos	!byte playerx_l, playery_l
+pbt_oth	!byte playery_h, playerx_h
 
 end_sfx = *
 !if end_sfx > KRILL_HOLE {

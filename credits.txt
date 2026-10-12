@@ -26,4 +26,4 @@ Hermit/SID-Wizard 1.5.
 
 Thanks y'all!
 
-v2.0, built 11 Oct 2026
+v2.1, built 12 Oct 2026

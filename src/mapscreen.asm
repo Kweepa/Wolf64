@@ -94,13 +94,31 @@ map_bit
 	!byte $01, $02, $04, $08, $10, $20, $40, $80
 
 ; ------------------------------------------------------------------
+; map_f1_down — C=1 when F1 is down and SPACE-column PB4 is still up.
+; 1351 LMB grounds PB4 on every column. F1 (PA0/PB4) counts only when
+; the SPACE column (PA7/PB4) reads released. Same test as SquareDoom.
+; ------------------------------------------------------------------
+map_f1_down
+	ldy #$fe			; F1 column
+	jsr map_cia_read
+	and #$10
+	bne .mfd_up
+	ldy #$7f			; SPACE column
+	jsr map_cia_read
+	and #$10
+	beq .mfd_up			; LMB or SPACE
+	sec
+	rts
+.mfd_up
+	clc
+	rts
+
+; ------------------------------------------------------------------
 ; map_poll_f1 — rising F1 opens the map. C=1 if the map ran.
 ; ------------------------------------------------------------------
 map_poll_f1
-	ldy #$fe
-	jsr map_cia_read
-	and #$10			; 0 = F1 down
-	bne .mp_up
+	jsr map_f1_down
+	bcc .mp_up
 	lda map_f1
 	bne .mp_held
 	lda #1
@@ -195,15 +213,13 @@ map_clear_latches
 map_wait_f1_up
 .wu
 	jsr map_wait_frame
-	ldy #$fe
-	jsr map_cia_read
-	and #$10
-	beq .wu				; still held
+	jsr map_f1_down
+	bcs .wu				; still held
 	lda #0
 	sta map_f1
 	rts
 
-; C=1 on F1 rising edge. map_keys = WASD (not IJKL).
+; C=1 on real F1 rising edge (not LMB). map_keys = WASD (not IJKL).
 map_read_keys
 	ldy #$fd			; W/A/S column, not I/J/K
 	jsr map_cia_read
@@ -235,10 +251,8 @@ map_read_keys
 	ora #$08
 	sta map_keys
 +
-	ldy #$fe
-	jsr map_cia_read
-	and #$10
-	bne .rk_up
+	jsr map_f1_down
+	bcc .rk_up
 	lda map_f1
 	bne .rk_held
 	lda #1

@@ -25,6 +25,7 @@ clr_ptr		= $fb
 	jsr load_sa1
 	bcs .fail
 	jsr splash_vic			; KERNAL LOAD RMW of $dd00; keep VIC bank $8000
+	jsr splash_tod_reset		; picture is up; menu waits out 4s from here
 
 !if USE_KRILL {
 	lda #6
@@ -125,6 +126,23 @@ splash_vic
 	lda SPLASH_BG
 	sta $d021
 	sta $d020
+	rts
+
+; CIA1 TOD = 0. Bit 7 of $DC0E follows KERNAL $02A6 (1 = PAL 50 Hz) so four
+; TOD seconds are four real seconds. RMW leaves Timer A running for KERNAL LOAD.
+splash_tod_reset
+	lda $dc0e
+	and #$7f
+	ldy $02a6
+	beq .tod_rate
+	ora #$80
+.tod_rate
+	sta $dc0e
+	lda #0
+	sta $dc0b				; hours stops the clock
+	sta $dc0a
+	sta $dc09
+	sta $dc08				; tenths starts it
 	rts
 
 load_sa1

@@ -101,6 +101,7 @@ run_menu
 	jsr probe_quicksave			; QS+QM? insert Continue (still no menu IRQ)
 	sei
 	jsr init_font_tabs
+	jsr splash_hold				; cover stays at least 4s from bitmap-in
 	jsr init_menu_vic
 	lda #0
 	sta menu_id
@@ -2664,6 +2665,17 @@ menu_unblank
 	lda $d011
 	ora #%00010000				; DEN on
 	sta $d011
+	rts
+
+; do_splash zeros CIA1 TOD when the bitmap lands. Loads since then count.
+; Hours latches the clock; tenths releases it. LDA $DC08 leaves C intact.
+SPLASH_HOLD_SEC = $04			; BCD seconds
+splash_hold
+	lda $dc0b
+	lda $dc09
+	cmp #SPLASH_HOLD_SEC
+	lda $dc08
+	bcc splash_hold
 	rts
 
 wait_raster

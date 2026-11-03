@@ -23,7 +23,9 @@ Ursiny Games.
 Music by Dr. Piotr/De-Koder.
 SID instrument definitions from
 Hermit/SID-Wizard 1.5.
+Splash screen by Paul Docherty
+(D0kk!).
 
 Thanks y'all!
 
-v2.1, built 12 Oct 2026
+v2.2, built 2 Nov 2026
